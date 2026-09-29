@@ -1,0 +1,6 @@
+# Copy to .dev.vars for `bun run dev`. Values come from a WorkOS staging environment.
+WORKOS_CLIENT_ID=client_...
+WORKOS_API_KEY=sk_test_...
+WORKOS_COOKIE_PASSWORD=at-least-32-characters-of-randomness
+WORKOS_REDIRECT_URI=https://web.<namespace>.localhost/api/auth/callback
+RELAY_URL=https://relay.<namespace>.localhost

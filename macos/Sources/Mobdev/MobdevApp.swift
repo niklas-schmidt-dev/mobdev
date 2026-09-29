@@ -3,8 +3,21 @@ import SwiftUI
 
 /// Starts the phone services and API at launch, whether or not the window is open.
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        // mobdev:// links from the dashboard. Handled here so they work without an open window.
+        NSAppleEventManager.shared().setEventHandler(
+            self, andSelector: #selector(handleURLEvent(_:withReply:)),
+            forEventClass: AEEventClass(kInternetEventClass), andEventID: AEEventID(kAEGetURL))
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         Task { @MainActor in await AppModel.shared.start() }
+    }
+
+    @objc private func handleURLEvent(_ event: NSAppleEventDescriptor, withReply reply: NSAppleEventDescriptor) {
+        guard let text = event.paramDescriptor(forKeyword: keyDirectObject)?.stringValue, let url = URL(string: text)
+        else { return }
+        Task { @MainActor in AppModel.shared.open(url) }
     }
 
     /// Agents keep working from the menu bar after the window is closed.

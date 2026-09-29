@@ -26,6 +26,17 @@
     <true/>
     <key>NSHumanReadableCopyright</key>
     <string>MIT License</string>
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleURLName</key>
+            <string>dev.mobdev.mac.connect</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>mobdev</string>
+            </array>
+        </dict>
+    </array>
     <key>NSBluetoothAlwaysUsageDescription</key>
     <string>Mobdev pairs with your iPhone as a Bluetooth keyboard and pointer so agents can tap and type on it.</string>
     <key>NSCameraUsageDescription</key>

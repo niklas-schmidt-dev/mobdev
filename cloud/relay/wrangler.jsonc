@@ -1,0 +1,23 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "mobdev-relay",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-29",
+  "compatibility_flags": ["nodejs_compat"],
+  "routes": [{ "pattern": "relay.mobdev.sh", "custom_domain": true }],
+  "workers_dev": false,
+  "durable_objects": {
+    "bindings": [{ "name": "RELAY_SPACE", "class_name": "RelaySpace" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["RelaySpace"] }],
+  // Create with `wrangler d1 create mobdev` and paste the id here and in ../wrangler.jsonc.
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "mobdev",
+      "database_id": "00000000-0000-4000-8000-000000000000",
+      "migrations_dir": "../migrations"
+    }
+  ],
+  "observability": { "enabled": true }
+}

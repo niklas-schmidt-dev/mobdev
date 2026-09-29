@@ -1,14 +1,11 @@
 # Contributing
 
-Mobdev is early, independent and MIT licensed. Start with a bounded issue or an item in the feature matrix.
+Mobdev is early, independent and MIT licensed. Start with a bounded issue.
 
-1. Use Bun and preserve `bun.lock`.
-2. Keep the TypeScript action/provider contract strict. Advertise only capabilities the adapter implements.
-3. Add meaningful tests for parser semantics, protocol behavior, persistence or execution changes. Use the explicit demo/fake servers in automated tests; never operate personal devices or paid accounts in CI.
-4. Run `bun run typecheck`, `bun run test` and `bun run build`.
-5. Exercise the actual UI or affected adapter when possible. State hardware/OS validation gaps in the PR.
-6. Update the feature matrix when behavior or support boundaries change.
+1. Keep the three parts consistent: the Mac app (`macos/`), the self-hosted relay (`relay/`) and mobdev.sh (`cloud/`). Relay protocol changes touch all three.
+2. Add tests for protocol, parsing, tool and persistence changes. Tests use the fake phone and fake Macs; never operate personal devices or paid accounts in CI.
+3. Run the checks listed in the README for every part you changed.
+4. Try UI changes in the running app or site. State what you could not test on real hardware in the pull request.
+5. The Mac app follows Apple's macOS 26 design: standard SwiftUI controls, Liquid Glass, no custom chrome.
 
-Do not commit workspace tokens, model keys, device screenshots, private logs or `.mobdev` data. Do not label mocked protocol tests as real-device validation. Preserve unrelated user changes. Cloud integrations must not reserve or bill devices during discovery.
-
-Packaging uses Electron Builder. Unsigned CI artifacts are for development. Release signing/notarization credentials belong in a release owner's secret store, not this repository.
+Do not commit tokens, `.dev.vars`, device screenshots or app data. Release signing, notarization and deployment credentials belong to the release owner, not this repository.

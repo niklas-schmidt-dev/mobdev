@@ -13,17 +13,20 @@ struct RemoteView: View {
                     "Allow agents on other computers",
                     isOn: Binding(get: { model.settings.relayEnabled }, set: { model.setRelayEnabled($0) }))
             } footer: {
-                Text("Your Mac keeps an outgoing connection to a relay. No port is opened, and the relay stores nothing.")
+                Text("Your Mac keeps an outgoing connection to a relay. No port is opened, and the relay stores nothing. The hosted relay is free; create an access token at mobdev.sh, or run your own relay.")
             }
 
             if model.settings.relayEnabled {
                 Section("Relay") {
-                    TextField("URL", text: $model.settings.relayURL, prompt: Text("https://relay.example.com"))
+                    TextField("URL", text: $model.settings.relayURL, prompt: Text(AppModel.hostedRelayURL))
                         .onSubmit { model.applyRelaySettings() }
                     TextField("Mac name", text: $model.settings.hostName)
                         .onSubmit { model.applyRelaySettings() }
-                    SecureField("Access token", text: $model.settings.relayAccessToken, prompt: Text("Only if the relay requires one"))
+                    SecureField("Access token", text: $model.settings.relayAccessToken, prompt: Text("mda_…"))
                         .onSubmit { model.applyRelaySettings() }
+                    LabeledContent("No token yet?") {
+                        Link("Get one at mobdev.sh", destination: AppModel.dashboardURL)
+                    }
                     LabeledContent("Status") {
                         HStack(spacing: 8) {
                             relayStatusLabel

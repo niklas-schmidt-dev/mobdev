@@ -124,16 +124,24 @@ curl -H "Authorization: Bearer $TOKEN" -X POST http://127.0.0.1:4686/v1/tools/ty
 
 ## Remote access (optional)
 
-Turn on **Remote access** and enter a relay URL. The Mac then keeps outgoing connections to the
-relay; no port is opened on the Mac. The app shows the remote MCP URL and a client key:
+Turn on **Remote Access** to let agents on other computers reach the phone. The Mac keeps one
+outgoing WebSocket to a relay; no port is opened on the Mac.
+
+- **Hosted relay:** create an access token at [mobdev.sh/dashboard](https://mobdev.sh/dashboard)
+  and click **Open in Mobdev**. The `mobdev://connect` link fills in the relay URL and token after
+  you confirm. You can also paste the token under Remote Access.
+- **Your own relay:** run [`../relay`](../relay) and enter its URL.
+
+The app then shows the remote MCP URL and a client key:
 
 ```sh
-claude mcp add --transport http mobdev-remote https://relay.example.com/h/<mac-name>/mcp \
+claude mcp add --transport http mobdev-remote https://relay.mobdev.sh/h/<mac-name>/mcp \
   --header "Authorization: Bearer mdc_…"
 ```
 
-The relay forwards requests and stores nothing. Run your own from [`../relay`](../relay). Anyone
-with the client key can control the phone; **New client key** revokes the old one.
+Relays forward requests and store nothing. Anyone with the client key can control the phone;
+**New Client Key** revokes the old one, and revoking the access token in the dashboard disconnects
+the Mac.
 
 ## Security and privacy
 

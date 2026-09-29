@@ -1,9 +1,11 @@
 # Security
 
-Report vulnerabilities privately to the project maintainer through the repository host's private security advisory mechanism once this repository is published. No public reporting address is configured yet. Do not include real API tokens, private app screenshots or device logs in public issues.
+Report vulnerabilities privately through the repository host's security advisory feature. Do not include real tokens, device screenshots or logs in public issues.
 
-The daemon controls developer-authorized devices and installs apps by explicit request. Treat its bearer token as a credential. It binds only to loopback and checks Host/Origin headers. Remote access should use authenticated tunnels rather than public port exposure.
+What to know:
 
-Model keys are currently stored in the local settings file with restrictive permissions where supported, not an OS keychain. Run evidence includes typed values and may contain private device content. A configured hosted model receives UI text and action history only when an agent/draft operation is explicitly started.
-
-No telemetry, public upload, license check or automatic update service is included. Appium connections can be remote and are subject to the security of that server and its drivers.
+- The Mac app controls a real phone with the user's accounts. Its API binds to 127.0.0.1, requires a bearer token and rejects browser requests (`Origin`) and foreign `Host` headers. The stdio MCP bridge reads the token from a 0600 file.
+- Remote access goes through a relay over an outgoing WebSocket. Agents authenticate with a client key derived from a secret that stays on the Mac. Anyone with the client key can control the phone; rotating it in the app revokes it.
+- The hosted relay (relay.mobdev.sh) additionally requires an access token from the dashboard, stored as a SHA-256 hash in D1. Requests and screenshots pass through memory only.
+- The dashboard uses WorkOS AuthKit sessions (encrypted cookies) and CSRF checks on server functions. Accounts can be deleted from the dashboard.
+- No telemetry. Text recognition runs on the Mac.

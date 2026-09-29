@@ -152,7 +152,32 @@ final class AppModel {
 
     // MARK: Relay
 
+    static let hostedRelayURL = "https://relay.mobdev.sh"
+    static let dashboardURL = URL(string: "https://mobdev.sh/dashboard")!
+
     var relayClientKey: String { RelayClient.clientKey(forSecret: relaySecret) }
+
+    /// Handles `mobdev://connect?relay=<url>&token=<access token>` from the dashboard.
+    func open(_ url: URL) {
+        guard let invite = RelayInvite(url: url) else {
+            NSSound.beep()
+            return
+        }
+        NSApp.activate()
+        let alert = NSAlert()
+        alert.messageText = "Connect this Mac to \(invite.relay.host ?? "the relay")?"
+        alert.informativeText =
+            "Agents that have this Mac's client key can then control your iPhone through the relay. You can turn this off under Remote Access at any time."
+        alert.addButton(withTitle: "Connect")
+        alert.addButton(withTitle: "Cancel")
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        settings.relayURL = invite.relay.absoluteString
+        settings.relayAccessToken = invite.token
+        settings.relayEnabled = true
+        save()
+        startRelay()
+        UserDefaults.standard.set("remote", forKey: "selectedPane")
+    }
 
     var remoteMCPURL: String {
         var base = settings.relayURL.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -162,6 +187,9 @@ final class AppModel {
 
     func setRelayEnabled(_ enabled: Bool) {
         settings.relayEnabled = enabled
+        if enabled, settings.relayURL.trimmingCharacters(in: .whitespaces).isEmpty {
+            settings.relayURL = Self.hostedRelayURL
+        }
         save()
         if enabled { startRelay() } else { relay.stop() }
     }
@@ -266,6 +294,24 @@ final class AppModel {
         if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?\(anchor)") {
             NSWorkspace.shared.open(url)
         }
+    }
+}
+
+/// A relay connection offered by a `mobdev://connect` link.
+struct RelayInvite: Equatable {
+    let relay: URL
+    let token: String
+
+    init?(url: URL) {
+        guard url.scheme == "mobdev", url.host == "connect",
+            let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems,
+            let relayText = items.first(where: { $0.name == "relay" })?.value,
+            let relay = try? RelayClient.validatedURL(relayText),
+            let token = items.first(where: { $0.name == "token" })?.value,
+            token.range(of: "^mda_[0-9a-f]{64}$", options: .regularExpression) != nil
+        else { return nil }
+        self.relay = relay
+        self.token = token
     }
 }
 
