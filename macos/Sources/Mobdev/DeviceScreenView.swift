@@ -41,22 +41,72 @@ struct DeviceScreenView: View {
         .animation(.smooth(duration: 0.4), value: showPanel)
         .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
         .toolbar {
+            ToolbarItemGroup {
+                Button("Home", systemImage: "house") { model.home(id) }
+                    .disabled(status?.bluetooth.isConnected != true)
+                    .help("Go to the home screen")
+                Button("Screenshot", systemImage: "camera") { model.saveScreenshot(id) }
+                    .disabled(status?.frameSize == nil)
+                    .help("Save a screenshot")
+            }
+            ToolbarSpacer(.fixed)
             ToolbarItem {
-                Button("Activity", systemImage: "sidebar.trailing") { showPanel.toggle() }
-                    .help(showPanel ? "Hide activity" : "Show activity")
+                Button("Inspector", systemImage: "sidebar.trailing") { showPanel.toggle() }
+                    .help(showPanel ? "Hide the inspector" : "Show activity and info")
             }
         }
     }
 }
 
-/// Beside the phone: the device's state (expanded into setup steps while something is missing),
-/// then its activity.
+enum PanelTab: String, CaseIterable {
+    case activity, info
+
+    var title: String { self == .activity ? "Activity" : "Info" }
+    var symbol: String { self == .activity ? "waveform.path.ecg" : "info.circle" }
+}
+
+/// The inspector beside the phone, with icon tabs like Xcode's: activity and device info.
 private struct DevicePanel: View {
-    @Environment(AppModel.self) private var model
     let id: String
+    @AppStorage("devicePanelTab") private var tab = PanelTab.activity
 
     var body: some View {
-        let entries = model.state(id).map { _ in model.device(id)?.activity.all ?? [] } ?? []
+        VStack(spacing: 0) {
+            HStack(spacing: 6) {
+                ForEach(PanelTab.allCases, id: \.self) { item in
+                    Button { tab = item } label: {
+                        Image(systemName: item.symbol)
+                            .font(.system(size: 15, weight: .medium))
+                            .frame(width: 40, height: 28)
+                            .contentShape(.rect)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(tab == item ? Color.accentColor : .secondary)
+                    .background(tab == item ? Color.accentColor.opacity(0.14) : .clear, in: .capsule)
+                    .help(item.title)
+                    .accessibilityLabel(item.title)
+                    .accessibilityAddTraits(tab == item ? .isSelected : [])
+                }
+            }
+            .padding(.top, 12)
+            .padding(.bottom, 10)
+            Divider().padding(.horizontal, 14)
+            switch tab {
+            case .activity: ActivityPane(id: id)
+            case .info: DeviceInfoView(id: id, compact: true)
+            }
+        }
+    }
+}
+
+/// The device's state (expanded into setup steps while something is missing), then its activity.
+private struct ActivityPane: View {
+    @Environment(AppModel.self) private var model
+    let id: String
+    @State private var pager = ActivityPager()
+
+    var body: some View {
+        let entries = model.state(id).map { _ in pager.items(in: model, device: id).map(\.entry) } ?? []
         let ready = model.state(id)?.isReady ?? false
         VStack(spacing: 0) {
             Group {
@@ -73,10 +123,15 @@ private struct DevicePanel: View {
             HStack(spacing: 6) {
                 Text("Activity").font(.headline)
                 if !entries.isEmpty {
-                    Text("\(entries.count)").foregroundStyle(.secondary).monospacedDigit()
+                    Text("\(entries.count)\(pager.hasMore(in: model, device: id) ? "+" : "")")
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
                 }
                 Spacer()
-                Button("Clear", systemImage: "trash") { model.clearActivity(device: id) }
+                Button("Clear", systemImage: "trash") {
+                    model.clearActivity(device: id)
+                    pager.reset()
+                }
                     .labelStyle(.iconOnly)
                     .buttonStyle(.borderless)
                     .disabled(entries.isEmpty)
@@ -93,9 +148,20 @@ private struct DevicePanel: View {
                     .padding(28)
                     .frame(maxHeight: .infinity)
             } else {
-                List(entries) { entry in
-                    ActivityRow(entry: entry, compact: true)
-                        .listRowBackground(Color.clear)
+                List {
+                    ForEach(ActivityDay.group(entries, date: \.date)) { day in
+                        Section(day.title) {
+                            ForEach(day.items) { entry in
+                                ActivityRow(entry: entry, compact: true)
+                                    .listRowBackground(Color.clear)
+                            }
+                        }
+                    }
+                    if pager.hasMore(in: model, device: id) {
+                        LoadMoreRow { await pager.loadMore(in: model, device: id) }
+                            .listRowBackground(Color.clear)
+                            .id(entries.count)
+                    }
                 }
                 .listStyle(.plain)
                 .scrollContentBackground(.hidden)
@@ -134,12 +200,12 @@ private struct PhoneStage: View {
             // Room for the setup panel is always kept, so opening it never resizes the phone.
             let available = CGSize(
                 width: max(proxy.size.width - 80 - DeviceScreenView.panelWidth, 100),
-                height: max(proxy.size.height - 150, 100))
+                height: max(proxy.size.height - 90, 100))
             let scale = min(available.width / frameSize.width, available.height / frameSize.height)
             let screen = CGSize(width: frameSize.width * scale, height: frameSize.height * scale)
             let radius = screen.width * 0.14
 
-            VStack(spacing: 22) {
+            VStack(spacing: 16) {
                 PhoneMirrorView(
                     id: id, session: model.device(id)?.capture.session, input: model.device(id)?.input,
                     layout: model.settings.keyboardLayout, focused: $focused
@@ -170,70 +236,23 @@ private struct PhoneStage: View {
                 .accessibilityLabel("iPhone screen")
                 .accessibilityHint("Click to tap, drag to swipe, type while focused")
 
-                ControlBar(id: id, focused: focused)
+                Text(hint)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .contentTransition(.opacity)
+                    .animation(.smooth, value: focused)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
-}
 
-/// Floating Liquid Glass controls under the phone.
-private struct ControlBar: View {
-    @Environment(AppModel.self) private var model
-    let id: String
-    let focused: Bool
-    @State private var text = ""
-
-    var body: some View {
-        let canTouch = model.state(id)?.status.bluetooth.isConnected == true
-        VStack(spacing: 10) {
-            GlassEffectContainer(spacing: 12) {
-                HStack(spacing: 12) {
-                    Button { model.home(id) } label: {
-                        Image(systemName: "house.fill").frame(width: 22, height: 22)
-                    }
-                    .buttonStyle(.glass)
-                    .buttonBorderShape(.circle)
-                    .controlSize(.large)
-                    .help("Home")
-                    .disabled(!canTouch)
-
-                    HStack(spacing: 8) {
-                        Image(systemName: "keyboard").foregroundStyle(.secondary)
-                        TextField("Type on iPhone", text: $text)
-                            .textFieldStyle(.plain)
-                            .onSubmit {
-                                model.type(text, on: id)
-                                text = ""
-                            }
-                    }
-                    .padding(.horizontal, 16)
-                    .frame(width: 260, height: 40)
-                    .glassEffect(.regular.interactive(), in: .capsule)
-                    .disabled(!canTouch)
-
-                    Button { model.saveScreenshot(id) } label: {
-                        Image(systemName: "camera.fill").frame(width: 22, height: 22)
-                    }
-                    .buttonStyle(.glass)
-                    .buttonBorderShape(.circle)
-                    .controlSize(.large)
-                    .help("Save a screenshot")
-                }
-            }
-
-            Text(hint(canTouch))
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .contentTransition(.opacity)
+    private var hint: String {
+        guard model.state(id)?.status.bluetooth.isConnected == true else {
+            return "Pair over Bluetooth to control the iPhone from here."
         }
-    }
-
-    private func hint(_ canTouch: Bool) -> String {
-        guard canTouch else { return "Pair over Bluetooth to control the phone from here." }
         return focused
             ? "Typing goes to the iPhone. ⌘V types the Mac clipboard."
-            : "Click to tap · drag to swipe · scroll · click once, then type"
+            : "Click to tap · drag to swipe · scroll · click, then type"
     }
 }
 

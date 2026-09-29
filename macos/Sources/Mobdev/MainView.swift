@@ -123,8 +123,6 @@ private struct Sidebar: View {
                 NavigationLink(value: Pane.activity) {
                     Label("Activity", systemImage: "waveform.path.ecg")
                 }
-                .badge(model.activity.count)
-                .tag(Pane.activity)
             }
             Section("Cloud") {
                 NavigationLink(value: Pane.remote) {

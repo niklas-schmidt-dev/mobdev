@@ -57,7 +57,7 @@ final class AppModel {
     var serverSummary = "Starting…"
     var serverFailed = false
     var relayState: RelayState = .off
-    /// The newest actions across all devices.
+    /// Every loaded action across all devices (each device loads its newest 1000), newest first.
     private(set) var activity: [ActivityItem] = []
     /// Small live pictures of each connected device and the average colors of its screen.
     private(set) var thumbnails: [String: CGImage] = [:]
@@ -194,10 +194,10 @@ final class AppModel {
 
     private func refreshActivity() {
         let merged = hub.devices.flatMap { device in
-            device.activity.all.prefix(300).map { ActivityItem(deviceID: device.id, deviceName: device.name, entry: $0) }
+            device.activity.all.map { ActivityItem(deviceID: device.id, deviceName: device.name, entry: $0) }
         }
         .sorted { $0.entry.date > $1.entry.date }
-        let recent = Array(merged.prefix(500))
+        let recent = merged
         if recent != activity { activity = recent }
         for index in devices.indices {
             let count = hub.devices.first { $0.id == devices[index].id }?.activity.all.count ?? 0

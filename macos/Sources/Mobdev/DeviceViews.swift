@@ -299,48 +299,18 @@ struct DeviceArtwork: View {
 
 // MARK: - Device detail
 
-enum DeviceTab: String, CaseIterable, Identifiable {
-    case screen = "Screen", info = "Info"
-    var id: String { rawValue }
-}
-
-/// One device: its live screen with its own growing activity log beside it, and what it is.
+/// One device: its live screen, with its activity and info in the inspector beside it.
 struct DeviceDetailView: View {
     @Environment(AppModel.self) private var model
     let id: String
-    @AppStorage("deviceTab") private var tab = DeviceTab.screen
 
     var body: some View {
-        Group {
-            if let state = model.state(id) {
-                // Both pages stay alive and only fade, so switching does not tear down and rebuild the
-                // stage, its video layer and the toolbar every time.
-                ZStack {
-                    DeviceScreenView(id: id)
-                        .opacity(tab == .screen ? 1 : 0)
-                        .allowsHitTesting(tab == .screen)
-                        .accessibilityHidden(tab != .screen)
-                    DeviceInfoView(id: id)
-                        .opacity(tab == .info ? 1 : 0)
-                        .allowsHitTesting(tab == .info)
-                        .accessibilityHidden(tab != .info)
-                }
-                .animation(.easeInOut(duration: 0.15), value: tab)
+        if let state = model.state(id) {
+            DeviceScreenView(id: id)
                 .navigationTitle(state.name)
                 .navigationSubtitle(state.statusLine)
-            } else {
-                ContentUnavailableView("Device Not Found", systemImage: "iphone.slash")
-            }
-        }
-        .toolbar {
-            ToolbarItem(placement: .principal) {
-                Picker("View", selection: $tab) {
-                    ForEach(DeviceTab.allCases) { Text($0.rawValue).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .frame(width: 180)
-            }
+        } else {
+            ContentUnavailableView("Device Not Found", systemImage: "iphone.slash")
         }
     }
 }
@@ -349,12 +319,14 @@ struct DeviceDetailView: View {
 private struct DeviceHeader: View {
     @Environment(AppModel.self) private var model
     let state: DeviceState
+    var compact = false
 
     var body: some View {
-        HStack(spacing: 20) {
-            DeviceArtwork(info: state.info, screen: state.isConnected ? model.thumbnails[state.id] : nil, height: 120)
+        HStack(spacing: compact ? 14 : 20) {
+            DeviceArtwork(
+                info: state.info, screen: state.isConnected ? model.thumbnails[state.id] : nil, height: compact ? 84 : 120)
             VStack(alignment: .leading, spacing: 4) {
-                Text(state.name).font(.title2.weight(.semibold))
+                Text(state.name).font(compact ? .headline : .title2.weight(.semibold))
                 Text([state.modelName, state.info.map(\.systemName)].compactMap { $0 }.joined(separator: " · "))
                     .foregroundStyle(.secondary)
                 StateBadge(device: state).padding(.top, 6)
@@ -365,14 +337,16 @@ private struct DeviceHeader: View {
     }
 }
 
-private struct DeviceInfoView: View {
+struct DeviceInfoView: View {
     @Environment(AppModel.self) private var model
     let id: String
+    /// Inside the inspector: smaller header, no window background.
+    var compact = false
 
     var body: some View {
         if let state = model.state(id) {
             Form {
-                Section { DeviceHeader(state: state) }
+                Section { DeviceHeader(state: state, compact: compact) }
                 Section("Device") {
                     LabeledContent("Name", value: state.name)
                     LabeledContent("Model", value: state.modelName)
@@ -425,6 +399,7 @@ private struct DeviceInfoView: View {
                 }
             }
             .formStyle(.grouped)
+            .scrollContentBackground(compact ? .hidden : .automatic)
         }
     }
 

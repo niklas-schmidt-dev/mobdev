@@ -57,7 +57,8 @@ public final class ActivityLog: @unchecked Sendable {
     private let observers = Locked<[@Sendable ([Entry]) -> Void]>([])
 
     /// With a `file`, entries are appended to it as JSON lines and the newest `limit` are loaded
-    /// back, so a device's log keeps growing across launches.
+    /// back, so a device's log keeps growing across launches; `older(than:limit:)` pages further
+    /// back. The file keeps the newest `Self.fileLimit` entries.
     public init(limit: Int = 200, file: URL? = nil) {
         self.limit = limit
         self.file = file
@@ -106,17 +107,38 @@ public final class ActivityLog: @unchecked Sendable {
         }
     }
 
-    /// The newest `limit` entries, newest first. Compacts the file when it grew far beyond that.
-    private static func load(_ file: URL, limit: Int) -> [Entry] {
-        guard let data = try? Data(contentsOf: file) else { return [] }
+    /// Entries kept on disk per log; the file is trimmed back to this once it holds twice as many.
+    public static let fileLimit = 50_000
+
+    /// Up to `limit` entries recorded before `date`, newest first, read from the file. Blocking;
+    /// call off the main thread.
+    public func older(than date: Date, limit: Int) -> [Entry] {
+        guard let file, let data = try? Data(contentsOf: file) else { return [] }
+        let decoder = Self.decoder
+        var result: [Entry] = []
+        for line in data.split(separator: UInt8(ascii: "\n")).reversed() {
+            guard let entry = try? decoder.decode(Entry.self, from: Data(line)), entry.date < date else { continue }
+            result.append(entry)
+            if result.count == limit { break }
+        }
+        return result
+    }
+
+    private static var decoder: JSONDecoder {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .millisecondsSince1970
+        return decoder
+    }
+
+    /// The newest `limit` entries, newest first. Trims the file when it grew far beyond `fileLimit`.
+    private static func load(_ file: URL, limit: Int) -> [Entry] {
+        guard let data = try? Data(contentsOf: file) else { return [] }
         let lines = data.split(separator: UInt8(ascii: "\n"))
-        let kept = lines.suffix(limit)
-        if lines.count > limit * 4 {
+        if lines.count > fileLimit * 2 {
+            let kept = lines.suffix(fileLimit)
             try? Data(kept.joined(separator: [UInt8(ascii: "\n")]) + [UInt8(ascii: "\n")]).write(to: file)
         }
-        return kept.compactMap { try? decoder.decode(Entry.self, from: Data($0)) }.reversed()
+        return lines.suffix(limit).compactMap { try? decoder.decode(Entry.self, from: Data($0)) }.reversed()
     }
 
     public func observe(_ observer: @escaping @Sendable ([Entry]) -> Void) {

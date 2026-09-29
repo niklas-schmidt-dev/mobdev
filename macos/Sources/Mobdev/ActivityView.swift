@@ -1,25 +1,47 @@
 import MobdevCore
 import SwiftUI
 
-/// Every agent action across all devices, newest first, with each entry's device. Filter by device
-/// or search tools, summaries and device names.
+/// Every agent action across all devices, newest first and grouped by day, with each entry's
+/// device. Filter by device or search tools, summaries and device names.
 struct ActivityView: View {
     @Environment(AppModel.self) private var model
     @State private var device: String?
     @State private var query = ""
+    @State private var pager = ActivityPager()
 
     private var items: [ActivityItem] {
-        model.activity.filter { item in
-            (device == nil || item.deviceID == device)
-                && (query.isEmpty || item.entry.summary.localizedCaseInsensitiveContains(query)
-                    || ToolIcon.title(for: item.entry.tool).localizedCaseInsensitiveContains(query)
-                    || item.deviceName.localizedCaseInsensitiveContains(query))
+        _ = model.activity  // Refresh when new actions come in.
+        return pager.items(in: model, device: device).filter { item in
+            query.isEmpty || item.entry.summary.localizedCaseInsensitiveContains(query)
+                || ToolIcon.title(for: item.entry.tool).localizedCaseInsensitiveContains(query)
+                || item.deviceName.localizedCaseInsensitiveContains(query)
         }
     }
 
     var body: some View {
         let items = self.items
-        Group {
+        VStack(spacing: 0) {
+            if !model.activity.isEmpty {
+                // In the content, not the toolbar: a toolbar menu shows neither title nor selection.
+                HStack {
+                    Picker("Device", selection: $device) {
+                        Text("All Devices").tag(String?.none)
+                        Divider()
+                        ForEach(model.devices) { device in
+                            Text(device.name).tag(Optional(device.id))
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .fixedSize()
+                    Spacer()
+                    Text(items.count == 1 ? "1 action" : "\(items.count)\(pager.hasMore(in: model, device: device) ? "+" : "") actions")
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
+                .padding(.horizontal, 20)
+                .padding(.vertical, 10)
+                Divider()
+            }
             if model.activity.isEmpty {
                 ContentUnavailableView(
                     "No Activity Yet", systemImage: "waveform.path.ecg",
@@ -27,38 +49,84 @@ struct ActivityView: View {
             } else if items.isEmpty {
                 ContentUnavailableView.search(text: query)
             } else {
-                List(items) { item in
-                    ActivityRow(entry: item.entry, deviceName: item.deviceName)
+                List {
+                    ForEach(ActivityDay.group(items, date: \.entry.date)) { day in
+                        Section(day.title) {
+                            ForEach(day.items) { item in
+                                ActivityRow(entry: item.entry, deviceName: item.deviceName)
+                            }
+                        }
+                    }
+                    if pager.hasMore(in: model, device: device) {
+                        // A new identity per page, so the row loads again if it is still in view.
+                        LoadMoreRow { await pager.loadMore(in: model, device: device) }
+                            .id(items.count)
+                    }
                 }
             }
         }
         .navigationTitle("Activity")
-        .navigationSubtitle(subtitle(items.count))
+        .navigationSubtitle(subtitle)
         .searchable(text: $query, placement: .toolbar, prompt: "Search activity")
         .toolbar {
             ToolbarItem {
-                // Text items, so the toolbar shows which device is picked, not just an icon.
-                Picker("Device", selection: $device) {
-                    Text("All Devices").tag(String?.none)
-                    Divider()
-                    ForEach(model.devices) { device in
-                        Text(device.name).tag(Optional(device.id))
-                    }
+                Button("Clear", systemImage: "trash") {
+                    model.clearActivity(device: device)
+                    pager.reset()
                 }
-                .pickerStyle(.menu)
-                .fixedSize()
-                .help("Show one device's activity")
-            }
-            ToolbarItem {
-                Button("Clear", systemImage: "trash") { model.clearActivity(device: device) }
                     .disabled(items.isEmpty)
                     .help(device == nil ? "Clear the activity of every device" : "Clear this device's activity")
             }
         }
     }
 
-    private func subtitle(_ count: Int) -> String {
-        let scope = device.flatMap { id in model.devices.first { $0.id == id }?.name } ?? "all devices"
-        return model.activity.isEmpty ? "All devices" : "\(count) actions on \(scope)"
+    private var subtitle: String {
+        device.flatMap { id in model.devices.first { $0.id == id }?.name } ?? "All devices"
+    }
+}
+
+/// Activity grouped by calendar day, newest first, titled "Today", "Yesterday" or the date.
+struct ActivityDay<Item: Identifiable>: Identifiable {
+    let id: Date
+    let title: String
+    let items: [Item]
+
+    static func group(_ items: [Item], date: (Item) -> Date) -> [ActivityDay] {
+        let calendar = Calendar.current
+        var days: [ActivityDay] = []
+        var current: (day: Date, items: [Item])?
+        for item in items {
+            let day = calendar.startOfDay(for: date(item))
+            if current?.day != day {
+                if let current { days.append(ActivityDay(id: current.day, title: title(for: current.day, calendar: calendar), items: current.items)) }
+                current = (day, [])
+            }
+            current?.items.append(item)
+        }
+        if let current { days.append(ActivityDay(id: current.day, title: title(for: current.day, calendar: calendar), items: current.items)) }
+        return days
+    }
+
+    private static func title(for day: Date, calendar: Calendar) -> String {
+        if calendar.isDateInToday(day) { return "Today" }
+        if calendar.isDateInYesterday(day) { return "Yesterday" }
+        return day.formatted(.dateTime.weekday(.wide).day().month(.wide))
+    }
+}
+
+/// The last row of an activity list: loads the next page as soon as it scrolls into view.
+struct LoadMoreRow: View {
+    let load: () async -> Void
+
+    var body: some View {
+        HStack {
+            Spacer()
+            ProgressView().controlSize(.small)
+            Text("Loading older activity…").font(.callout).foregroundStyle(.secondary)
+            Spacer()
+        }
+        .padding(.vertical, 8)
+        .listRowSeparator(.hidden)
+        .task { await load() }
     }
 }

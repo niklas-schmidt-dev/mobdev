@@ -43,17 +43,27 @@ import Testing
         #expect(reloaded.all == log.all)
     }
 
-    @Test func reloadKeepsTheNewestAndCompactsTheFile() throws {
+    @Test func reloadKeepsTheNewestInMemoryAndOlderOnesOnDisk() throws {
         let file = temporaryFile()
         defer { try? FileManager.default.removeItem(at: file.deletingLastPathComponent()) }
         let log = ActivityLog(limit: 2, file: file)
-        for index in 0..<12 { log.record(source: "local", tool: "tap", summary: "\(index)", failed: false) }
+        for index in 0..<12 {
+            log.record(source: "local", tool: "tap", summary: "\(index)", failed: false)
+            Thread.sleep(forTimeInterval: 0.002)  // distinct milliseconds
+        }
         #expect(log.all.map(\.summary) == ["11", "10"])
 
         let reloaded = ActivityLog(limit: 2, file: file)
         #expect(reloaded.all.map(\.summary) == ["11", "10"])
         let lines = try String(contentsOf: file, encoding: .utf8).split(separator: "\n")
-        #expect(lines.count == 2)
+        #expect(lines.count == 12)
+
+        // Paging further back continues where memory ends.
+        let oldest = try #require(reloaded.all.last)
+        #expect(reloaded.older(than: oldest.date, limit: 3).map(\.summary) == ["9", "8", "7"])
+        let page = reloaded.older(than: oldest.date, limit: 100)
+        #expect(page.map(\.summary) == (0...9).reversed().map(String.init))
+        #expect(reloaded.older(than: try #require(page.last).date, limit: 5).isEmpty)
     }
 
     @Test func clearEmptiesTheFile() {
