@@ -1,0 +1,7 @@
+# Run with the explicit Demo phone enabled.
+launch "dev.mobdev.fern"
+tap "Sign in"
+type "Email" "alex@example.com"
+tap "Continue"
+wait_for "Welcome, alex"
+screenshot "signed-in"

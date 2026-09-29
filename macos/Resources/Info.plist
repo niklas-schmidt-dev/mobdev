@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleIdentifier</key>
+    <string>dev.mobdev.mac</string>
+    <key>CFBundleName</key>
+    <string>Mobdev</string>
+    <key>CFBundleDisplayName</key>
+    <string>Mobdev</string>
+    <key>CFBundleExecutable</key>
+    <string>Mobdev</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>0.1.0</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>26.0</string>
+    <key>LSApplicationCategoryType</key>
+    <string>public.app-category.developer-tools</string>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+    <key>NSHumanReadableCopyright</key>
+    <string>MIT License</string>
+    <key>NSBluetoothAlwaysUsageDescription</key>
+    <string>Mobdev pairs with your iPhone as a Bluetooth keyboard and pointer so agents can tap and type on it.</string>
+    <key>NSCameraUsageDescription</key>
+    <string>Mobdev reads your iPhone's screen over the USB cable, the same way QuickTime does. macOS treats that as camera access.</string>
+</dict>
+</plist>

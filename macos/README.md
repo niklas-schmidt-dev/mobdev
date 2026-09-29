@@ -1,0 +1,180 @@
+# Mobdev for Mac
+
+Let an AI agent use a real iPhone from your Mac. Free, open source, about 2 MB, no account.
+
+Mobdev reads the iPhone screen over the USB cable and taps and types through Bluetooth, posing as a
+keyboard and pointer. Nothing is installed on the phone: no developer mode, no jailbreak, no
+simulator. Agents get an MCP server and a small HTTP API. An optional relay lets agents elsewhere
+reach the phone.
+
+```
+              USB cable: screen frames (like QuickTime)
+   ┌─────────┐ ◀──────────────────────────────────────── ┌────────┐
+   │  Mac    │                                           │ iPhone │
+   │ Mobdev  │ ────────────────────────────────────────▶ │        │
+   └─────────┘   Bluetooth LE: keyboard + pointer (HID)   └────────┘
+     ▲     ▲                                     AssistiveTouch turns
+     │     └── MCP / HTTP on 127.0.0.1           the pointer into taps
+     │
+     └── optional outgoing connection to a relay (see ../relay)
+```
+
+## Requirements
+
+- A Mac with Bluetooth LE running macOS 26 or later (the interface uses Liquid Glass). Developed on macOS 27 with Swift 6.4.
+- An iPhone and a USB **data** cable. Charge-only cables give power and no picture.
+- To build: Xcode 26 or later (Swift 6.2+, macOS 26 SDK).
+
+## Build and run
+
+```sh
+cd macos
+scripts/build-app.sh          # builds build/Mobdev.app (ad hoc signature)
+open build/Mobdev.app         # allow Bluetooth and Camera when macOS asks
+```
+
+macOS treats the iPhone screen like a camera, hence the Camera prompt. To sign with a certificate,
+set `CODESIGN_IDENTITY`; `UNIVERSAL=1` builds for Apple silicon and Intel. With an ad hoc signature
+macOS may ask for the permissions again after each rebuild.
+
+## Set up the iPhone (once)
+
+1. Plug it in, unlock it and tap **Trust**. If the Mac asks to allow the accessory, click **Allow**.
+   The screen appears in Mobdev.
+2. On the iPhone open **Settings > Bluetooth** and tap this Mac or **Mobdev** to pair.
+3. Turn on **Settings > Accessibility > Touch > AssistiveTouch**. iOS then shows a pointer and
+   turns clicks into taps.
+4. In Mobdev pick the **keyboard layout** that matches Settings > General > Keyboard > Hardware
+   Keyboard on the iPhone (U.S. or German).
+5. Set **Auto-Lock** to Never while agents work. The phone must stay unlocked.
+
+The mirror in the app is live: click to tap, drag to swipe, scroll, and type while it has focus.
+⌘V types the Mac clipboard on the phone. The inspector on the right shows what is still missing,
+Activity lists every agent action, and Settings (⌘,) holds the keyboard layout and API token.
+
+## Connect an agent
+
+The app shows ready-to-copy configurations with the right paths. The stdio variants need no
+token: `Mobdev mcp` reads it locally and starts the app in the background if needed.
+
+Claude Code:
+
+```sh
+claude mcp add --scope user mobdev -- /Applications/Mobdev.app/Contents/MacOS/Mobdev mcp
+```
+
+Codex (`~/.codex/config.toml`):
+
+```toml
+[mcp_servers.mobdev]
+command = "/Applications/Mobdev.app/Contents/MacOS/Mobdev"
+args = ["mcp"]
+```
+
+Claude Desktop, Cursor and other clients:
+
+```json
+{ "mcpServers": { "mobdev": { "command": "/Applications/Mobdev.app/Contents/MacOS/Mobdev", "args": ["mcp"] } } }
+```
+
+Clients that speak Streamable HTTP can also use `http://127.0.0.1:4686/mcp` with
+`Authorization: Bearer <token>` (copy it in the app). The server supports MCP 2026-07-28 and the
+earlier `initialize`-based versions from 2024-11-05 to 2025-11-25.
+
+### Tools
+
+Coordinates are pixels of the image `screenshot` returns (long edge 1280 px, origin top-left).
+Actions return a fresh screenshot over MCP unless `screenshot` is `false`.
+
+| Tool | Arguments | |
+|---|---|---|
+| `status` | | Screen and Bluetooth readiness, screenshot size |
+| `screenshot` | | JPEG of the screen |
+| `tap` | `x`, `y` | |
+| `long_press` | `x`, `y`, `seconds` | |
+| `swipe` | `from_x`, `from_y`, `to_x`, `to_y`, `duration` | |
+| `scroll` | `direction` (`up`/`down`), `amount`, `x`, `y` | Mouse wheel |
+| `type_text` | `text`, `submit` | Into the focused field |
+| `press_key` | `key`, `modifiers` | e.g. `space` + `cmd` for Spotlight |
+| `home` | | |
+| `open_app` | `name` | Through Spotlight |
+| `read_screen` | | All visible text with positions (on-device OCR) |
+| `find_text` | `text` | |
+| `tap_text` | `text`, `index` | Taps a visible label |
+| `wait_for_text` | `text`, `timeout`, `gone` | |
+
+Text recognition uses Apple's Vision framework on the Mac; no screen content leaves the machine
+unless your agent sends it to its model.
+
+## HTTP API
+
+Everything listens on `127.0.0.1:4686` (`MOBDEV_PORT` overrides it) and needs
+`Authorization: Bearer <token>`. The token is in `~/Library/Application Support/dev.mobdev.mac/token`.
+
+```sh
+TOKEN=$(cat ~/Library/Application\ Support/dev.mobdev.mac/token)
+curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:4686/v1/status
+curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:4686/v1/screenshot -o screen.jpg   # ?format=png, ?full=1
+curl -H "Authorization: Bearer $TOKEN" -X POST http://127.0.0.1:4686/v1/tools/tap_text -d '{"text":"Settings"}'
+curl -H "Authorization: Bearer $TOKEN" -X POST http://127.0.0.1:4686/v1/tools/type_text -d '{"text":"hello","submit":true}'
+```
+
+`POST /v1/tools/<name>` takes the tool's arguments and returns `{"ok", "text", "data"}`; pass
+`"screenshot": true` to include one. `GET /v1/tools` lists the tools with their schemas.
+
+## Remote access (optional)
+
+Turn on **Remote access** and enter a relay URL. The Mac then keeps outgoing connections to the
+relay; no port is opened on the Mac. The app shows the remote MCP URL and a client key:
+
+```sh
+claude mcp add --transport http mobdev-remote https://relay.example.com/h/<mac-name>/mcp \
+  --header "Authorization: Bearer mdc_…"
+```
+
+The relay forwards requests and stores nothing. Run your own from [`../relay`](../relay). Anyone
+with the client key can control the phone; **New client key** revokes the old one.
+
+## Security and privacy
+
+- The API binds only to 127.0.0.1, requires the bearer token, rejects browser requests (`Origin`)
+  and foreign `Host` headers.
+- The token and relay secret are files readable only by you (mode 0600) in
+  `~/Library/Application Support/dev.mobdev.mac`. `MOBDEV_HOME` moves that directory.
+- No telemetry, no account. Every agent action appears under **Activity** in the app.
+- Agents act on your real phone with your accounts. Keep a human in the loop for anything that
+  sends messages, pays or deletes.
+
+## Limits
+
+- One iPhone per Mac for now. Several can be captured, but a Bluetooth host is not yet matched to
+  a USB screen, so input goes to every paired phone.
+- Verified on hardware so far: screen capture from an iPhone over USB, Bluetooth pairing, the API,
+  OCR, MCP and the relay. Whether taps land correctly with AssistiveTouch, swipes and typing still
+  need a hands-on check.
+- Typing supports the U.S. and German hardware layouts, including common accents. Emoji and other
+  characters without a key cannot be typed.
+- Portrait orientation is the tested case. Coordinates follow the current screenshot size.
+- The phone must stay unlocked. Mobdev cannot enter the passcode.
+
+## Development
+
+```sh
+swift test                      # unit, HTTP, MCP, OCR and relay end-to-end tests (needs Go for the last)
+scripts/build-app.sh
+```
+
+`MobdevCore` contains everything testable: HID reports and gestures (`HID/`), screen capture and
+text recognition (`Capture/`), tools (`Phone/`), HTTP, MCP and the stdio bridge (`Server/`) and the
+relay client (`Relay/`). The `Mobdev` target is the SwiftUI app: a `NavigationSplitView` with
+Liquid Glass controls, an inspector for setup, a `Table` for activity and a Settings scene. Tests
+use a fake phone that renders real text, so OCR, `tap_text` and coordinates are exercised without
+hardware. `scripts/make-icon.swift` renders the app icon on the macOS 26 grid.
+
+## Credits
+
+The idea comes from [TapKit](https://tapkit.ai). The Bluetooth LE HID approach (long-form `1812`
+UUID, encrypted report attributes, Report Reference descriptors, Service Changed for stale caches,
+absolute pointer for AssistiveTouch) is documented by [iphone-use](https://github.com/xhoantran/iphone-use)
+(MIT) and [sryo/clak](https://github.com/sryo/clak). Independent implementation; not affiliated
+with TapKit or MobAI.

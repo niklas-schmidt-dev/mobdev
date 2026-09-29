@@ -1,0 +1,15 @@
+node_modules/
+dist/
+release/
+.mobdev/
+.env
+.env.*
+!.env.example
+playwright-report/
+test-results/
+*.log
+.DS_Store
+.playwright-cli/
+output/
+macos/.build/
+macos/build/
