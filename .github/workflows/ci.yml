@@ -1,4 +1,4 @@
-name: Build and test
+name: Native app and relay
 on:
   push:
   pull_request:
@@ -8,35 +8,32 @@ permissions:
   contents: read
 
 jobs:
-  verify:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [macos-latest, windows-latest, ubuntu-latest]
-    runs-on: ${{ matrix.os }}
+  relay:
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-go@v5
         with:
-          node-version: '22'
-      - uses: oven-sh/setup-bun@v2
+          go-version: '1.27'
+      - run: go vet ./...
+        working-directory: relay
+      - run: go test -race ./...
+        working-directory: relay
+
+  macos:
+    # Needs Xcode 26 or later (Swift 6.2, macOS 26 SDK for Liquid Glass).
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
         with:
-          bun-version: '1.3.13'
-      - run: bun install --frozen-lockfile
-      - run: bun run typecheck
-      - run: bun run test
-      - run: bun run build
-      - name: Package unsigned development build
-        run: bunx electron-builder --publish never
-        env:
-          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+          go-version: '1.27'
+      - run: swift test
+        working-directory: macos
+      - run: scripts/build-app.sh
+        working-directory: macos
       - uses: actions/upload-artifact@v4
         with:
-          name: mobdev-${{ matrix.os }}
-          path: |
-            release/*.dmg
-            release/*.zip
-            release/*.exe
-            release/*.AppImage
-            release/*.deb
+          name: Mobdev.app
+          path: macos/build/Mobdev.app
           if-no-files-found: error

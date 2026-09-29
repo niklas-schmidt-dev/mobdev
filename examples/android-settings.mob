@@ -1,4 +1,0 @@
-# Android only. Runs on your selected, authorized device.
-launch "com.android.settings"
-wait 500
-screenshot "settings"

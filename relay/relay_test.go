@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"io"
@@ -9,58 +10,75 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/coder/websocket"
 )
 
 const testSecret = "mdh_0123456789abcdef"
 
 func testConfig() Config {
 	cfg := DefaultConfig()
-	cfg.PollTimeout = 2 * time.Second
 	cfg.RequestTimeout = 3 * time.Second
 	return cfg
 }
 
-// fakeHost answers every request with the path it received, like a Mac would.
-func fakeHost(t *testing.T, baseURL, secret, name string, stop <-chan struct{}) {
+func newServer(t *testing.T, cfg Config) *httptest.Server {
 	t.Helper()
+	server := httptest.NewServer(logRequests(NewRelay(cfg)))
+	t.Cleanup(server.Close)
+	return server
+}
+
+func dialHost(t *testing.T, baseURL, secret, name string, header http.Header) (*websocket.Conn, *http.Response, error) {
+	t.Helper()
+	if header == nil {
+		header = http.Header{}
+	}
+	header.Set("Authorization", "Bearer "+secret)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	url := "ws" + strings.TrimPrefix(baseURL, "http") + "/v1/host/connect?name=" + name
+	return websocket.Dial(ctx, url, &websocket.DialOptions{HTTPHeader: header})
+}
+
+// fakeHost answers every request with what it received, like a Mac would. It stops when
+// the test ends or the relay closes the connection.
+func fakeHost(t *testing.T, baseURL, secret, name string) *websocket.Conn {
+	t.Helper()
+	conn, _, err := dialHost(t, baseURL, secret, name, nil)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	t.Cleanup(func() { conn.CloseNow() })
 	go func() {
 		for {
-			select {
-			case <-stop:
-				return
-			default:
-			}
-			req, _ := http.NewRequest(http.MethodGet, baseURL+"/v1/host/poll?name="+name, nil)
-			req.Header.Set("Authorization", "Bearer "+secret)
-			resp, err := http.DefaultClient.Do(req)
+			_, data, err := conn.Read(context.Background())
 			if err != nil {
 				return
 			}
-			if resp.StatusCode != http.StatusOK {
-				resp.Body.Close()
+			var env envelope
+			if json.Unmarshal(data, &env) != nil || env.Type != "request" {
 				continue
 			}
-			var env envelope
-			_ = json.NewDecoder(resp.Body).Decode(&env)
-			resp.Body.Close()
+			if env.Path == "/v1/silent" {
+				continue // Never answers.
+			}
 			body, _ := base64.StdEncoding.DecodeString(env.Body)
-			answer := map[string]string{
+			answer, _ := json.Marshal(map[string]string{
 				"host": name, "method": env.Method, "path": env.Path, "query": env.Query,
 				"body": string(body), "mcp-method": env.Headers["mcp-method"],
-			}
-			encoded, _ := json.Marshal(answer)
-			reply := envelope{
-				ID: env.ID, Status: 200, Headers: map[string]string{"Content-Type": "application/json"},
-				Body: base64.StdEncoding.EncodeToString(encoded),
-			}
-			payload, _ := json.Marshal(reply)
-			post, _ := http.NewRequest(http.MethodPost, baseURL+"/v1/host/respond", strings.NewReader(string(payload)))
-			post.Header.Set("Authorization", "Bearer "+secret)
-			if r, err := http.DefaultClient.Do(post); err == nil {
-				r.Body.Close()
+			})
+			reply, _ := json.Marshal(envelope{
+				Type: "response", ID: env.ID, Status: 200,
+				Headers: map[string]string{"Content-Type": "application/json"},
+				Body:    base64.StdEncoding.EncodeToString(answer),
+			})
+			if conn.Write(context.Background(), websocket.MessageText, reply) != nil {
+				return
 			}
 		}
 	}()
+	return conn
 }
 
 func clientRequest(t *testing.T, method, url, key, body string, headers map[string]string) (int, map[string]string) {
@@ -84,24 +102,23 @@ func clientRequest(t *testing.T, method, url, key, body string, headers map[stri
 	return resp.StatusCode, result
 }
 
-func waitForHost(t *testing.T, baseURL, key string, count int) {
+func waitForHosts(t *testing.T, baseURL, key string, count int) {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
 		req, _ := http.NewRequest(http.MethodGet, baseURL+"/v1/relay/hosts", nil)
 		req.Header.Set("Authorization", "Bearer "+key)
-		resp, err := http.DefaultClient.Do(req)
-		if err == nil {
+		if resp, err := http.DefaultClient.Do(req); err == nil {
 			var list struct{ Hosts []string }
 			_ = json.NewDecoder(resp.Body).Decode(&list)
 			resp.Body.Close()
-			if len(list.Hosts) >= count {
+			if len(list.Hosts) == count {
 				return
 			}
 		}
-		time.Sleep(20 * time.Millisecond)
+		time.Sleep(10 * time.Millisecond)
 	}
-	t.Fatalf("host did not come online")
+	t.Fatalf("expected %d hosts", count)
 }
 
 func TestClientKeyMatchesSwiftDerivation(t *testing.T) {
@@ -112,13 +129,10 @@ func TestClientKeyMatchesSwiftDerivation(t *testing.T) {
 }
 
 func TestForwardsRequestToHostAndBack(t *testing.T) {
-	server := httptest.NewServer(NewRelay(testConfig()))
-	defer server.Close()
-	stop := make(chan struct{})
-	defer close(stop)
-	fakeHost(t, server.URL, testSecret, "studio", stop)
+	server := newServer(t, testConfig())
+	fakeHost(t, server.URL, testSecret, "studio")
 	key := ClientKey(testSecret)
-	waitForHost(t, server.URL, key, 1)
+	waitForHosts(t, server.URL, key, 1)
 
 	status, body := clientRequest(t, http.MethodPost, server.URL+"/mcp", key, `{"jsonrpc":"2.0"}`,
 		map[string]string{"Mcp-Method": "tools/call", "Cookie": "secret"})
@@ -138,10 +152,26 @@ func TestForwardsRequestToHostAndBack(t *testing.T) {
 	}
 }
 
-func TestRejectsWrongKeys(t *testing.T) {
-	server := httptest.NewServer(NewRelay(testConfig()))
-	defer server.Close()
+func TestAnswersPing(t *testing.T) {
+	server := newServer(t, testConfig())
+	conn, _, err := dialHost(t, server.URL, testSecret, "studio", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.CloseNow()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if err := conn.Write(ctx, websocket.MessageText, []byte("ping")); err != nil {
+		t.Fatal(err)
+	}
+	_, data, err := conn.Read(ctx)
+	if err != nil || string(data) != "pong" {
+		t.Fatalf("got %q, %v", data, err)
+	}
+}
 
+func TestRejectsWrongKeys(t *testing.T) {
+	server := newServer(t, testConfig())
 	if status, _ := clientRequest(t, http.MethodPost, server.URL+"/mcp", "", "{}", nil); status != 401 {
 		t.Fatalf("missing key: status %d", status)
 	}
@@ -149,38 +179,27 @@ func TestRejectsWrongKeys(t *testing.T) {
 	if status, _ := clientRequest(t, http.MethodPost, server.URL+"/mcp", testSecret, "{}", nil); status != 401 {
 		t.Fatalf("host secret as client key: status %d", status)
 	}
-	// A client key cannot register as a host.
-	req, _ := http.NewRequest(http.MethodGet, server.URL+"/v1/host/poll", nil)
-	req.Header.Set("Authorization", "Bearer "+ClientKey(testSecret))
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	resp.Body.Close()
-	if resp.StatusCode != 401 {
-		t.Fatalf("client key as host: status %d", resp.StatusCode)
+	// A client key cannot connect as a host.
+	_, resp, err := dialHost(t, server.URL, ClientKey(testSecret), "studio", nil)
+	if err == nil || resp == nil || resp.StatusCode != 401 {
+		t.Fatalf("client key as host: %v %v", resp, err)
 	}
 }
 
 func TestOnlyForwardsMobdevPaths(t *testing.T) {
-	server := httptest.NewServer(NewRelay(testConfig()))
-	defer server.Close()
-	stop := make(chan struct{})
-	defer close(stop)
-	fakeHost(t, server.URL, testSecret, "studio", stop)
+	server := newServer(t, testConfig())
+	fakeHost(t, server.URL, testSecret, "studio")
 	key := ClientKey(testSecret)
-	waitForHost(t, server.URL, key, 1)
-	if status, _ := clientRequest(t, http.MethodGet, server.URL+"/healthz/../etc", key, "", nil); status != 404 {
-		t.Fatalf("status %d", status)
-	}
-	if status, _ := clientRequest(t, http.MethodGet, server.URL+"/admin", key, "", nil); status != 404 {
-		t.Fatalf("status %d", status)
+	waitForHosts(t, server.URL, key, 1)
+	for _, path := range []string{"/healthz/../etc", "/admin", "/h/studio"} {
+		if status, _ := clientRequest(t, http.MethodGet, server.URL+path, key, "", nil); status != 404 {
+			t.Fatalf("%s: status %d", path, status)
+		}
 	}
 }
 
 func TestNoHostOnline(t *testing.T) {
-	server := httptest.NewServer(NewRelay(testConfig()))
-	defer server.Close()
+	server := newServer(t, testConfig())
 	status, body := clientRequest(t, http.MethodPost, server.URL+"/mcp", ClientKey(testSecret), "{}", nil)
 	if status != 503 {
 		t.Fatalf("status %d: %v", status, body)
@@ -188,14 +207,11 @@ func TestNoHostOnline(t *testing.T) {
 }
 
 func TestSeveralHostsNeedAName(t *testing.T) {
-	server := httptest.NewServer(NewRelay(testConfig()))
-	defer server.Close()
-	stop := make(chan struct{})
-	defer close(stop)
-	fakeHost(t, server.URL, testSecret, "office", stop)
-	fakeHost(t, server.URL, testSecret, "home", stop)
+	server := newServer(t, testConfig())
+	fakeHost(t, server.URL, testSecret, "office")
+	fakeHost(t, server.URL, testSecret, "home")
 	key := ClientKey(testSecret)
-	waitForHost(t, server.URL, key, 2)
+	waitForHosts(t, server.URL, key, 2)
 
 	status, body := clientRequest(t, http.MethodPost, server.URL+"/mcp", key, "{}", nil)
 	if status != 409 || !strings.Contains(body["error"], "home, office") {
@@ -212,12 +228,9 @@ func TestSeveralHostsNeedAName(t *testing.T) {
 }
 
 func TestKeysAreIsolated(t *testing.T) {
-	server := httptest.NewServer(NewRelay(testConfig()))
-	defer server.Close()
-	stop := make(chan struct{})
-	defer close(stop)
-	fakeHost(t, server.URL, testSecret, "studio", stop)
-	waitForHost(t, server.URL, ClientKey(testSecret), 1)
+	server := newServer(t, testConfig())
+	fakeHost(t, server.URL, testSecret, "studio")
+	waitForHosts(t, server.URL, ClientKey(testSecret), 1)
 	other := ClientKey("mdh_another-secret-value")
 	if status, _ := clientRequest(t, http.MethodPost, server.URL+"/mcp", other, "{}", nil); status != 503 {
 		t.Fatalf("another key reached the host: status %d", status)
@@ -227,52 +240,59 @@ func TestKeysAreIsolated(t *testing.T) {
 func TestAccessTokenGatesHosts(t *testing.T) {
 	cfg := testConfig()
 	cfg.AccessToken = "let-me-in"
-	server := httptest.NewServer(NewRelay(cfg))
-	defer server.Close()
-	req, _ := http.NewRequest(http.MethodGet, server.URL+"/v1/host/poll", nil)
-	req.Header.Set("Authorization", "Bearer "+testSecret)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatal(err)
+	server := newServer(t, cfg)
+	if _, resp, err := dialHost(t, server.URL, testSecret, "studio", nil); err == nil || resp.StatusCode != 403 {
+		t.Fatalf("expected 403 without token, got %v %v", resp, err)
 	}
-	resp.Body.Close()
-	if resp.StatusCode != 403 {
-		t.Fatalf("status %d", resp.StatusCode)
+	conn, _, err := dialHost(t, server.URL, testSecret, "studio", http.Header{"X-Relay-Access": {"let-me-in"}})
+	if err != nil {
+		t.Fatalf("with token: %v", err)
+	}
+	conn.CloseNow()
+}
+
+func TestNewerConnectionReplacesOlder(t *testing.T) {
+	server := newServer(t, testConfig())
+	first := fakeHost(t, server.URL, testSecret, "studio")
+	waitForHosts(t, server.URL, ClientKey(testSecret), 1)
+	fakeHost(t, server.URL, testSecret, "studio")
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	_, _, err := first.Read(ctx)
+	if websocket.CloseStatus(err) != CloseReplaced {
+		t.Fatalf("first connection: %v", err)
+	}
+	status, body := clientRequest(t, http.MethodPost, server.URL+"/mcp", ClientKey(testSecret), "{}", nil)
+	if status != 200 {
+		t.Fatalf("newer connection should serve: %d %v", status, body)
 	}
 }
 
 func TestTimesOutWhenHostDoesNotAnswer(t *testing.T) {
 	cfg := testConfig()
 	cfg.RequestTimeout = 300 * time.Millisecond
-	server := httptest.NewServer(NewRelay(cfg))
-	defer server.Close()
-	// Register a host that polls once and never answers.
-	go func() {
-		req, _ := http.NewRequest(http.MethodGet, server.URL+"/v1/host/poll?name=silent", nil)
-		req.Header.Set("Authorization", "Bearer "+testSecret)
-		if resp, err := http.DefaultClient.Do(req); err == nil {
-			resp.Body.Close()
-		}
-	}()
-	waitForHost(t, server.URL, ClientKey(testSecret), 1)
-	status, _ := clientRequest(t, http.MethodPost, server.URL+"/mcp", ClientKey(testSecret), "{}", nil)
+	server := newServer(t, cfg)
+	fakeHost(t, server.URL, testSecret, "studio")
+	waitForHosts(t, server.URL, ClientKey(testSecret), 1)
+	status, _ := clientRequest(t, http.MethodGet, server.URL+"/v1/silent", ClientKey(testSecret), "", nil)
 	if status != 504 {
 		t.Fatalf("status %d", status)
 	}
 }
 
-func TestImmediatePollConfirmsTheKey(t *testing.T) {
-	server := httptest.NewServer(NewRelay(DefaultConfig()))
-	defer server.Close()
-	req, _ := http.NewRequest(http.MethodGet, server.URL+"/v1/host/poll?name=studio&wait=0", nil)
-	req.Header.Set("Authorization", "Bearer "+testSecret)
+func TestDisconnectFailsPendingRequestsQuickly(t *testing.T) {
+	server := newServer(t, testConfig())
+	conn := fakeHost(t, server.URL, testSecret, "studio")
+	key := ClientKey(testSecret)
+	waitForHosts(t, server.URL, key, 1)
+	go func() {
+		time.Sleep(200 * time.Millisecond)
+		conn.Close(websocket.StatusGoingAway, "bye")
+	}()
 	start := time.Now()
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatal(err)
+	status, _ := clientRequest(t, http.MethodGet, server.URL+"/v1/silent", key, "", nil)
+	if status != 502 || time.Since(start) > 2*time.Second {
+		t.Fatalf("status %d after %s", status, time.Since(start))
 	}
-	resp.Body.Close()
-	if resp.StatusCode != http.StatusNoContent || time.Since(start) > time.Second {
-		t.Fatalf("status %d after %s", resp.StatusCode, time.Since(start))
-	}
+	waitForHosts(t, server.URL, key, 0)
 }

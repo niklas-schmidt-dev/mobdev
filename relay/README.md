@@ -1,11 +1,11 @@
 # Mobdev relay
 
 Lets agents anywhere reach a Mac running Mobdev without opening a port on that Mac. The Mac keeps
-a few outgoing long-poll requests open; the relay hands each agent request to one of them and
-returns the answer. Requests and screenshots pass through memory only. Nothing is stored and
-there are no accounts.
+one outgoing WebSocket open; the relay sends each agent request over it and returns the answer.
+Requests and screenshots pass through memory only. Nothing is stored and there are no accounts.
 
-One Go binary, standard library only.
+One Go binary; its only dependency is [coder/websocket](https://github.com/coder/websocket). The
+hosted relay at `relay.mobdev.sh` (see [`../cloud`](../cloud)) speaks the same protocol.
 
 ## Run
 
@@ -40,19 +40,19 @@ revokes the client key.
 
 | Who | Request | |
 |---|---|---|
-| Mac | `GET /v1/host/poll?name=<mac>` with `Bearer mdh_…` | Waits up to 25 s. `200` with a request envelope or `204`. `wait=0` answers at once. |
-| Mac | `POST /v1/host/respond` with `Bearer mdh_…` | The response envelope for a request id |
+| Mac | WebSocket `GET /v1/host/connect?name=<mac>` with `Bearer mdh_…` | Carries requests to the Mac and responses back. A newer connection with the same key and name replaces the older one (close code 4000). |
 | Agent | `POST /mcp`, `GET/POST /v1/...` with `Bearer mdc_…` | Forwarded to the only connected Mac |
 | Agent | `/h/<mac>/mcp`, `/h/<mac>/v1/...` or header `X-Mobdev-Host` | Pick a Mac when several share a key |
 | Agent | `GET /v1/relay/hosts` | Connected Macs for this key |
 | Anyone | `GET /healthz` | |
 
-Envelopes are JSON: `{"id", "method", "path", "query", "status", "headers", "body"}` with a
-base64 body. Only `/mcp` and `/v1/...` are forwarded, and only the headers MCP needs
+Messages are JSON text frames: the relay sends `{"type":"request","id","method","path","query","headers","body"}`
+and the Mac answers `{"type":"response","id","status","headers","body"}`, bodies in base64. The
+Mac sends `ping` every 20 s and the relay answers `pong`; a connection silent for 75 s is closed. Only `/mcp` and `/v1/...` are forwarded, and only the headers MCP needs
 (`Content-Type`, `Accept`, `MCP-Protocol-Version`, `Mcp-Method`, `Mcp-Name`, `Mcp-Param-*`).
 Cookies and the agent's `Authorization` header are never forwarded.
 
-Limits: 16 MB bodies, 90 s per request, 64 queued requests and 32 Macs per key. Logs contain
+Limits: 16 MB bodies, 90 s per request and 32 Macs per key. Logs contain
 method, path, status and duration only.
 
 ## Test

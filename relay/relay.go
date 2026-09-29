@@ -1,6 +1,6 @@
 // Package main is the Mobdev relay: it lets agents reach a Mac running Mobdev without
-// opening a port on that Mac. The Mac keeps outgoing long-poll requests open; the relay
-// hands each client request to one of them and returns the answer. Nothing is stored.
+// opening a port on that Mac. The Mac keeps one outgoing WebSocket open; the relay sends
+// each agent request over it and returns the answer. Nothing is stored.
 package main
 
 import (
@@ -13,40 +13,40 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"io"
-	"log"
 	"net/http"
 	"regexp"
 	"sort"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/coder/websocket"
 )
 
 // Config controls limits and optional access control.
 type Config struct {
-	// AccessToken, when set, is required from Macs (X-Relay-Access) before they may register.
+	// AccessToken, when set, is required from Macs (X-Relay-Access) before they may connect.
 	AccessToken    string
 	RequestTimeout time.Duration
-	PollTimeout    time.Duration
-	HostTTL        time.Duration
-	MaxBody        int64
-	QueueSize      int
-	MaxHosts       int
+	// IdleTimeout closes a Mac's connection when nothing, not even a ping, arrives in time.
+	IdleTimeout time.Duration
+	MaxBody     int64
+	MaxHosts    int
 }
 
 func DefaultConfig() Config {
 	return Config{
 		RequestTimeout: 90 * time.Second,
-		PollTimeout:    25 * time.Second,
-		HostTTL:        45 * time.Second,
+		IdleTimeout:    75 * time.Second,
 		MaxBody:        16 << 20,
-		QueueSize:      64,
 		MaxHosts:       32,
 	}
 }
 
-// envelope is one tunnelled HTTP request or response. Bodies are base64.
+// envelope is one tunnelled HTTP request ("request") or its answer ("response").
+// Bodies are base64.
 type envelope struct {
+	Type    string            `json:"type"`
 	ID      string            `json:"id"`
 	Method  string            `json:"method,omitempty"`
 	Path    string            `json:"path,omitempty"`
@@ -56,29 +56,41 @@ type envelope struct {
 	Body    string            `json:"body"`
 }
 
-type pending struct {
-	env   envelope
-	space string
-	ctx   context.Context
-	reply chan envelope
-}
+// CloseReplaced tells a Mac that another connection with the same key and name took over.
+const CloseReplaced websocket.StatusCode = 4000
 
 type host struct {
-	name     string
-	queue    chan *pending
-	lastSeen time.Time
-	polling  int
+	conn    *websocket.Conn
+	writeMu sync.Mutex
+	mu      sync.Mutex
+	pending map[string]chan envelope
+	done    chan struct{}
+}
+
+func (h *host) write(ctx context.Context, data []byte) error {
+	h.writeMu.Lock()
+	defer h.writeMu.Unlock()
+	return h.conn.Write(ctx, websocket.MessageText, data)
+}
+
+func (h *host) deliver(env envelope) {
+	h.mu.Lock()
+	ch := h.pending[env.ID]
+	delete(h.pending, env.ID)
+	h.mu.Unlock()
+	if ch != nil {
+		ch <- env
+	}
 }
 
 type Relay struct {
-	cfg      Config
-	mu       sync.Mutex
-	spaces   map[string]map[string]*host
-	inflight map[string]*pending
+	cfg    Config
+	mu     sync.Mutex
+	spaces map[string]map[string]*host
 }
 
 func NewRelay(cfg Config) *Relay {
-	return &Relay{cfg: cfg, spaces: map[string]map[string]*host{}, inflight: map[string]*pending{}}
+	return &Relay{cfg: cfg, spaces: map[string]map[string]*host{}}
 }
 
 const clientKeyContext = "mobdev-relay-client-v1"
@@ -105,7 +117,7 @@ func bearer(r *http.Request) string {
 	return ""
 }
 
-func (s *Relay) hostSpace(r *http.Request) (string, bool) {
+func hostSpace(r *http.Request) (string, bool) {
 	secret := bearer(r)
 	if !strings.HasPrefix(secret, "mdh_") || len(secret) < 20 || len(secret) > 200 {
 		return "", false
@@ -126,10 +138,8 @@ func (s *Relay) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case r.URL.Path == "/healthz":
 		w.Header().Set("Content-Type", "text/plain")
 		_, _ = io.WriteString(w, "ok\n")
-	case r.URL.Path == "/v1/host/poll" && r.Method == http.MethodGet:
-		s.poll(w, r)
-	case r.URL.Path == "/v1/host/respond" && r.Method == http.MethodPost:
-		s.respond(w, r)
+	case r.URL.Path == "/v1/host/connect":
+		s.connect(w, r)
 	case r.URL.Path == "/v1/relay/hosts" && r.Method == http.MethodGet:
 		s.listHosts(w, r)
 	default:
@@ -143,39 +153,16 @@ func writeError(w http.ResponseWriter, status int, message string) {
 	_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": message})
 }
 
-func (s *Relay) authorizeHost(w http.ResponseWriter, r *http.Request) (string, bool) {
+// connect upgrades a Mac's request to the WebSocket that carries agent requests.
+func (s *Relay) connect(w http.ResponseWriter, r *http.Request) {
 	if s.cfg.AccessToken != "" &&
 		subtle.ConstantTimeCompare([]byte(r.Header.Get("X-Relay-Access")), []byte(s.cfg.AccessToken)) != 1 {
 		writeError(w, http.StatusForbidden, "this relay requires an access token")
-		return "", false
+		return
 	}
-	space, ok := s.hostSpace(r)
+	space, ok := hostSpace(r)
 	if !ok {
 		writeError(w, http.StatusUnauthorized, "missing or malformed host secret")
-		return "", false
-	}
-	return space, true
-}
-
-func (s *Relay) online(h *host) bool {
-	return h.polling > 0 || time.Since(h.lastSeen) < s.cfg.HostTTL
-}
-
-// prune drops hosts that have been gone for a while. Caller holds s.mu.
-func (s *Relay) prune(space string) {
-	for name, h := range s.spaces[space] {
-		if h.polling == 0 && time.Since(h.lastSeen) > 10*time.Minute {
-			delete(s.spaces[space], name)
-		}
-	}
-	if len(s.spaces[space]) == 0 {
-		delete(s.spaces, space)
-	}
-}
-
-func (s *Relay) poll(w http.ResponseWriter, r *http.Request) {
-	space, ok := s.authorizeHost(w, r)
-	if !ok {
 		return
 	}
 	name := strings.ToLower(r.URL.Query().Get("name"))
@@ -186,88 +173,70 @@ func (s *Relay) poll(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "host name must be 1-64 characters of a-z, 0-9, '.', '_' or '-'")
 		return
 	}
+	s.mu.Lock()
+	full := len(s.spaces[space]) >= s.cfg.MaxHosts && s.spaces[space][name] == nil
+	s.mu.Unlock()
+	if full {
+		writeError(w, http.StatusTooManyRequests, "too many Macs share this key")
+		return
+	}
+
+	conn, err := websocket.Accept(w, r, nil)
+	if err != nil {
+		return // Accept already answered.
+	}
+	conn.SetReadLimit(s.cfg.MaxBody * 2)
+	h := &host{conn: conn, pending: map[string]chan envelope{}, done: make(chan struct{})}
 
 	s.mu.Lock()
-	s.prune(space)
 	hosts := s.spaces[space]
 	if hosts == nil {
 		hosts = map[string]*host{}
 		s.spaces[space] = hosts
 	}
-	h := hosts[name]
-	if h == nil {
-		if len(hosts) >= s.cfg.MaxHosts {
-			s.mu.Unlock()
-			writeError(w, http.StatusTooManyRequests, "too many Macs share this key")
-			return
-		}
-		h = &host{name: name, queue: make(chan *pending, s.cfg.QueueSize)}
-		hosts[name] = h
-	}
-	h.polling++
-	h.lastSeen = time.Now()
+	previous := hosts[name]
+	hosts[name] = h
 	s.mu.Unlock()
+	if previous != nil {
+		go previous.conn.Close(CloseReplaced, "another connection with this key and name took over")
+	}
 	defer func() {
 		s.mu.Lock()
-		h.polling--
-		h.lastSeen = time.Now()
+		if s.spaces[space][name] == h {
+			delete(s.spaces[space], name)
+			if len(s.spaces[space]) == 0 {
+				delete(s.spaces, space)
+			}
+		}
 		s.mu.Unlock()
+		close(h.done)
+		_ = conn.CloseNow()
 	}()
 
-	// wait=0 asks for an immediate answer, so a Mac can confirm its key without a long wait.
-	timeout := s.cfg.PollTimeout
-	if r.URL.Query().Get("wait") == "0" {
-		timeout = 0
-	}
-	timer := time.NewTimer(timeout)
-	defer timer.Stop()
 	for {
-		select {
-		case p := <-h.queue:
-			if p.ctx.Err() != nil {
-				continue // The client gave up before a Mac picked the request up.
-			}
-			w.Header().Set("Content-Type", "application/json")
-			if err := json.NewEncoder(w).Encode(p.env); err != nil {
-				log.Printf("poll write failed: %v", err)
-			}
-			return
-		case <-timer.C:
-			w.WriteHeader(http.StatusNoContent)
-			return
-		case <-r.Context().Done():
+		readCtx, cancel := context.WithTimeout(context.Background(), s.cfg.IdleTimeout)
+		kind, data, err := conn.Read(readCtx)
+		cancel()
+		if err != nil {
 			return
 		}
+		if kind != websocket.MessageText {
+			continue
+		}
+		if string(data) == "ping" {
+			writeCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			err := h.write(writeCtx, []byte("pong"))
+			cancel()
+			if err != nil {
+				return
+			}
+			continue
+		}
+		var env envelope
+		if json.Unmarshal(data, &env) == nil && env.Type == "response" {
+			h.deliver(env)
+		}
 	}
-}
-
-func (s *Relay) respond(w http.ResponseWriter, r *http.Request) {
-	space, ok := s.authorizeHost(w, r)
-	if !ok {
-		return
-	}
-	var env envelope
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, s.cfg.MaxBody*2)).Decode(&env); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid response envelope")
-		return
-	}
-	s.mu.Lock()
-	p := s.inflight[env.ID]
-	if p != nil && p.space == space {
-		delete(s.inflight, env.ID)
-	} else {
-		p = nil
-	}
-	s.mu.Unlock()
-	if p == nil {
-		writeError(w, http.StatusNotFound, "unknown or expired request")
-		return
-	}
-	select {
-	case p.reply <- env:
-	default:
-	}
-	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Relay) listHosts(w http.ResponseWriter, r *http.Request) {
@@ -277,12 +246,9 @@ func (s *Relay) listHosts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.mu.Lock()
-	s.prune(space)
 	names := []string{}
-	for name, h := range s.spaces[space] {
-		if s.online(h) {
-			names = append(names, name)
-		}
+	for name := range s.spaces[space] {
+		names = append(names, name)
 	}
 	s.mu.Unlock()
 	sort.Strings(names)
@@ -293,6 +259,7 @@ func (s *Relay) listHosts(w http.ResponseWriter, r *http.Request) {
 var forwardedRequestHeaders = []string{"Content-Type", "Accept", "Mcp-Protocol-Version", "Mcp-Method", "Mcp-Name"}
 var forwardedResponseHeaders = []string{"Content-Type", "Allow", "X-Image-Width", "X-Image-Height"}
 
+// forward sends an agent's request to the chosen Mac and relays the answer.
 func (s *Relay) forward(w http.ResponseWriter, r *http.Request) {
 	space, ok := clientSpace(r)
 	if !ok {
@@ -318,19 +285,14 @@ func (s *Relay) forward(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.mu.Lock()
-	s.prune(space)
-	var target *host
-	var online []string
-	for hostName, h := range s.spaces[space] {
-		if s.online(h) {
-			online = append(online, hostName)
-			if hostName == name {
-				target = h
-			}
+	hosts := s.spaces[space]
+	target := hosts[name]
+	online := make([]string, 0, len(hosts))
+	for hostName, h := range hosts {
+		online = append(online, hostName)
+		if name == "" && len(hosts) == 1 {
+			target = h
 		}
-	}
-	if name == "" && len(online) == 1 {
-		target = s.spaces[space][online[0]]
 	}
 	s.mu.Unlock()
 	switch {
@@ -368,53 +330,52 @@ func (s *Relay) forward(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "could not create request id")
 		return
 	}
-	p := &pending{
-		env: envelope{
-			ID: id, Method: r.Method, Path: path, Query: r.URL.RawQuery, Headers: headers,
-			Body: base64.StdEncoding.EncodeToString(body),
-		},
-		space: space,
-		ctx:   r.Context(),
-		reply: make(chan envelope, 1),
-	}
-	s.mu.Lock()
-	s.inflight[id] = p
-	s.mu.Unlock()
+	payload, _ := json.Marshal(envelope{
+		Type: "request", ID: id, Method: r.Method, Path: path, Query: r.URL.RawQuery, Headers: headers,
+		Body: base64.StdEncoding.EncodeToString(body),
+	})
+	reply := make(chan envelope, 1)
+	target.mu.Lock()
+	target.pending[id] = reply
+	target.mu.Unlock()
 	defer func() {
-		s.mu.Lock()
-		delete(s.inflight, id)
-		s.mu.Unlock()
+		target.mu.Lock()
+		delete(target.pending, id)
+		target.mu.Unlock()
 	}()
 
-	select {
-	case target.queue <- p:
-	default:
-		writeError(w, http.StatusServiceUnavailable, "the Mac is busy; try again")
+	writeCtx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	err = target.write(writeCtx, payload)
+	cancel()
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "the Mac disconnected")
 		return
 	}
 
 	timer := time.NewTimer(s.cfg.RequestTimeout)
 	defer timer.Stop()
 	select {
-	case reply := <-p.reply:
-		decoded, err := base64.StdEncoding.DecodeString(reply.Body)
+	case answer := <-reply:
+		decoded, err := base64.StdEncoding.DecodeString(answer.Body)
 		if err != nil {
 			writeError(w, http.StatusBadGateway, "the Mac sent an invalid response")
 			return
 		}
 		for _, header := range forwardedResponseHeaders {
-			for key, value := range reply.Headers {
+			for key, value := range answer.Headers {
 				if strings.EqualFold(key, header) {
 					w.Header().Set(header, value)
 				}
 			}
 		}
-		status := reply.Status
+		status := answer.Status
 		if status < 100 || status > 599 {
 			status = http.StatusBadGateway
 		}
 		w.WriteHeader(status)
 		_, _ = w.Write(decoded)
+	case <-target.done:
+		writeError(w, http.StatusBadGateway, "the Mac disconnected")
 	case <-timer.C:
 		writeError(w, http.StatusGatewayTimeout, "the Mac did not answer in time")
 	case <-r.Context().Done():

@@ -10,6 +10,13 @@ import Testing
                 == "mdc_0e465dea368fb6d8eb7a0c146da16c6a88b354216735682efcdf51a0ec3a9ab4")
     }
 
+    @Test func connectURLUsesWebSockets() {
+        let secure = RelayClient.connectURL(base: URL(string: "https://relay.mobdev.sh/")!, hostName: "studio")
+        #expect(secure?.absoluteString == "wss://relay.mobdev.sh/v1/host/connect?name=studio")
+        let local = RelayClient.connectURL(base: URL(string: "http://127.0.0.1:8080")!, hostName: "a b")
+        #expect(local?.absoluteString == "ws://127.0.0.1:8080/v1/host/connect?name=a%20b")
+    }
+
     @Test func relayURLMustBeHTTPSExceptLocally() throws {
         #expect(try RelayClient.validatedURL("https://relay.example.com").host == "relay.example.com")
         #expect(try RelayClient.validatedURL("http://127.0.0.1:8080").port == 8080)
@@ -29,36 +36,14 @@ import Testing
 
     @Test(.enabled(if: goPath != nil, "Go is not installed"))
     func mcpThroughTheRelay() async throws {
-        let relayDirectory = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-            .deletingLastPathComponent().appendingPathComponent("relay")
-        let work = FileManager.default.temporaryDirectory.appendingPathComponent("mobdev-relay-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: work) }
-        let binary = work.appendingPathComponent("relay")
-
-        let build = Process()
-        build.executableURL = URL(fileURLWithPath: Self.goPath!)
-        build.arguments = ["build", "-o", binary.path, "."]
-        build.currentDirectoryURL = relayDirectory
-        try build.run()
-        build.waitUntilExit()
-        #expect(build.terminationStatus == 0)
-
-        let port = try await Self.freePort()
-        let relay = Process()
-        relay.executableURL = binary
-        relay.environment = ["RELAY_ADDR": "127.0.0.1:\(port)"]
-        relay.standardError = FileHandle.nullDevice
-        try relay.run()
-        defer { relay.terminate() }
-        let base = URL(string: "http://127.0.0.1:\(port)")!
-        try await Self.waitUntilHealthy(base)
+        let relay = try await RelayProcess.start()
+        defer { relay.stop() }
+        let base = relay.base
 
         let phone = FakePhone(lines: [("Settings", 420, 300)])
         let tools = PhoneTools(phone: phone, activity: ActivityLog(), settleDelay: 0)
         let router = APIRouter(tools: tools, phone: phone, token: { "unused" }, port: { 0 })
-        let client = RelayClient(pollers: 2, handler: { request in await router.handle(request, from: .relay) })
+        let client = RelayClient(handler: { request in await router.handle(request, from: .relay) })
         let secret = "mdh_" + SecretStore.randomHex(bytes: 32)
         client.start(url: base, secret: secret, hostName: "test-mac", accessToken: nil)
         defer { client.stop() }
@@ -74,6 +59,7 @@ import Testing
             if hosts.isEmpty { try await Task.sleep(nanoseconds: 100_000_000) }
         }
         #expect(hosts == ["test-mac"])
+        for _ in 0..<50 where client.state != .connected { try await Task.sleep(for: .milliseconds(50)) }
         #expect(client.state == .connected)
 
         var request = URLRequest(url: base.appendingPathComponent("h/test-mac/mcp"))
@@ -98,23 +84,77 @@ import Testing
         #expect((wrongResponse as? HTTPURLResponse)?.statusCode == 503)
         #expect(phone.events.get().count == 1)
     }
+}
 
-    static func freePort() async throws -> UInt16 {
+/// Builds the Go relay once and runs it on a free loopback port.
+struct RelayProcess {
+    let process: Process
+    let base: URL
+
+    private static let binary = Locked<URL?>(nil)
+
+    static func start(environment: [String: String] = [:]) async throws -> RelayProcess {
+        let binary = try buildOnce()
         let server = HTTPServer(port: 0) { _ in HTTPResponse(status: 200) }
         try await server.start()
-        defer { server.stop() }
-        return server.port
-    }
+        let port = server.port
+        server.stop()
 
-    static func waitUntilHealthy(_ base: URL) async throws {
+        let process = Process()
+        process.executableURL = binary
+        process.environment = environment.merging(["RELAY_ADDR": "127.0.0.1:\(port)"]) { $1 }
+        process.standardError = FileHandle.nullDevice
+        try process.run()
+        let base = URL(string: "http://127.0.0.1:\(port)")!
         for _ in 0..<100 {
             if let (_, response) = try? await URLSession.shared.data(from: base.appendingPathComponent("healthz")),
                 (response as? HTTPURLResponse)?.statusCode == 200
             {
-                return
+                return RelayProcess(process: process, base: base)
             }
-            try await Task.sleep(nanoseconds: 50_000_000)
+            try await Task.sleep(for: .milliseconds(50))
         }
+        process.terminate()
         throw URLError(.cannotConnectToHost)
+    }
+
+    func stop() { process.terminate() }
+
+    private static func buildOnce() throws -> URL {
+        if let built = binary.get() { return built }
+        let relayDirectory = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent().appendingPathComponent("relay")
+        let output = FileManager.default.temporaryDirectory.appendingPathComponent("mobdev-relay-\(UUID().uuidString)")
+        let build = Process()
+        build.executableURL = URL(fileURLWithPath: RelayEndToEndTests.goPath!)
+        build.arguments = ["build", "-o", output.path, "."]
+        build.currentDirectoryURL = relayDirectory
+        try build.run()
+        build.waitUntilExit()
+        guard build.terminationStatus == 0 else { throw CocoaError(.executableLoad) }
+        binary.set(output)
+        return output
+    }
+}
+
+/// The relay rejects a Mac without the required access token, and the client says so.
+@Suite(.serialized) struct RelayAccessTests {
+    @Test(.enabled(if: RelayEndToEndTests.goPath != nil, "Go is not installed"))
+    func missingAccessTokenIsReported() async throws {
+        let relay = try await RelayProcess.start(environment: ["RELAY_HOST_ACCESS_TOKEN": "let-me-in"])
+        defer { relay.stop() }
+        let client = RelayClient(handler: { _ in HTTPResponse(status: 200) })
+        client.start(url: relay.base, secret: "mdh_" + SecretStore.randomHex(bytes: 32), hostName: "mac", accessToken: nil)
+        defer { client.stop() }
+        for _ in 0..<60 where client.state == .connecting { try await Task.sleep(for: .milliseconds(50)) }
+        #expect(client.state == .failed(RelayError.rejected(403).description))
+
+        let allowed = RelayClient(handler: { _ in HTTPResponse(status: 200) })
+        allowed.start(
+            url: relay.base, secret: "mdh_" + SecretStore.randomHex(bytes: 32), hostName: "mac", accessToken: "let-me-in")
+        defer { allowed.stop() }
+        for _ in 0..<60 where allowed.state != .connected { try await Task.sleep(for: .milliseconds(50)) }
+        #expect(allowed.state == .connected)
     }
 }
