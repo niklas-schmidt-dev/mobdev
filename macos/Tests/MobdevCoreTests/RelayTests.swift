@@ -84,10 +84,8 @@ import Testing
         #expect((wrongResponse as? HTTPURLResponse)?.statusCode == 503)
         #expect(phone.events.get().count == 1)
     }
-}
 
-/// The Mac reports its devices over the relay, and the relay lists them for the key.
-@Suite(.serialized) struct RelayDevicesTests {
+    /// The Mac reports its devices over the relay, and the relay lists them for the key.
     @Test(.enabled(if: RelayEndToEndTests.goPath != nil, "Go is not installed"))
     func devicesReachTheRelay() async throws {
         let relay = try await RelayProcess.start()
@@ -136,34 +134,43 @@ struct RelayProcess {
 
     private static let binary = Locked<URL?>(nil)
 
+    /// Several suites start relays in parallel, so the "free" port can be taken by the time the relay
+    /// binds it; a relay that exits right away is retried on another port.
     static func start(environment: [String: String] = [:]) async throws -> RelayProcess {
         let binary = try buildOnce()
-        let server = HTTPServer(port: 0) { _ in HTTPResponse(status: 200) }
-        try await server.start()
-        let port = server.port
-        server.stop()
+        for _ in 0..<3 {
+            let server = HTTPServer(port: 0) { _ in HTTPResponse(status: 200) }
+            try await server.start()
+            let port = server.port
+            server.stop()
 
-        let process = Process()
-        process.executableURL = binary
-        process.environment = environment.merging(["RELAY_ADDR": "127.0.0.1:\(port)"]) { $1 }
-        process.standardError = FileHandle.nullDevice
-        try process.run()
-        let base = URL(string: "http://127.0.0.1:\(port)")!
-        for _ in 0..<100 {
-            if let (_, response) = try? await URLSession.shared.data(from: base.appendingPathComponent("healthz")),
-                (response as? HTTPURLResponse)?.statusCode == 200
-            {
-                return RelayProcess(process: process, base: base)
+            let process = Process()
+            process.executableURL = binary
+            process.environment = environment.merging(["RELAY_ADDR": "127.0.0.1:\(port)"]) { $1 }
+            process.standardError = FileHandle.nullDevice
+            try process.run()
+            let base = URL(string: "http://127.0.0.1:\(port)")!
+            for _ in 0..<200 where process.isRunning {
+                if let (_, response) = try? await URLSession.shared.data(from: base.appendingPathComponent("healthz")),
+                    (response as? HTTPURLResponse)?.statusCode == 200
+                {
+                    return RelayProcess(process: process, base: base)
+                }
+                try await Task.sleep(for: .milliseconds(50))
             }
-            try await Task.sleep(for: .milliseconds(50))
+            process.terminate()
         }
-        process.terminate()
         throw URLError(.cannotConnectToHost)
     }
 
     func stop() { process.terminate() }
 
+    /// One build for every suite: callers wait for the first build instead of starting their own.
+    private static let building = NSLock()
+
     private static func buildOnce() throws -> URL {
+        building.lock()
+        defer { building.unlock() }
         if let built = binary.get() { return built }
         let relayDirectory = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
