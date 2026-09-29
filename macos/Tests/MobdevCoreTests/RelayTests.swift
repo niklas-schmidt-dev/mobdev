@@ -68,14 +68,14 @@ import Testing
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = JSONValue([
             "jsonrpc": "2.0", "id": 1, "method": "tools/call",
-            "params": ["name": "tap_text", "arguments": ["text": "Settings"]],
+            "params": ["name": "tap", "arguments": ["x": 295, "y": 640]],
         ]).encoded()
         let (data, response) = try await URLSession.shared.data(for: request)
         #expect((response as? HTTPURLResponse)?.statusCode == 200)
         let result = try JSONValue.parse(data)
         #expect(result["result"]?["isError"] == false, "\(result.compactString.prefix(400))")
         #expect(result["result"]?["content"]?.arrayValue?.last?["type"] == "image")
-        #expect(phone.events.get().count == 1)
+        #expect(phone.events.get() == [.tap(NormalizedPoint(x: 0.5, y: 0.5), 0.08)])
 
         // A wrong key reaches nothing.
         var wrong = request

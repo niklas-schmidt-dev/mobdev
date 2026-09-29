@@ -168,12 +168,12 @@ the Mac.
 ## Development
 
 ```sh
-swift test --build-system native # unit, HTTP, MCP, OCR and relay end-to-end tests (needs Go for the last)
+swift test                      # unit, HTTP, MCP, OCR and relay end-to-end tests (needs Go for the last)
 scripts/build-app.sh
 ```
 
-CI uses the native build system for tests to work around a test-launch hang on the Xcode 27
-hosted runner. Release builds continue to use the default build system.
+Vision text recognition never returns on GitHub's virtualized macOS runners, so the OCR tests
+are skipped when `CI` is set and only run on real Macs.
 
 `MobdevCore` contains everything testable: HID reports and gestures (`HID/`), screen capture and
 text recognition (`Capture/`), tools (`Phone/`), HTTP, MCP and the stdio bridge (`Server/`) and the

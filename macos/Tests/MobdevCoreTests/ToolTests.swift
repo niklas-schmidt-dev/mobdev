@@ -2,6 +2,14 @@ import Foundation
 import Testing
 @testable import MobdevCore
 
+extension Trait where Self == ConditionTrait {
+    /// Vision text recognition never returns on GitHub's virtualized macOS runners, so OCR tests
+    /// only run on real Macs.
+    static var needsTextRecognition: Self {
+        .disabled(if: ProcessInfo.processInfo.environment["CI"] != nil, "Vision text recognition hangs on CI runners")
+    }
+}
+
 @Suite struct ToolTests {
     // 1179×2556 screen, screenshots are 590×1280.
     let phone = FakePhone(lines: [
@@ -81,14 +89,14 @@ import Testing
         #expect(log.all.first?.summary == "typed 2 characters")
     }
 
-    @Test func readScreenFindsTextWithOCR() async throws {
+    @Test(.needsTextRecognition) func readScreenFindsTextWithOCR() async throws {
         let (tools, _) = tools()
         let output = try await tools.call("read_screen", arguments: nil, source: "test", screenshotByDefault: false)
         #expect(output.text.contains("Settings"))
         #expect(output.text.contains("Bluetooth"))
     }
 
-    @Test func tapTextTapsTheRecognizedLabel() async throws {
+    @Test(.needsTextRecognition) func tapTextTapsTheRecognizedLabel() async throws {
         let (tools, _) = tools()
         let output = try await tools.call(
             "tap_text", arguments: ["text": "bluetooth"], source: "test", screenshotByDefault: false)
@@ -102,7 +110,7 @@ import Testing
         #expect(point.x > 120.0 / 1179.0 && point.x < 0.5)
     }
 
-    @Test func tapTextRefusesAmbiguousMatchesWithoutIndex() async throws {
+    @Test(.needsTextRecognition) func tapTextRefusesAmbiguousMatchesWithoutIndex() async throws {
         let (tools, _) = tools()
         let ambiguous = try await tools.call(
             "tap_text", arguments: ["text": "General"], source: "test", screenshotByDefault: false)
@@ -120,7 +128,7 @@ import Testing
         #expect(abs(point.y - 1600.0 / 2556.0) < 0.02)
     }
 
-    @Test func tapTextReportsMissingText() async throws {
+    @Test(.needsTextRecognition) func tapTextReportsMissingText() async throws {
         let (tools, _) = tools()
         let output = try await tools.call(
             "tap_text", arguments: ["text": "Airplane Mode"], source: "test", screenshotByDefault: false)
@@ -128,7 +136,7 @@ import Testing
         #expect(output.text.contains("not visible"))
     }
 
-    @Test func waitForTextReturnsWhenVisibleAndTimesOutOtherwise() async throws {
+    @Test(.needsTextRecognition) func waitForTextReturnsWhenVisibleAndTimesOutOtherwise() async throws {
         let (tools, _) = tools()
         let found = try await tools.call(
             "wait_for_text", arguments: ["text": "Wi-Fi", "timeout": 1], source: "test", screenshotByDefault: false)

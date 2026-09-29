@@ -28,8 +28,7 @@ jobs:
           cache: false
       - name: Test
         working-directory: macos
-        # Avoid the Swift Build test-launch hang on the Xcode 27 hosted runner.
-        run: swift test --build-system native
+        run: swift test
 
   release:
     needs: test
