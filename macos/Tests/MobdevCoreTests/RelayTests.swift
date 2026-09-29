@@ -86,6 +86,49 @@ import Testing
     }
 }
 
+/// The Mac reports its devices over the relay, and the relay lists them for the key.
+@Suite(.serialized) struct RelayDevicesTests {
+    @Test(.enabled(if: RelayEndToEndTests.goPath != nil, "Go is not installed"))
+    func devicesReachTheRelay() async throws {
+        let relay = try await RelayProcess.start()
+        defer { relay.stop() }
+        let client = RelayClient(handler: { _ in HTTPResponse(status: 200) })
+        let secret = "mdh_" + SecretStore.randomHex(bytes: 32)
+        let phone = DeviceSummary(
+            id: "00008120-000639440C13C01E", name: "iPhone von Niklas", model: "iPhone15,2",
+            modelName: "iPhone 14 Pro", osVersion: "27.0", deviceClass: "iPhone", screen: true, bluetooth: true,
+            ready: true)
+        // Reported before the connection exists: sent once it is established.
+        client.updateDevices([phone])
+        client.start(url: relay.base, secret: secret, hostName: "studio", accessToken: nil)
+        defer { client.stop() }
+
+        func listed() async throws -> [RemoteMac] {
+            var request = URLRequest(url: relay.base.appendingPathComponent("v1/relay/devices"))
+            request.setValue("Bearer \(RelayClient.clientKey(forSecret: secret))", forHTTPHeaderField: "Authorization")
+            let (data, _) = try await URLSession.shared.data(for: request)
+            return try JSONDecoder().decode(RemoteMac.Response.self, from: data).macs
+        }
+        var macs: [RemoteMac] = []
+        for _ in 0..<60 where macs.first?.devices.isEmpty ?? true {
+            macs = try await listed()
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        #expect(macs.map(\.name) == ["studio"])
+        #expect(macs.first?.devices == [phone])
+
+        // A change is sent right away.
+        var locked = phone
+        locked.screen = false
+        locked.ready = false
+        client.updateDevices([locked])
+        for _ in 0..<60 where try await listed().first?.devices.first?.ready != false {
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        #expect(try await listed().first?.devices == [locked])
+    }
+}
+
 /// Builds the Go relay once and runs it on a free loopback port.
 struct RelayProcess {
     let process: Process

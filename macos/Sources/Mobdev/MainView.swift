@@ -2,13 +2,14 @@ import MobdevCore
 import SwiftUI
 
 enum Pane: Hashable {
-    case overview, device(String), agents, activity, remote
+    case overview, device(String), remoteDevice(mac: String, id: String), agents, activity, remote
 
-    /// Stored in user defaults as "overview", "device:<id>", "agents", …
+    /// Stored in user defaults as "overview", "device:<id>", "remote-device:<mac>/<id>", "agents", …
     var rawValue: String {
         switch self {
         case .overview: "overview"
         case .device(let id): "device:\(id)"
+        case .remoteDevice(let mac, let id): "remote-device:\(mac)/\(id)"
         case .agents: "agents"
         case .activity: "activity"
         case .remote: "remote"
@@ -21,6 +22,9 @@ enum Pane: Hashable {
         case "activity": self = .activity
         case "remote": self = .remote
         case let value where value.hasPrefix("device:"): self = .device(String(value.dropFirst("device:".count)))
+        case let value where value.hasPrefix("remote-device:"):
+            let parts = value.dropFirst("remote-device:".count).split(separator: "/", maxSplits: 1)
+            self = parts.count == 2 ? .remoteDevice(mac: String(parts[0]), id: String(parts[1])) : .overview
         default: self = .overview
         }
     }
@@ -48,6 +52,12 @@ struct MainView: View {
             case .device(let id):
                 if model.state(id) != nil {
                     DeviceDetailView(id: id).id(id)
+                } else {
+                    DevicesOverview()
+                }
+            case .remoteDevice(let mac, let id):
+                if model.remoteDevice(mac: mac, id: id) != nil {
+                    RemoteDeviceView(mac: mac, id: id).id(mac + id)
                 } else {
                     DevicesOverview()
                 }
@@ -90,6 +100,18 @@ private struct Sidebar: View {
                     .contextMenu {
                         if !device.isConnected {
                             Button("Forget Device", role: .destructive) { model.forget(device.id) }
+                        }
+                    }
+                }
+            }
+            ForEach(model.otherMacs) { mac in
+                Section(mac.online ? mac.name : "\(mac.name) · Offline") {
+                    if mac.devices.isEmpty {
+                        Text("No iPhone connected").foregroundStyle(.secondary).selectionDisabled()
+                    }
+                    ForEach(mac.devices, id: \.id) { device in
+                        NavigationLink(value: Pane.remoteDevice(mac: mac.name, id: device.id)) {
+                            RemoteDeviceRow(device: device, online: mac.online)
                         }
                     }
                 }
@@ -145,6 +167,29 @@ private struct DeviceRow: View {
         case .notch: "iphone.gen2"
         case .iPad: "ipad"
         default: "iphone.gen3"
+        }
+    }
+}
+
+private struct RemoteDeviceRow: View {
+    let device: DeviceSummary
+    let online: Bool
+
+    var body: some View {
+        Label {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(device.name.isEmpty ? device.modelName : device.name).lineLimit(1)
+                Text(online ? (device.ready ? "Ready for agents" : "Not ready") : device.modelName)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+        } icon: {
+            Image(systemName: device.deviceClass == "iPad" ? "ipad" : "iphone.gen3")
+                .foregroundStyle(online ? .primary : .secondary)
+                .overlay(alignment: .bottomTrailing) {
+                    StatusDot(ready: device.ready).opacity(online ? 1 : 0).offset(x: 3, y: 2)
+                }
         }
     }
 }

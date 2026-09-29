@@ -24,12 +24,30 @@ struct DevicesOverview: View {
                     VStack(alignment: .leading, spacing: 14) {
                         Text("This Mac")
                             .font(.title3.weight(.semibold))
-                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 200, maximum: 260), spacing: 20)], spacing: 20) {
+                        LazyVGrid(columns: Self.columns, spacing: 20) {
                             ForEach(model.devices) { device in
                                 Button { storedPane = Pane.device(device.id).rawValue } label: {
                                     DeviceCard(device: device, thumbnail: model.thumbnails[device.id])
                                 }
                                 .buttonStyle(.plain)
+                            }
+                        }
+                        ForEach(model.otherMacs) { mac in
+                            HStack(spacing: 8) {
+                                Image(systemName: "desktopcomputer").foregroundStyle(.secondary)
+                                Text(mac.name).font(.title3.weight(.semibold))
+                                if !mac.online { Text("Offline").foregroundStyle(.secondary) }
+                            }
+                            .padding(.top, 18)
+                            LazyVGrid(columns: Self.columns, spacing: 20) {
+                                ForEach(mac.devices, id: \.id) { device in
+                                    Button {
+                                        storedPane = Pane.remoteDevice(mac: mac.name, id: device.id).rawValue
+                                    } label: {
+                                        RemoteDeviceCard(device: device, online: mac.online)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
                             }
                         }
                     }
@@ -41,6 +59,8 @@ struct DevicesOverview: View {
         .navigationTitle("All Devices")
         .navigationSubtitle(subtitle)
     }
+
+    private static let columns = [GridItem(.adaptive(minimum: 200, maximum: 260), spacing: 20)]
 
     private var subtitle: String {
         let ready = model.devices.filter(\.isReady).count
@@ -81,6 +101,102 @@ private struct DeviceCard: View {
         .contentShape(.rect(cornerRadius: 26))
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isButton)
+    }
+}
+
+/// A device on another Mac of the account: no live picture, the state it last reported.
+private struct RemoteDeviceCard: View {
+    let device: DeviceSummary
+    let online: Bool
+
+    var body: some View {
+        VStack(spacing: 14) {
+            DeviceArtwork(info: device.info, height: 210)
+                .opacity(online ? 0.9 : 0.5)
+            VStack(spacing: 3) {
+                Text(device.name.isEmpty ? device.modelName : device.name).font(.headline).lineLimit(1)
+                Text([device.modelName, device.osVersion.isEmpty ? nil : device.info.systemName].compactMap { $0 }
+                    .joined(separator: " · "))
+                    .font(.callout).foregroundStyle(.secondary).lineLimit(1)
+                RemoteStateBadge(device: device, online: online).padding(.top, 5)
+            }
+        }
+        .padding(.vertical, 22)
+        .padding(.horizontal, 14)
+        .frame(maxWidth: .infinity)
+        .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 26))
+        .contentShape(.rect(cornerRadius: 26))
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isButton)
+    }
+}
+
+private struct RemoteStateBadge: View {
+    let device: DeviceSummary
+    let online: Bool
+
+    var body: some View {
+        let (text, color): (String, Color) =
+            !online ? ("Mac offline", .secondary) : device.ready ? ("Ready", .green)
+            : device.screen ? ("Pair over Bluetooth", .orange) : ("Not ready", .orange)
+        HStack(spacing: 6) {
+            Circle().fill(color).frame(width: 7, height: 7)
+            Text(text)
+        }
+        .font(.caption.weight(.medium))
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 4)
+        .background(.quaternary.opacity(0.6), in: .capsule)
+    }
+}
+
+/// A device on another Mac: what it is, its state, and how agents reach it.
+struct RemoteDeviceView: View {
+    @Environment(AppModel.self) private var model
+    let mac: String
+    let id: String
+
+    var body: some View {
+        if let (remote, device) = model.remoteDevice(mac: mac, id: id) {
+            Form {
+                Section {
+                    HStack(spacing: 20) {
+                        DeviceArtwork(info: device.info, height: 120)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(device.name.isEmpty ? device.modelName : device.name).font(.title2.weight(.semibold))
+                            Text("\(device.modelName) · on \(remote.name)").foregroundStyle(.secondary)
+                            RemoteStateBadge(device: device, online: remote.online).padding(.top, 6)
+                        }
+                        Spacer()
+                    }
+                    .padding(.vertical, 6)
+                }
+                Section("Device") {
+                    LabeledContent("Model", value: device.modelName)
+                    if !device.model.isEmpty { LabeledContent("Model Identifier", value: device.model) }
+                    if !device.osVersion.isEmpty { LabeledContent("Software", value: device.info.systemName) }
+                    LabeledContent("Mac", value: remote.name)
+                    LabeledContent("Screen (USB)", value: device.screen ? "Connected" : "Not connected")
+                    LabeledContent("Input (Bluetooth)", value: device.bluetooth ? "Paired" : "Not paired")
+                }
+                Section {
+                    LabeledContent("Device ID") {
+                        HStack {
+                            Text(device.id).font(.system(.body, design: .monospaced)).textSelection(.enabled)
+                            CopyButton { device.id }
+                        }
+                    }
+                } header: {
+                    Text("For Agents")
+                } footer: {
+                    Text("Agents reach this iPhone through \(remote.name)'s remote MCP command, found under Remote Access in Mobdev on that Mac. Pass this id as `device` when that Mac has several iPhones.")
+                }
+            }
+            .formStyle(.grouped)
+            .navigationTitle(device.name.isEmpty ? device.modelName : device.name)
+            .navigationSubtitle("On \(remote.name)")
+        }
     }
 }
 

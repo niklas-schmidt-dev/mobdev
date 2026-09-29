@@ -50,6 +50,25 @@ public struct DeviceSummary: Sendable, Equatable, Codable {
         case deviceClass = "device_class"
     }
 
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        name = try container.decodeIfPresent(String.self, forKey: .name) ?? ""
+        model = try container.decodeIfPresent(String.self, forKey: .model) ?? ""
+        modelName = try container.decodeIfPresent(String.self, forKey: .modelName) ?? ""
+        osVersion = try container.decodeIfPresent(String.self, forKey: .osVersion) ?? ""
+        deviceClass = try container.decodeIfPresent(String.self, forKey: .deviceClass) ?? "iPhone"
+        screen = try container.decodeIfPresent(Bool.self, forKey: .screen) ?? false
+        bluetooth = try container.decodeIfPresent(Bool.self, forKey: .bluetooth) ?? false
+        ready = try container.decodeIfPresent(Bool.self, forKey: .ready) ?? false
+    }
+
+    /// What the device artwork needs, for devices known only from the relay.
+    public var info: DeviceInfo {
+        DeviceInfo(
+            id: id, name: name, productType: model, osVersion: osVersion, buildVersion: "", deviceClass: deviceClass)
+    }
+
     public init(_ device: HardwareDevice) {
         let status = device.status()
         self.init(
@@ -166,5 +185,18 @@ public final class DeviceTools: ToolCalling {
         return ToolOutput(
             text: lines.joined(separator: "\n"),
             data: ["ready": .bool(!ready.isEmpty), "devices": .array(summaries.map(\.json))])
+    }
+}
+
+/// Another Mac of the same account and the devices it last reported, from the relay's
+/// `GET /v1/account/devices`.
+public struct RemoteMac: Sendable, Equatable, Decodable, Identifiable {
+    public let name: String
+    public let online: Bool
+    public let devices: [DeviceSummary]
+    public var id: String { name }
+
+    public struct Response: Decodable {
+        public let macs: [RemoteMac]
     }
 }

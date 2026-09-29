@@ -62,6 +62,8 @@ final class AppModel {
     /// Small live pictures of each connected device and the average colors of its screen.
     private(set) var thumbnails: [String: CGImage] = [:]
     private(set) var ambient: [String: [Color]] = [:]
+    /// Your other Macs and their iPhones, from the hosted relay. Empty without Remote Access.
+    private(set) var otherMacs: [RemoteMac] = []
     /// The setup assistant. It opens by itself until macOS has asked for camera and Bluetooth
     /// access, so both prompts appear on the page that explains them.
     var showsOnboarding = false
@@ -104,7 +106,13 @@ final class AppModel {
         }
 
         signal.connect { [weak self] in Task { @MainActor in self?.refresh() } }
-        relaySignal.connect { [weak self] in Task { @MainActor in self?.relayState = self?.relay.state ?? .off } }
+        relaySignal.connect { [weak self] in
+            Task { @MainActor in
+                guard let self else { return }
+                self.relayState = self.relay.state
+                if self.relayState == .connected { await self.refreshOtherMacs() }
+            }
+        }
     }
 
     func start() async {
@@ -132,6 +140,36 @@ final class AppModel {
                 try? await Task.sleep(for: .seconds(2))
             }
         }
+        Task { [weak self] in
+            while let self {
+                await self.refreshOtherMacs()
+                try? await Task.sleep(for: .seconds(30))
+            }
+        }
+    }
+
+    /// Asks the relay which Macs and devices the account has, using this Mac's access token.
+    func refreshOtherMacs() async {
+        let token = settings.relayAccessToken.trimmingCharacters(in: .whitespaces)
+        guard settings.relayEnabled, !token.isEmpty, let base = try? RelayClient.validatedURL(settings.relayURL) else {
+            if !otherMacs.isEmpty { otherMacs = [] }
+            return
+        }
+        var request = URLRequest(url: base.appendingPathComponent("v1/account/devices"), timeoutInterval: 10)
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        guard let (data, response) = try? await URLSession.shared.data(for: request),
+            (response as? HTTPURLResponse)?.statusCode == 200,
+            let decoded = try? JSONDecoder().decode(RemoteMac.Response.self, from: data)
+        else { return }
+        let others = decoded.macs.filter { $0.name != settings.hostName }
+        if others != otherMacs { otherMacs = others }
+    }
+
+    func remoteDevice(mac: String, id: String) -> (mac: RemoteMac, device: DeviceSummary)? {
+        guard let remote = otherMacs.first(where: { $0.name == mac }),
+            let device = remote.devices.first(where: { $0.id == id })
+        else { return nil }
+        return (remote, device)
     }
 
     func refresh() {
