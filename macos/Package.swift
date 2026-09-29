@@ -8,9 +8,15 @@ let package = Package(
     products: [
         .executable(name: "Mobdev", targets: ["Mobdev"])
     ],
+    dependencies: [
+        // Over-the-air updates for release builds.
+        .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.10.0")
+    ],
     targets: [
         .target(name: "MobdevCore"),
-        .executableTarget(name: "Mobdev", dependencies: ["MobdevCore"]),
+        .executableTarget(
+            name: "Mobdev",
+            dependencies: ["MobdevCore", .product(name: "Sparkle", package: "Sparkle")]),
         .testTarget(name: "MobdevCoreTests", dependencies: ["MobdevCore"]),
     ]
 )

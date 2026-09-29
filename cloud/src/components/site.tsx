@@ -1,5 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { useState, type ReactNode } from "react";
+import { GITHUB_URL } from "../lib/releases";
 
 export function Logo({ className = "size-7" }: { className?: string }) {
   return (
@@ -33,13 +34,12 @@ export function SiteHeader() {
           <Link to="/dashboard" className={link}>
             Account
           </Link>
-          <Link
-            to="/docs"
-            hash="install"
+          <a
+            href="/download"
             className="ml-2 rounded-full bg-blue px-3.5 py-1 text-[13px] font-medium text-white transition-colors hover:bg-blue-hover"
           >
-            Get Mobdev
-          </Link>
+            Download
+          </a>
         </div>
       </nav>
     </header>
@@ -69,6 +69,9 @@ export function SiteFooter() {
             </Link>
             <a href="/#pricing" className={item}>
               Pricing
+            </a>
+            <a href={GITHUB_URL} className={item}>
+              GitHub
             </a>
           </div>
           <div>

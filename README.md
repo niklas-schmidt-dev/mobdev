@@ -23,6 +23,8 @@ take screenshots, tap, type, open apps and tap visible text.
 
 ## Get started
 
+[Download Mobdev](https://mobdev.sh/download) (signed, notarized, updates itself), or build it:
+
 ```sh
 cd macos
 scripts/build-app.sh
@@ -45,6 +47,22 @@ cd cloud && bun install && bun run typecheck && bun run test && bun run build
 
 The Swift tests build and start the Go relay to test remote access end to end. Everything runs
 without an iPhone: a fake phone renders real text so OCR, `tap_text` and coordinates are covered.
+
+## Shipping
+
+Every push to `main` ships what changed, through GitHub Actions:
+
+| Change in | Workflow | Result |
+|---|---|---|
+| `cloud/` | `cloud.yml` | Tests, D1 migrations, deploy of mobdev.sh; relay.mobdev.sh only when the relay changed |
+| `macos/` | `macos.yml` | Tests, universal build, Developer ID signature, notarization, DMG, GitHub release `mac-v<version>`. `mobdev.sh/appcast.xml` then offers it and installed apps update through Sparkle |
+| `relay/` | `relay.yml` | Tests, `ghcr.io/niklas-schmidt-dev/mobdev-relay` for amd64 and arm64 |
+
+The app version is `macos/VERSION` plus the workflow run number. Repository secrets:
+`CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `DEVELOPER_ID_P12`, `DEVELOPER_ID_P12_PASSWORD`,
+`APPLE_API_KEY` (base64 `.p8`), `APPLE_API_KEY_ID`, `APPLE_API_ISSUER_ID`, `SPARKLE_PRIVATE_KEY`.
+The Sparkle key's backup is the "mobdev" item in the maintainer's keychain; losing it means
+installed apps can no longer be updated.
 
 ## Status
 

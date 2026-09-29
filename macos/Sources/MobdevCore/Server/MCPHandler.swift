@@ -7,7 +7,8 @@ public final class MCPHandler: Sendable {
     public static let modernVersions = ["2026-07-28"]
     public static let legacyVersions = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"]
     public static let serverName = "mobdev"
-    public static let serverVersion = "0.1.0"
+    /// The app's version in release builds; tests and `swift run` report 0.1.0.
+    public static let serverVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.1.0"
 
     private let tools: PhoneTools
 

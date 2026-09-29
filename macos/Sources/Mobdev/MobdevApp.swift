@@ -11,7 +11,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        Task { @MainActor in await AppModel.shared.start() }
+        Task { @MainActor in
+            _ = Updates.shared
+            await AppModel.shared.start()
+        }
     }
 
     @objc private func handleURLEvent(_ event: NSAppleEventDescriptor, withReply reply: NSAppleEventDescriptor) {
@@ -34,6 +37,13 @@ struct MobdevApp: App {
                 .environment(model)
         }
         .defaultSize(width: 1180, height: 860)
+        .commands {
+            CommandGroup(after: .appInfo) {
+                if Updates.shared.isAvailable {
+                    Button("Check for Updates…") { Updates.shared.checkForUpdates() }
+                }
+            }
+        }
 
         Settings {
             SettingsView()
@@ -59,6 +69,9 @@ private struct MenuBarContent: View {
             Text("Relay: \(model.relayState.summary)")
         }
         Divider()
+        if Updates.shared.isAvailable {
+            Button("Check for Updates…") { Updates.shared.checkForUpdates() }
+        }
         Button("Open Mobdev") {
             openWindow(id: "main")
             NSApp.activate(ignoringOtherApps: true)

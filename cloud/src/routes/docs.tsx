@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import type { ReactNode } from "react";
-import { Code, Page } from "../components/site";
+import { Code, Page, buttonPrimary } from "../components/site";
+import { GITHUB_URL } from "../lib/releases";
 
 export const Route = createFileRoute("/docs")({
   head: () => ({ meta: [{ title: "Docs — Mobdev" }] }),
@@ -74,14 +75,19 @@ function Docs() {
             <Section id="install" title="Install">
               <p>
                 You need a Mac with Bluetooth LE and <strong>macOS 26 or later</strong>, an iPhone and a USB{" "}
-                <strong>data</strong> cable. Signed downloads are on the way; until then, build the app from source
-                with Xcode 26 or later:
+                <strong>data</strong> cable. Download the app, open the disk image and drag Mobdev into Applications.
+                It is signed and notarized by Apple and updates itself.
               </p>
-              <Code>{"git clone <repository>\ncd mobdev/macos\nscripts/build-app.sh\nopen build/Mobdev.app"}</Code>
+              <p>
+                <a href="/download" className={`${buttonPrimary} !text-white !no-underline`}>
+                  Download for Mac
+                </a>
+              </p>
               <p>
                 Allow Bluetooth and Camera when macOS asks. macOS treats the iPhone screen like a camera, which is why
-                it asks for camera access.
+                it asks for camera access. To build it yourself with Xcode 26 or later:
               </p>
+              <Code>{`git clone ${GITHUB_URL}\ncd mobdev/macos\nscripts/build-app.sh\nopen build/Mobdev.app`}</Code>
             </Section>
 
             <Section id="iphone" title="Set up the iPhone">

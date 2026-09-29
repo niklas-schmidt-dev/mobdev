@@ -62,14 +62,16 @@ function Home() {
           the phone. Free and open source.
         </p>
         <div className="mt-9 flex flex-wrap items-center justify-center gap-x-7 gap-y-4">
-          <Link to="/docs" hash="install" className={buttonPrimary}>
-            Get Mobdev
-          </Link>
+          <a href="/download" className={buttonPrimary}>
+            Download for Mac
+          </a>
           <a href="#how" className={moreLink}>
             See how it works ›
           </a>
         </div>
-        <p className="mt-5 text-[13px] text-faint">Requires macOS 26 and an iPhone with a USB data cable.</p>
+        <p className="mt-5 text-[13px] text-faint">
+          Free. Updates itself. Requires macOS 26 and an iPhone with a USB data cable.
+        </p>
         <div className="mt-16 sm:mt-20">
           <AppMock />
         </div>
@@ -268,9 +270,9 @@ function Home() {
       <section className="px-5 py-24 text-center sm:py-32">
         <h2 className="headline text-balance mx-auto max-w-3xl text-[40px] sm:text-[56px]">Hand your agent a phone.</h2>
         <div className="mt-9 flex flex-wrap items-center justify-center gap-x-7 gap-y-4">
-          <Link to="/docs" hash="install" className={buttonPrimary}>
-            Get Mobdev
-          </Link>
+          <a href="/download" className={buttonPrimary}>
+            Download for Mac
+          </a>
           <Link to="/docs" className={moreLink}>
             Read the docs ›
           </Link>

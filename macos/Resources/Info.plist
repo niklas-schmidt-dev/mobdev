@@ -37,6 +37,10 @@
             </array>
         </dict>
     </array>
+    <key>SUPublicEDKey</key>
+    <string>MgR2RrEtndDZ0IbINs44RKIqjtunvEYDFNdDJkiyK3M=</string>
+    <key>SUEnableAutomaticChecks</key>
+    <true/>
     <key>NSBluetoothAlwaysUsageDescription</key>
     <string>Mobdev pairs with your iPhone as a Bluetooth keyboard and pointer so agents can tap and type on it.</string>
     <key>NSCameraUsageDescription</key>

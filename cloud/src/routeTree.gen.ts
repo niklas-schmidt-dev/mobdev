@@ -10,8 +10,10 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AppcastDotxmlRouteImport } from './routes/appcast[.]xml'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as DocsRouteImport } from './routes/docs'
+import { Route as DownloadRouteImport } from './routes/download'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as SignOutRouteImport } from './routes/sign-out'
 import { Route as ApiAuthCallbackRouteImport } from './routes/api/auth/callback'
@@ -22,6 +24,11 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AppcastDotxmlRoute = AppcastDotxmlRouteImport.update({
+  id: '/appcast.xml',
+  path: '/appcast.xml',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DashboardRoute = DashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
@@ -30,6 +37,11 @@ const DashboardRoute = DashboardRouteImport.update({
 const DocsRoute = DocsRouteImport.update({
   id: '/docs',
   path: '/docs',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DownloadRoute = DownloadRouteImport.update({
+  id: '/download',
+  path: '/download',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PrivacyRoute = PrivacyRouteImport.update({
@@ -55,8 +67,10 @@ const ApiAuthSignInRoute = ApiAuthSignInRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/appcast.xml': typeof AppcastDotxmlRoute
   '/dashboard': typeof DashboardRoute
   '/docs': typeof DocsRoute
+  '/download': typeof DownloadRoute
   '/privacy': typeof PrivacyRoute
   '/sign-out': typeof SignOutRoute
   '/api/auth/callback': typeof ApiAuthCallbackRoute
@@ -64,8 +78,10 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/appcast.xml': typeof AppcastDotxmlRoute
   '/dashboard': typeof DashboardRoute
   '/docs': typeof DocsRoute
+  '/download': typeof DownloadRoute
   '/privacy': typeof PrivacyRoute
   '/sign-out': typeof SignOutRoute
   '/api/auth/callback': typeof ApiAuthCallbackRoute
@@ -74,8 +90,10 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/appcast.xml': typeof AppcastDotxmlRoute
   '/dashboard': typeof DashboardRoute
   '/docs': typeof DocsRoute
+  '/download': typeof DownloadRoute
   '/privacy': typeof PrivacyRoute
   '/sign-out': typeof SignOutRoute
   '/api/auth/callback': typeof ApiAuthCallbackRoute
@@ -85,8 +103,10 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/appcast.xml'
     | '/dashboard'
     | '/docs'
+    | '/download'
     | '/privacy'
     | '/sign-out'
     | '/api/auth/callback'
@@ -94,8 +114,10 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/appcast.xml'
     | '/dashboard'
     | '/docs'
+    | '/download'
     | '/privacy'
     | '/sign-out'
     | '/api/auth/callback'
@@ -103,8 +125,10 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/appcast.xml'
     | '/dashboard'
     | '/docs'
+    | '/download'
     | '/privacy'
     | '/sign-out'
     | '/api/auth/callback'
@@ -113,8 +137,10 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AppcastDotxmlRoute: typeof AppcastDotxmlRoute
   DashboardRoute: typeof DashboardRoute
   DocsRoute: typeof DocsRoute
+  DownloadRoute: typeof DownloadRoute
   PrivacyRoute: typeof PrivacyRoute
   SignOutRoute: typeof SignOutRoute
   ApiAuthCallbackRoute: typeof ApiAuthCallbackRoute
@@ -130,6 +156,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/appcast.xml': {
+      id: '/appcast.xml'
+      path: '/appcast.xml'
+      fullPath: '/appcast.xml'
+      preLoaderRoute: typeof AppcastDotxmlRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/dashboard': {
       id: '/dashboard'
       path: '/dashboard'
@@ -142,6 +175,13 @@ declare module '@tanstack/react-router' {
       path: '/docs'
       fullPath: '/docs'
       preLoaderRoute: typeof DocsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/download': {
+      id: '/download'
+      path: '/download'
+      fullPath: '/download'
+      preLoaderRoute: typeof DownloadRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/privacy': {
@@ -177,8 +217,10 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AppcastDotxmlRoute: AppcastDotxmlRoute,
   DashboardRoute: DashboardRoute,
   DocsRoute: DocsRoute,
+  DownloadRoute: DownloadRoute,
   PrivacyRoute: PrivacyRoute,
   SignOutRoute: SignOutRoute,
   ApiAuthCallbackRoute: ApiAuthCallbackRoute,

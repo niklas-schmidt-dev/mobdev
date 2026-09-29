@@ -26,6 +26,22 @@ private struct GeneralSettings: View {
             Text("Must match Settings › General › Keyboard › Hardware Keyboard on the iPhone.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
+
+            Section("Updates") {
+                LabeledContent("Version", value: Updates.version)
+                if Updates.shared.isAvailable {
+                    Toggle(
+                        "Check for updates automatically",
+                        isOn: Binding(
+                            get: { Updates.shared.automaticallyChecks },
+                            set: { Updates.shared.automaticallyChecks = $0 }))
+                    Button("Check Now") { Updates.shared.checkForUpdates() }
+                } else {
+                    Text("This is a local build. Release builds from mobdev.sh update themselves.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+            }
         }
         .formStyle(.grouped)
     }

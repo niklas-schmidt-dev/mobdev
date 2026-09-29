@@ -1,0 +1,108 @@
+name: Mac app
+# Tests the app on every change. On main it also builds a signed, notarized release, publishes it
+# on GitHub and thereby updates the feed at mobdev.sh/appcast.xml, so installed apps update.
+on:
+  push:
+    branches: [main]
+    paths: ["macos/**", ".github/workflows/macos.yml"]
+  pull_request:
+    paths: ["macos/**", ".github/workflows/macos.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: xcode-27
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.27"
+          cache: false
+      - name: Test
+        working-directory: macos
+        run: swift test
+
+  release:
+    needs: test
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: xcode-27
+    permissions:
+      contents: write
+    env:
+      DEVELOPER_ID_P12: ${{ secrets.DEVELOPER_ID_P12 }}
+      DEVELOPER_ID_P12_PASSWORD: ${{ secrets.DEVELOPER_ID_P12_PASSWORD }}
+      APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+      APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+      APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+      SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check signing credentials
+        id: credentials
+        run: |
+          for name in DEVELOPER_ID_P12 DEVELOPER_ID_P12_PASSWORD APPLE_API_KEY APPLE_API_KEY_ID APPLE_API_ISSUER_ID SPARKLE_PRIVATE_KEY; do
+            if [ -z "${!name}" ]; then
+              echo "::notice::Secret $name is missing, so no release is published. The app was tested."
+              echo "ready=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          done
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+      - name: Import the Developer ID certificate
+        if: steps.credentials.outputs.ready == 'true'
+        run: |
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+          PASSWORD="$(openssl rand -hex 16)"
+          security create-keychain -p "$PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$PASSWORD" "$KEYCHAIN"
+          echo "$DEVELOPER_ID_P12" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+          security import "$RUNNER_TEMP/certificate.p12" -k "$KEYCHAIN" -P "$DEVELOPER_ID_P12_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$PASSWORD" "$KEYCHAIN" > /dev/null
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+          rm "$RUNNER_TEMP/certificate.p12"
+          echo "$APPLE_API_KEY" | base64 --decode > "$RUNNER_TEMP/AuthKey.p8"
+      - name: Build, notarize and package
+        if: steps.credentials.outputs.ready == 'true'
+        id: build
+        working-directory: macos
+        run: |
+          VERSION="$(cat VERSION).${{ github.run_number }}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          MOBDEV_VERSION="$VERSION" MOBDEV_BUILD="${{ github.run_number }}" \
+          CODESIGN_IDENTITY="Developer ID Application: Niklas Schmidt (9537RR5SZS)" \
+          APPLE_API_KEY_PATH="$RUNNER_TEMP/AuthKey.p8" \
+          RELEASE_URL="https://github.com/${{ github.repository }}/releases/download/mac-v$VERSION" \
+          scripts/release.sh
+      - name: Publish the release
+        if: steps.credentials.outputs.ready == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.build.outputs.version }}
+        run: |
+          gh release create "mac-v$VERSION" macos/build/dist/* \
+            --title "Mobdev $VERSION" --generate-notes --latest
+      - name: Check the live feed
+        if: steps.credentials.outputs.ready == 'true'
+        env:
+          VERSION: ${{ steps.build.outputs.version }}
+        run: |
+          for attempt in 1 2 3 4 5 6; do
+            if curl -fsS "https://mobdev.sh/appcast.xml?v=$VERSION" | grep -q "<sparkle:shortVersionString>$VERSION<"; then
+              echo "mobdev.sh/appcast.xml offers $VERSION"; exit 0
+            fi
+            sleep 60
+          done
+          echo "::warning::mobdev.sh/appcast.xml does not offer $VERSION yet (it caches for 5 minutes)"
+      - name: Remove the signing keychain
+        if: always()
+        run: |
+          security delete-keychain "$RUNNER_TEMP/signing.keychain-db" 2>/dev/null || true
+          rm -f "$RUNNER_TEMP/AuthKey.p8"
