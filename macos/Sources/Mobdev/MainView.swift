@@ -11,7 +11,10 @@ struct MainView: View {
     @AppStorage("selectedPane") private var storedPane = Pane.phone.rawValue
 
     private var pane: Binding<Pane?> {
-        Binding(get: { Pane(rawValue: storedPane) ?? .phone }, set: { storedPane = ($0 ?? .phone).rawValue })
+        Binding(
+            get: { Pane(rawValue: storedPane) ?? .phone },
+            // The list reports nil for clicks that select nothing; stay on the current pane then.
+            set: { if let pane = $0 { storedPane = pane.rawValue } })
     }
 
     var body: some View {
@@ -62,12 +65,15 @@ private struct Sidebar: View {
                     Label("Activity", systemImage: "waveform.path.ecg")
                 }
                 .badge(model.activity.count)
+                // A badge hides the link's value from the list's selection, so tag the row again.
+                .tag(Pane.activity)
             }
             Section("Cloud") {
                 NavigationLink(value: Pane.remote) {
                     Label("Remote Access", systemImage: "network")
                 }
                 .badge(model.settings.relayEnabled ? Text(model.relayState == .connected ? "On" : "…") : nil)
+                .tag(Pane.remote)
             }
         }
         .listStyle(.sidebar)

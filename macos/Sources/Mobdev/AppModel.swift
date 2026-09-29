@@ -86,7 +86,7 @@ final class AppModel {
         refresh()
         Task { [weak self] in
             while let self {
-                if let frame = self.phone.frame() { self.ambient = Ambient.colors(of: frame) }
+                await self.sampleAmbient()
                 try? await Task.sleep(for: .seconds(2))
             }
         }
@@ -94,12 +94,23 @@ final class AppModel {
 
     func refresh() {
         status = phone.status()
-        captureDevices = phone.capture.availableDevices()
-        if status.frameSize == nil {
-            ambient = []
-        } else if ambient.isEmpty, let frame = phone.frame() {
-            ambient = Ambient.colors(of: frame)
+        if status.frameSize == nil { ambient = [] }
+        // Device discovery can take a moment, so it stays off the main thread.
+        let capture = phone.capture
+        Task {
+            let devices = await Task.detached(priority: .utility) { capture.availableDevices() }.value
+            if devices != captureDevices { captureDevices = devices }
         }
+        if ambient.isEmpty { Task { await sampleAmbient() } }
+    }
+
+    /// Averages the colors of the current frame for the backdrop. Rendering a full-size frame takes
+    /// a while, so it happens off the main thread, and views only update when the colors change.
+    private func sampleAmbient() async {
+        guard status.frameSize != nil else { return }
+        let phone = self.phone
+        let colors = await Task.detached(priority: .utility) { phone.frame().map(Ambient.colors(of:)) }.value
+        if let colors, status.frameSize != nil, colors != ambient { ambient = colors }
     }
 
     var port: UInt16 { portBox.get() == 0 ? MobdevPaths.port(settings: settings) : portBox.get() }
@@ -222,11 +233,15 @@ final class AppModel {
     var executablePath: String { Bundle.main.executablePath ?? "/Applications/Mobdev.app/Contents/MacOS/Mobdev" }
     var localMCPURL: String { "http://127.0.0.1:\(port)/mcp" }
 
-    var claudeCodeCommand: String { "claude mcp add --scope user mobdev -- \(shellQuoted(executablePath)) mcp" }
+    /// The name agents register. The development build uses its own, so copying its snippets never
+    /// replaces the installed app's entry.
+    var mcpName: String { MobdevPaths.isDevelopmentBuild ? "mobdev-dev" : "mobdev" }
+
+    var claudeCodeCommand: String { "claude mcp add --scope user \(mcpName) -- \(shellQuoted(executablePath)) mcp" }
 
     var codexConfig: String {
         """
-        [mcp_servers.mobdev]
+        [mcp_servers.\(mcpName)]
         command = "\(executablePath)"
         args = ["mcp"]
         """
@@ -236,7 +251,7 @@ final class AppModel {
         """
         {
           "mcpServers": {
-            "mobdev": {
+            "\(mcpName)": {
               "command": "\(executablePath)",
               "args": ["mcp"]
             }
@@ -246,7 +261,7 @@ final class AppModel {
     }
 
     var httpCommand: String {
-        "claude mcp add --transport http mobdev \(localMCPURL) --header \"Authorization: Bearer \(token)\""
+        "claude mcp add --transport http \(mcpName) \(localMCPURL) --header \"Authorization: Bearer \(token)\""
     }
 
     var curlCommand: String {
@@ -254,7 +269,7 @@ final class AppModel {
     }
 
     var remoteCommand: String {
-        "claude mcp add --transport http mobdev-remote \(remoteMCPURL) --header \"Authorization: Bearer \(relayClientKey)\""
+        "claude mcp add --transport http \(mcpName)-remote \(remoteMCPURL) --header \"Authorization: Bearer \(relayClientKey)\""
     }
 
     private func shellQuoted(_ path: String) -> String {
@@ -319,8 +334,10 @@ enum Ambient {
             context.render(
                 output, toBitmap: &pixel, rowBytes: 4, bounds: output.extent,
                 format: .RGBA8, colorSpace: CGColorSpace(name: CGColorSpace.sRGB))
-            return Color(
-                .sRGB, red: Double(pixel[0]) / 255, green: Double(pixel[1]) / 255, blue: Double(pixel[2]) / 255)
+            // Coarse steps, so a ticking clock or small changes on screen do not restart the
+            // backdrop's cross-fade every few seconds.
+            func channel(_ value: UInt8) -> Double { Double(value / 16 * 16) / 255 }
+            return Color(.sRGB, red: channel(pixel[0]), green: channel(pixel[1]), blue: channel(pixel[2]))
         }
     }
 }

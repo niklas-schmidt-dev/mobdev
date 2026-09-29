@@ -12,7 +12,7 @@ struct PhoneMirrorView: NSViewRepresentable {
     @Binding var focused: Bool
 
     func makeNSView(context: Context) -> MirrorNSView {
-        let view = MirrorNSView()
+        let view = MirrorNSView.shared
         view.onFocusChange = { focused in DispatchQueue.main.async { self.focused = focused } }
         return view
     }
@@ -27,6 +27,11 @@ struct PhoneMirrorView: NSViewRepresentable {
 }
 
 final class MirrorNSView: NSView {
+    /// One mirror for the app's lifetime. Adding or removing a preview layer makes the capture
+    /// session tear down and rebuild its graph on the main thread, which stalled every switch to
+    /// and from the phone pane, so the layer stays attached while other panes are shown.
+    static let shared = MirrorNSView()
+
     let previewLayer = AVCaptureVideoPreviewLayer()
     var input: HIDInput?
     var keyboardLayout: KeyboardLayout = .us

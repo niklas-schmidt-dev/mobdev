@@ -1,11 +1,18 @@
 import Foundation
 import Security
 
-/// Where Mobdev keeps settings and secrets. `MOBDEV_HOME` overrides the location, e.g. to
-/// run a development copy next to an installed app.
+/// Where Mobdev keeps settings and secrets. `MOBDEV_HOME` overrides the location.
 public enum MobdevPaths {
-    public static let bundleIdentifier = "dev.mobdev.mac"
-    public static let defaultPort: UInt16 = 4686
+    /// "dev.mobdev.mac" for the released app. The development build, "Mobdev Dev" with
+    /// "dev.mobdev.mac.dev" (see scripts/build-app.sh), keeps its own settings, secrets and port,
+    /// so it runs next to an installed Mobdev without touching it.
+    public static let bundleIdentifier: String = {
+        let identifier = Bundle.main.bundleIdentifier ?? ""
+        return identifier.hasPrefix("dev.mobdev.mac") ? identifier : "dev.mobdev.mac"
+    }()
+    public static var isDevelopmentBuild: Bool { bundleIdentifier != "dev.mobdev.mac" }
+    public static var appName: String { isDevelopmentBuild ? "Mobdev Dev" : "Mobdev" }
+    public static var defaultPort: UInt16 { isDevelopmentBuild ? 4687 : 4686 }
 
     public static var home: URL {
         if let custom = ProcessInfo.processInfo.environment["MOBDEV_HOME"], !custom.isEmpty {

@@ -32,7 +32,7 @@ struct MobdevApp: App {
     @State private var model = AppModel.shared
 
     var body: some Scene {
-        Window("Mobdev", id: "main") {
+        Window(MobdevPaths.appName, id: "main") {
             MainView()
                 .environment(model)
         }
@@ -54,7 +54,10 @@ struct MobdevApp: App {
             MenuBarContent()
                 .environment(model)
         } label: {
-            Image(systemName: model.isReady ? "iphone.radiowaves.left.and.right" : "iphone")
+            // The development build gets its own icon, so it is never mistaken for the installed app.
+            Image(
+                systemName: MobdevPaths.isDevelopmentBuild
+                    ? "hammer" : model.isReady ? "iphone.radiowaves.left.and.right" : "iphone")
         }
     }
 }
@@ -72,11 +75,11 @@ private struct MenuBarContent: View {
         if Updates.shared.isAvailable {
             Button("Check for Updates…") { Updates.shared.checkForUpdates() }
         }
-        Button("Open Mobdev") {
+        Button("Open \(MobdevPaths.appName)") {
             openWindow(id: "main")
             NSApp.activate(ignoringOtherApps: true)
         }
-        Button("Quit Mobdev") { NSApp.terminate(nil) }
+        Button("Quit \(MobdevPaths.appName)") { NSApp.terminate(nil) }
             .keyboardShortcut("q")
     }
 }

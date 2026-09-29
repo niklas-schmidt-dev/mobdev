@@ -27,7 +27,7 @@ take screenshots, tap, type, open apps and tap visible text.
 
 ```sh
 cd macos
-scripts/build-app.sh
+MOBDEV_VARIANT=release scripts/build-app.sh
 open build/Mobdev.app
 ```
 
@@ -40,7 +40,7 @@ click “Open in Mobdev”, or run [your own relay](relay/README.md).
 ## Development
 
 ```sh
-cd macos && swift test && scripts/build-app.sh      # Mac app
+cd macos && swift test && scripts/build-app.sh      # Mac app: builds "Mobdev Dev"
 cd relay && go vet ./... && go test -race ./...    # self-hosted relay
 cd cloud && bun install && bun run typecheck && bun run test && bun run build
 ```

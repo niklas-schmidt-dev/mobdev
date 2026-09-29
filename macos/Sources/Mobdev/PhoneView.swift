@@ -177,7 +177,7 @@ private struct ConnectPhone: View {
             ContentUnavailableView {
                 Label("Camera Access Needed", systemImage: "video.slash")
             } description: {
-                Text("macOS treats the iPhone screen like a camera. Allow Mobdev in Privacy & Security.")
+                Text("macOS treats the iPhone screen like a camera. Allow \(MobdevPaths.appName) in Privacy & Security.")
             } actions: {
                 Button("Open Privacy Settings") { model.openPrivacySettings("Privacy_Camera") }
                     .buttonStyle(.glassProminent)
@@ -274,8 +274,8 @@ struct SetupInspector: View {
 
     private var bluetoothDetail: String {
         switch model.status.bluetooth {
-        case .connected: "Paired. Mobdev can tap and type."
-        case .advertising: "On the iPhone: Settings › Bluetooth, then tap this Mac or “Mobdev”."
+        case .connected: "Paired. \(MobdevPaths.appName) can tap and type."
+        case .advertising: "On the iPhone: Settings › Bluetooth, then tap this Mac or “\(MobdevPaths.appName)”."
         default: model.status.bluetooth.summary
         }
     }

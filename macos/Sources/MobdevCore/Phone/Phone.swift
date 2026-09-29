@@ -39,7 +39,7 @@ public final class HardwarePhone: PhoneBackend, @unchecked Sendable {
 
     public init(keyboardLayout: KeyboardLayout, onChange: @escaping @Sendable () -> Void) {
         capture = ScreenCapture(onStateChange: { _ in onChange() })
-        peripheral = HIDPeripheral(onStateChange: { _ in onChange() })
+        peripheral = HIDPeripheral(localName: MobdevPaths.appName, onStateChange: { _ in onChange() })
         input = HIDInput(sink: peripheral)
         layout = Locked(keyboardLayout)
     }

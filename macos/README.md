@@ -29,13 +29,20 @@ reach the phone.
 
 ```sh
 cd macos
-scripts/build-app.sh          # builds build/Mobdev.app (ad hoc signature)
-open build/Mobdev.app         # allow Bluetooth and Camera when macOS asks
+MOBDEV_VARIANT=release scripts/build-app.sh   # builds build/Mobdev.app (ad hoc signature)
+open build/Mobdev.app                         # allow Bluetooth and Camera when macOS asks
 ```
 
 macOS treats the iPhone screen like a camera, hence the Camera prompt. To sign with a certificate,
 set `CODESIGN_IDENTITY`; `UNIVERSAL=1` builds for Apple silicon and Intel. With an ad hoc signature
 macOS may ask for the permissions again after each rebuild.
+
+Without `MOBDEV_VARIANT=release` the script builds **Mobdev Dev** (`build/Mobdev Dev.app`) for
+development. It is a separate app that runs next to an installed Mobdev without changing it:
+bundle ID `dev.mobdev.mac.dev`, its own settings and secrets in
+`~/Library/Application Support/dev.mobdev.mac.dev`, port 4687, the `mobdev-dev://` URL scheme (so
+dashboard links keep opening the installed app), the MCP name `mobdev-dev`, an amber icon and no
+automatic updates. Both apps share the Mac's Bluetooth, so quit one before testing touch.
 
 ## Set up the iPhone (once)
 
@@ -169,7 +176,7 @@ the Mac.
 
 ```sh
 swift test                      # unit, HTTP, MCP, OCR and relay end-to-end tests (needs Go for the last)
-scripts/build-app.sh
+scripts/build-app.sh            # build/Mobdev Dev.app, the separate development app
 ```
 
 Vision text recognition never returns on GitHub's virtualized macOS runners, so the OCR tests

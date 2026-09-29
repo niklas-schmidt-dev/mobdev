@@ -22,7 +22,7 @@ SPARKLE_VERSION=2.10.0
 REPOSITORY="${GITHUB_REPOSITORY:-niklas-schmidt-dev/mobdev}"
 export MOBDEV_VERSION MOBDEV_BUILD CODESIGN_IDENTITY
 export MOBDEV_UPDATE_FEED="${MOBDEV_UPDATE_FEED:-https://mobdev.sh/appcast.xml}"
-UNIVERSAL=1 scripts/build-app.sh
+MOBDEV_VARIANT=release UNIVERSAL=1 scripts/build-app.sh
 
 DIST=build/dist
 rm -rf "$DIST"

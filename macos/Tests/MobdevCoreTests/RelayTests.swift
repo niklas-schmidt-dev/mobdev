@@ -167,6 +167,9 @@ struct RelayProcess {
         #expect(RelayInvite(url: url) == RelayInvite(url: url))
         #expect(RelayInvite(url: url)?.relay.absoluteString == "https://relay.mobdev.sh")
         #expect(RelayInvite(url: url)?.token == token)
+        // The development build's scheme.
+        let dev = URL(string: "mobdev-dev://connect?relay=https%3A%2F%2Frelay.mobdev.sh&token=\(token)")!
+        #expect(RelayInvite(url: dev)?.token == token)
     }
 
     @Test func rejectsInsecureRelaysAndBadTokens() {

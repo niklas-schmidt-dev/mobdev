@@ -2,7 +2,7 @@ import Foundation
 import os
 
 public enum Log {
-    private static let logger = Logger(subsystem: "dev.mobdev.mac", category: "mobdev")
+    private static let logger = Logger(subsystem: MobdevPaths.bundleIdentifier, category: "mobdev")
 
     public static func info(_ message: String) {
         logger.info("\(message, privacy: .public)")
