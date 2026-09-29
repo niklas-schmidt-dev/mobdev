@@ -29,22 +29,22 @@ const steps = [
 /** The roadmap in "Coming next". Keep the statuses honest; move shipped items into the page above. */
 const roadmap = [
   {
-    icon: "phones",
+    icon: "terminal",
     status: "Just shipped",
-    title: "Many iPhones, one device hub.",
-    body: "Drive several iPhones from one Mac, and see the iPhones on all your Macs in one list.",
+    title: "Install, launch, logs.",
+    body: "Install builds, launch apps by bundle ID, open deep links, read their logs and crash reports.",
+  },
+  {
+    icon: "sparkle",
+    status: "Just shipped",
+    title: "Skills for your agent.",
+    body: "Ready-made workflows: the build and debug loop, smoke tests, onboarding audits, competitor research.",
   },
   {
     icon: "devices",
     status: "Next",
     title: "Simulators and Android.",
     body: "The same tools for the iOS Simulator, Android emulators and Android phones.",
-  },
-  {
-    icon: "terminal",
-    status: "Next",
-    title: "Install, launch, logs.",
-    body: "Install builds, launch apps by bundle ID, open deep links, stream logs and crash reports.",
   },
   {
     icon: "tree",
@@ -69,7 +69,11 @@ const roadmap = [
 const faqs = [
   [
     "Does the iPhone need developer mode or an app?",
-    "No. Mobdev only uses the USB screen feed and a Bluetooth keyboard and pointer, which every iPhone supports. You turn on AssistiveTouch once.",
+    "No. Mobdev only uses the USB screen feed and a Bluetooth keyboard and pointer, which every iPhone supports. You turn on AssistiveTouch once. Only the optional tools for your own apps, such as installing builds and reading their logs, need Developer Mode and Xcode.",
+  ],
+  [
+    "Can my agent run the app I am building?",
+    "Yes. With Developer Mode on, it installs your build, launches it, drives it like a user and reads its logs and crash reports. Mobdev never removes App Store or system apps.",
   ],
   [
     "What do I need?",
@@ -180,10 +184,10 @@ function Home() {
               </div>
             </div>
             <div className="flex flex-col rounded-3xl bg-mist p-8">
-              <p className="headline text-[64px] text-ink">15</p>
+              <p className="headline text-[64px] text-ink">23</p>
               <p className="mt-auto text-[17px] leading-[1.47] text-muted">
-                tools, from <span className="text-ink">tap</span> and <span className="text-ink">swipe</span> to{" "}
-                <span className="text-ink">open_app</span> and <span className="text-ink">tap_text</span>.
+                tools, from <span className="text-ink">tap</span> and <span className="text-ink">tap_text</span> to{" "}
+                <span className="text-ink">install_app</span> and <span className="text-ink">logs</span>.
               </p>
             </div>
             <div className="rounded-3xl bg-mist p-8">

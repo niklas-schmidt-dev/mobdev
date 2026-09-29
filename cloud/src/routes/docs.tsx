@@ -16,6 +16,8 @@ const sections = [
   ["iphone", "Set up the iPhone"],
   ["agents", "Connect an agent"],
   ["tools", "Tools"],
+  ["developer", "Build, run and debug"],
+  ["skills", "Skills"],
   ["remote", "Remote access"],
   ["self-host", "Run your own relay"],
   ["security", "Security and privacy"],
@@ -38,6 +40,43 @@ const tools = [
   ["tap_text", "text, index", "Tap a visible label"],
   ["wait_for_text", "text, timeout, gone", "Wait for text to appear or disappear"],
 ];
+
+/** Need Developer Mode on the iPhone and Xcode on the Mac. */
+const developerTools = [
+  ["list_apps", "all", "Apps installed for development, or every app"],
+  ["install_app", "path", "Install an .app or .ipa built for iPhone from the Mac"],
+  ["uninstall_app", "bundle_id", "Remove an app installed for development"],
+  ["launch_app", "bundle_id, arguments, environment, restart", "Launch an app and capture what it prints"],
+  ["stop_app", "bundle_id", "Stop a running app"],
+  ["open_url", "url", "Open a deep link, universal link or web page"],
+  ["logs", "bundle_id, after, lines, contains", "print, NSLog and os_log output, and how the app ended"],
+  ["crash_reports", "app, name, limit", "List crash reports, or read one: exception, reason, crashed thread"],
+];
+
+function ToolTable({ rows }: { rows: string[][] }) {
+  return (
+    <div className="overflow-x-auto rounded-2xl bg-mist">
+      <table className="w-full text-left text-[15px]">
+        <thead className="text-muted">
+          <tr>
+            <th className="px-4 pb-2 pt-3.5 text-[13px] font-semibold">Tool</th>
+            <th className="px-4 pb-2 pt-3.5 text-[13px] font-semibold">Arguments</th>
+            <th className="px-4 pb-2 pt-3.5 text-[13px] font-semibold">What it does</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-line/70">
+          {rows.map(([name, args, what]) => (
+            <tr key={name}>
+              <td className="px-4 py-2.5 font-semibold text-ink">{name}</td>
+              <td className="px-4 py-2.5 text-muted">{args}</td>
+              <td className="px-4 py-2.5 text-ink/85">{what}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
 
 function Section({ id, title, children }: { id: string; title: string; children: ReactNode }) {
   return (
@@ -137,29 +176,42 @@ function Docs() {
                 <code className="rounded bg-mist px-1.5 py-0.5 text-[15px]">device</code> (an id or name from{" "}
                 <code className="rounded bg-mist px-1.5 py-0.5 text-[15px]">list_devices</code>) to pick one.
               </p>
-              <div className="overflow-x-auto rounded-2xl bg-mist">
-                <table className="w-full text-left text-[15px]">
-                  <thead className="text-muted">
-                    <tr>
-                      <th className="px-4 pb-2 pt-3.5 text-[13px] font-semibold">Tool</th>
-                      <th className="px-4 pb-2 pt-3.5 text-[13px] font-semibold">Arguments</th>
-                      <th className="px-4 pb-2 pt-3.5 text-[13px] font-semibold">What it does</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-line/70">
-                    {tools.map(([name, args, what]) => (
-                      <tr key={name}>
-                        <td className="px-4 py-2.5 font-semibold text-ink">{name}</td>
-                        <td className="px-4 py-2.5 text-muted">{args}</td>
-                        <td className="px-4 py-2.5 text-ink/85">{what}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <ToolTable rows={tools} />
+            </Section>
+
+            <Section id="developer" title="Build, run and debug">
               <p>
-                Installing builds, launching apps by bundle ID and reading logs are on the way. See{" "}
-                <a href="/#next">what is coming next</a>.
+                For apps you build, Mobdev also installs builds, launches them and reads their output and crash
+                reports. The agent builds with <code className="rounded bg-mist px-1.5 py-0.5 text-[15px]">xcodebuild</code>,
+                installs, drives the app with the tools above and reads the logs. These tools use Xcode’s{" "}
+                <code className="rounded bg-mist px-1.5 py-0.5 text-[15px]">devicectl</code>, so they need{" "}
+                <strong>Xcode</strong> on the Mac and <strong>Developer Mode</strong> on the iPhone (Settings ›
+                Privacy &amp; Security › Developer Mode). Everything else works without them.
+              </p>
+              <ToolTable rows={developerTools} />
+              <Code>
+                {"xcodebuild -scheme MyApp -destination 'generic/platform=iOS' \\\n  -derivedDataPath build -allowProvisioningUpdates build\n# install_app {\"path\": \"…/build/Build/Products/Debug-iphoneos/MyApp.app\"}\n# launch_app  {\"bundle_id\": \"com.example.MyApp\"}\n# logs        {\"bundle_id\": \"com.example.MyApp\"}"}
+              </Code>
+              <p>
+                <code className="rounded bg-mist px-1.5 py-0.5 text-[15px]">logs</code> returns a cursor; pass it as{" "}
+                <code className="rounded bg-mist px-1.5 py-0.5 text-[15px]">after</code> to get only new lines. When the
+                app crashes, <code className="rounded bg-mist px-1.5 py-0.5 text-[15px]">logs</code> says so and{" "}
+                <code className="rounded bg-mist px-1.5 py-0.5 text-[15px]">crash_reports</code> shows the report.
+                Paths for <code className="rounded bg-mist px-1.5 py-0.5 text-[15px]">install_app</code> are on the Mac
+                that runs Mobdev, also through a relay. Mobdev never removes App Store or system apps.
+              </p>
+            </Section>
+
+            <Section id="skills" title="Skills">
+              <p>
+                Skills give your agent whole workflows on top of the tools: the build and debug loop, smoke tests,
+                onboarding audits and competitor research. They work with Claude Code, Codex, Cursor and other agents
+                that read <code className="rounded bg-mist px-1.5 py-0.5 text-[15px]">SKILL.md</code> files.
+              </p>
+              <Code>{"npx skills add niklas-schmidt-dev/mobdev"}</Code>
+              <p>
+                Or copy a folder from <a href={`${GITHUB_URL}/tree/main/skills`}>skills/</a> into your agent’s skills
+                directory.
               </p>
             </Section>
 
