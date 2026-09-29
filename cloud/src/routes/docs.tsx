@@ -36,9 +36,9 @@ const tools = [
 
 function Section({ id, title, children }: { id: string; title: string; children: ReactNode }) {
   return (
-    <section id={id} className="scroll-mt-24 border-b border-white/5 pb-12 pt-4 last:border-0">
-      <h2 className="font-display text-2xl font-semibold tracking-tight">{title}</h2>
-      <div className="mt-4 space-y-4 leading-relaxed text-paper/85 [&_a]:text-lime [&_a]:underline-offset-4 hover:[&_a]:underline [&_strong]:text-paper">
+    <section id={id} className="scroll-mt-20 border-b border-line pb-14 pt-2 last:border-0">
+      <h2 className="text-[28px] font-semibold tracking-tight">{title}</h2>
+      <div className="mt-5 space-y-5 text-[17px] leading-[1.6] text-ink/85 [&_a]:text-link [&_a]:underline-offset-4 hover:[&_a]:underline [&_strong]:font-semibold [&_strong]:text-ink">
         {children}
       </div>
     </section>
@@ -48,25 +48,29 @@ function Section({ id, title, children }: { id: string; title: string; children:
 function Docs() {
   return (
     <Page>
-      <div className="mx-auto grid max-w-6xl gap-10 px-5 py-14 lg:grid-cols-[200px_1fr]">
+      <div className="mx-auto grid max-w-5xl gap-12 px-5 py-16 lg:grid-cols-[190px_1fr]">
         <nav aria-label="On this page" className="hidden lg:block">
-          <ul className="sticky top-24 space-y-1 text-sm">
+          <div className="sticky top-20">
+          <p className="mb-3 px-3 text-[12px] font-semibold uppercase tracking-wide text-faint">On this page</p>
+          <ul className="space-y-0.5 text-[14px]">
             {sections.map(([id, title]) => (
               <li key={id}>
-                <a href={`#${id}`} className="block rounded-lg px-3 py-1.5 text-muted transition hover:bg-white/5 hover:text-paper">
+                <a href={`#${id}`} className="block rounded-lg px-3 py-1.5 text-muted transition-colors hover:bg-mist hover:text-ink">
                   {title}
                 </a>
               </li>
             ))}
           </ul>
+          </div>
         </nav>
         <article className="min-w-0 max-w-3xl">
-          <h1 className="font-display text-4xl font-semibold tracking-tight">Mobdev docs</h1>
-          <p className="mt-3 text-lg text-muted">
+          <p className="text-[17px] font-semibold text-blue">Documentation</p>
+          <h1 className="headline mt-1 text-[48px]">Mobdev</h1>
+          <p className="mt-4 text-[21px] leading-[1.45] text-muted">
             Mobdev reads the iPhone screen over USB and taps and types as a Bluetooth keyboard and pointer. Agents use it
             through MCP or HTTP.
           </p>
-          <div className="mt-10 space-y-8">
+          <div className="mt-14 space-y-12">
             <Section id="install" title="Install">
               <p>
                 You need a Mac with Bluetooth LE and <strong>macOS 26 or later</strong>, an iPhone and a USB{" "}
@@ -100,41 +104,41 @@ function Docs() {
 
             <Section id="agents" title="Connect an agent">
               <p>The app shows these with the right paths under Connect. They contain no secret.</p>
-              <p className="text-sm text-muted">Claude Code</p>
+              <p className="text-[15px] font-semibold text-ink">Claude Code</p>
               <Code>{"claude mcp add --scope user mobdev -- /Applications/Mobdev.app/Contents/MacOS/Mobdev mcp"}</Code>
-              <p className="text-sm text-muted">Codex (~/.codex/config.toml)</p>
+              <p className="text-[15px] font-semibold text-ink">Codex (~/.codex/config.toml)</p>
               <Code>{'[mcp_servers.mobdev]\ncommand = "/Applications/Mobdev.app/Contents/MacOS/Mobdev"\nargs = ["mcp"]'}</Code>
-              <p className="text-sm text-muted">Claude Desktop, Cursor and others</p>
+              <p className="text-[15px] font-semibold text-ink">Claude Desktop, Cursor and others</p>
               <Code>
                 {'{\n  "mcpServers": {\n    "mobdev": {\n      "command": "/Applications/Mobdev.app/Contents/MacOS/Mobdev",\n      "args": ["mcp"]\n    }\n  }\n}'}
               </Code>
               <p>
-                HTTP clients can use <code className="font-mono text-sm">http://127.0.0.1:4686/mcp</code> with the token
+                HTTP clients can use <code className="rounded bg-mist px-1.5 py-0.5 text-[15px]">http://127.0.0.1:4686/mcp</code> with the token
                 from Settings › API. The server speaks MCP 2026-07-28 and the earlier versions back to 2024-11-05.
               </p>
             </Section>
 
             <Section id="tools" title="Tools">
               <p>
-                Coordinates are pixels of the image <code className="font-mono text-sm">screenshot</code> returns (long
+                Coordinates are pixels of the image <code className="rounded bg-mist px-1.5 py-0.5 text-[15px]">screenshot</code> returns (long
                 edge 1280 px). Actions return a fresh screenshot unless you pass{" "}
-                <code className="font-mono text-sm">"screenshot": false</code>.
+                <code className="rounded bg-mist px-1.5 py-0.5 text-[15px]">"screenshot": false</code>.
               </p>
-              <div className="overflow-x-auto rounded-2xl border border-white/10">
-                <table className="w-full text-left text-sm">
-                  <thead className="bg-white/[0.03] text-muted">
+              <div className="overflow-x-auto rounded-2xl bg-mist">
+                <table className="w-full text-left text-[15px]">
+                  <thead className="text-muted">
                     <tr>
-                      <th className="px-4 py-2.5 font-medium">Tool</th>
-                      <th className="px-4 py-2.5 font-medium">Arguments</th>
-                      <th className="px-4 py-2.5 font-medium">What it does</th>
+                      <th className="px-4 pb-2 pt-3.5 text-[13px] font-semibold">Tool</th>
+                      <th className="px-4 pb-2 pt-3.5 text-[13px] font-semibold">Arguments</th>
+                      <th className="px-4 pb-2 pt-3.5 text-[13px] font-semibold">What it does</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-white/5">
+                  <tbody className="divide-y divide-line/70">
                     {tools.map(([name, args, what]) => (
                       <tr key={name}>
-                        <td className="px-4 py-2.5 font-mono text-[13px] text-lime">{name}</td>
-                        <td className="px-4 py-2.5 font-mono text-[13px] text-muted">{args}</td>
-                        <td className="px-4 py-2.5">{what}</td>
+                        <td className="px-4 py-2.5 font-semibold text-ink">{name}</td>
+                        <td className="px-4 py-2.5 text-muted">{args}</td>
+                        <td className="px-4 py-2.5 text-ink/85">{what}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -158,7 +162,7 @@ function Docs() {
                 {'claude mcp add --transport http mobdev-remote \\\n  https://relay.mobdev.sh/h/<mac-name>/mcp \\\n  --header "Authorization: Bearer mdc_…"'}
               </Code>
               <p>
-                The client key (<code className="font-mono text-sm">mdc_…</code>) is derived from a secret that never
+                The client key (<code className="rounded bg-mist px-1.5 py-0.5 text-[15px]">mdc_…</code>) is derived from a secret that never
                 leaves your Mac. Anyone with it can control the phone; “New Client Key” in the app revokes it. Revoking
                 the access token in the dashboard disconnects the Mac.
               </p>
@@ -169,7 +173,7 @@ function Docs() {
               <Code>{"cd relay\nRELAY_HOST_ACCESS_TOKEN=choose-one go run .\n# or\ndocker build -t mobdev-relay . && docker run -p 8080:8080 mobdev-relay"}</Code>
               <p>
                 Put it behind HTTPS and enter its URL in the app. With{" "}
-                <code className="font-mono text-sm">RELAY_HOST_ACCESS_TOKEN</code> set, only Macs that know the token
+                <code className="rounded bg-mist px-1.5 py-0.5 text-[15px]">RELAY_HOST_ACCESS_TOKEN</code> set, only Macs that know the token
                 may connect.
               </p>
             </Section>

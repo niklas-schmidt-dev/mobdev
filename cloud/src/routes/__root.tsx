@@ -14,7 +14,7 @@ export const Route = createRootRoute({
         content:
           "Mobdev lets Claude Code, Codex and other agents see and tap a real iPhone from your Mac. No developer mode, nothing installed on the phone. Free and open source.",
       },
-      { name: "theme-color", content: "#0b0d0b" },
+      { name: "theme-color", content: "#ffffff" },
     ],
     links: [
       { rel: "stylesheet", href: appCss },
@@ -32,7 +32,7 @@ function RootDocument({ children }: { children: ReactNode }) {
       <head>
         <HeadContent />
       </head>
-      <body className="min-h-dvh bg-ink font-sans text-paper">
+      <body className="min-h-dvh bg-white font-sans text-ink">
         {children}
         <Scripts />
       </body>

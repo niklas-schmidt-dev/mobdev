@@ -1,10 +1,10 @@
 import { createFileRoute, redirect, useRouter } from "@tanstack/react-router";
 import { useState, type FormEvent, type ReactNode } from "react";
-import { Code, CopyButton, Page } from "../components/site";
+import { Code, CopyButton, Page, buttonPrimary } from "../components/site";
 import { createToken, deleteAccount, forgetMac, loadDashboard, revokeToken } from "../server/dashboard";
 
 export const Route = createFileRoute("/dashboard")({
-  head: () => ({ meta: [{ title: "Dashboard — Mobdev" }] }),
+  head: () => ({ meta: [{ title: "Account — Mobdev" }] }),
   loader: async ({ location }) => {
     const data = await loadDashboard();
     if (!data) {
@@ -26,20 +26,17 @@ function relative(timestamp: number | null): string {
   return new Date(timestamp).toLocaleDateString();
 }
 
-function Card({ title, subtitle, children, action }: { title: string; subtitle?: string; children: ReactNode; action?: ReactNode }) {
+function Card({ title, subtitle, children }: { title: string; subtitle?: string; children: ReactNode }) {
   return (
-    <section className="rounded-3xl border border-white/10 bg-ink-raised p-6">
-      <div className="mb-5 flex items-start gap-4">
-        <div>
-          <h2 className="text-lg font-semibold">{title}</h2>
-          {subtitle && <p className="mt-1 text-sm text-muted">{subtitle}</p>}
-        </div>
-        <div className="ml-auto">{action}</div>
-      </div>
-      {children}
+    <section className="rounded-3xl bg-white p-7 sm:p-8">
+      <h2 className="text-[24px] font-semibold tracking-tight">{title}</h2>
+      {subtitle && <p className="mt-1.5 text-[15px] leading-[1.47] text-muted">{subtitle}</p>}
+      <div className="mt-6">{children}</div>
     </section>
   );
 }
+
+const destructive = "text-[15px] text-[#e30000] transition-opacity hover:opacity-70 disabled:opacity-40";
 
 function Dashboard() {
   const data = Route.useLoaderData();
@@ -78,51 +75,50 @@ function Dashboard() {
     : "";
 
   return (
-    <Page>
-      <div className="mx-auto max-w-5xl px-5 py-12">
+    <Page tone="mist">
+      <div className="mx-auto max-w-3xl px-5 py-16">
         <div className="flex flex-wrap items-end gap-4">
           <div>
-            <p className="text-sm text-muted">{data.user.email}</p>
-            <h1 className="mt-1 font-display text-4xl font-semibold tracking-tight">
-              {data.user.firstName ? `Hi ${data.user.firstName}` : "Dashboard"}
-            </h1>
+            <h1 className="headline text-[48px]">{data.user.firstName ? `Hi, ${data.user.firstName}.` : "Account"}</h1>
+            <p className="mt-2 text-[17px] text-muted">{data.user.email}</p>
           </div>
-          <a href="/sign-out" className="glass ml-auto rounded-full px-4 py-2 text-sm hover:bg-white/10">
+          <a href="/sign-out" className="ml-auto text-[15px] text-link hover:underline underline-offset-4">
             Sign out
           </a>
         </div>
 
         {error && (
-          <p role="alert" className="mt-6 rounded-2xl border border-red-400/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+          <p role="alert" className="mt-8 rounded-2xl bg-[#fff2f2] px-5 py-4 text-[15px] text-[#b00000]">
             {error}
           </p>
         )}
 
-        <div className="mt-8 grid gap-5">
+        <div className="mt-10 space-y-5">
           <Card
             title="Connect a Mac"
-            subtitle="Access tokens let a Mac use the hosted relay at relay.mobdev.sh, so agents on other computers can reach its iPhone."
+            subtitle="An access token lets a Mac use the hosted relay, so agents on other computers can reach its iPhone."
           >
             {created ? (
-              <div className="rounded-2xl border border-lime/40 bg-lime/[0.06] p-5">
-                <p className="font-medium">Token for “{created.name}” created</p>
-                <p className="mt-1 text-sm text-muted">It is shown only once. Open it in Mobdev on the Mac, or copy it.</p>
-                <div className="mt-4 flex flex-wrap items-center gap-3">
-                  <a
-                    href={deepLink}
-                    className="rounded-full bg-lime px-5 py-2.5 text-sm font-medium text-ink hover:bg-lime-strong"
-                  >
+              <div>
+                <p className="text-[17px] font-semibold">Your token for “{created.name}”</p>
+                <p className="mt-1 text-[15px] text-muted">It is shown only once. Open it in Mobdev on that Mac, or copy it.</p>
+                <div className="mt-5">
+                  <Code copy={false}>{created.token}</Code>
+                </div>
+                <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-3">
+                  <a href={deepLink} className={buttonPrimary}>
                     Open in Mobdev
                   </a>
                   <CopyButton text={created.token} label="Copy token" />
-                  <button type="button" onClick={() => setCreated(null)} className="text-sm text-muted hover:text-paper">
+                  <button
+                    type="button"
+                    onClick={() => setCreated(null)}
+                    className="text-[15px] text-link hover:underline underline-offset-4"
+                  >
                     Done
                   </button>
                 </div>
-                <div className="mt-4">
-                  <Code copy={false}>{created.token}</Code>
-                </div>
-                <p className="mt-4 text-sm text-muted">
+                <p className="mt-5 text-[15px] leading-[1.47] text-muted">
                   Then copy the remote command from Remote Access in the app and run it where your agent lives.
                 </p>
               </div>
@@ -137,44 +133,40 @@ function Dashboard() {
                   onChange={(event) => setName(event.target.value)}
                   placeholder="Name, e.g. Studio Mac"
                   maxLength={60}
-                  className="flex-1 rounded-full border border-white/10 bg-black/30 px-5 py-2.5 outline-none placeholder:text-faint focus:border-lime/60"
+                  className="h-12 flex-1 rounded-xl border border-line bg-white px-4 text-[17px] outline-none transition-shadow placeholder:text-faint focus:border-blue focus:ring-4 focus:ring-blue/15"
                 />
-                <button
-                  type="submit"
-                  disabled={busy}
-                  className="rounded-full bg-lime px-6 py-2.5 font-medium text-ink transition hover:bg-lime-strong disabled:opacity-60"
-                >
-                  Create access token
+                <button type="submit" disabled={busy} className={`${buttonPrimary} h-12 py-0`}>
+                  Create token
                 </button>
               </form>
             )}
           </Card>
 
-          <Card title="Macs" subtitle={`${online} of ${data.hosts.length} connected`}>
+          <Card title="Macs" subtitle={data.hosts.length ? `${online} of ${data.hosts.length} connected.` : undefined}>
             {data.hosts.length === 0 ? (
-              <p className="text-sm text-muted">No Mac has connected yet. Create a token above and open it in Mobdev.</p>
+              <p className="text-[15px] text-muted">No Mac has connected yet. Create a token above and open it in Mobdev.</p>
             ) : (
-              <ul className="divide-y divide-white/5">
+              <ul className="divide-y divide-line/70">
                 {data.hosts.map((host) => (
-                  <li key={host.space_id + host.name} className="flex flex-wrap items-center gap-3 py-3">
+                  <li key={host.space_id + host.name} className="flex items-center gap-4 py-4 first:pt-0 last:pb-0">
                     <span
-                      className={`size-2 rounded-full ${host.online ? "bg-lime shadow-[0_0_10px_rgba(209,237,165,0.8)]" : "bg-faint"}`}
+                      className={`size-2.5 shrink-0 rounded-full ${host.online ? "bg-[#34c759]" : "bg-line"}`}
                       aria-hidden="true"
                     />
                     <div className="min-w-0">
-                      <p className="font-medium">{host.name}</p>
-                      <p className="text-sm text-muted">
+                      <p className="text-[17px] font-medium">{host.name}</p>
+                      <p className="text-[14px] text-muted">
                         {host.online ? `Connected ${relative(host.connected_at)}` : `Last seen ${relative(host.disconnected_at)}`}
                         {host.token_id && tokenNames.get(host.token_id) ? ` · ${tokenNames.get(host.token_id)}` : ""}
+                        <span className="sr-only">{host.online ? ", online" : ", offline"}</span>
                       </p>
                     </div>
-                    <span className="sr-only">{host.online ? "online" : "offline"}</span>
                     {!host.online && (
                       <button
                         type="button"
                         disabled={busy}
                         onClick={() => run(() => forgetMac({ data: { spaceId: host.space_id, name: host.name } }))}
-                        className="ml-auto text-sm text-muted hover:text-paper"
+                        className="ml-auto text-[15px] text-link hover:underline underline-offset-4"
                       >
                         Forget
                       </button>
@@ -187,14 +179,14 @@ function Dashboard() {
 
           <Card title="Access tokens" subtitle="Revoking a token disconnects every Mac that uses it.">
             {data.tokens.length === 0 ? (
-              <p className="text-sm text-muted">No tokens yet.</p>
+              <p className="text-[15px] text-muted">No tokens yet.</p>
             ) : (
-              <ul className="divide-y divide-white/5">
+              <ul className="divide-y divide-line/70">
                 {data.tokens.map((token) => (
-                  <li key={token.id} className="flex flex-wrap items-center gap-3 py-3">
+                  <li key={token.id} className="flex items-center gap-4 py-4 first:pt-0 last:pb-0">
                     <div className="min-w-0">
-                      <p className="font-medium">{token.name}</p>
-                      <p className="font-mono text-xs text-muted">
+                      <p className="text-[17px] font-medium">{token.name}</p>
+                      <p className="text-[14px] text-muted">
                         {token.prefix}… · created {relative(token.created_at)} · used {relative(token.last_used_at)}
                       </p>
                     </div>
@@ -206,7 +198,7 @@ function Dashboard() {
                           void run(() => revokeToken({ data: { id: token.id } }));
                         }
                       }}
-                      className="ml-auto rounded-full border border-red-400/30 px-3.5 py-1 text-sm text-red-200 hover:bg-red-500/10"
+                      className={`ml-auto ${destructive}`}
                     >
                       Revoke
                     </button>
@@ -232,9 +224,9 @@ function Dashboard() {
                     });
                 }
               }}
-              className="rounded-full border border-red-400/30 px-4 py-2 text-sm text-red-200 hover:bg-red-500/10"
+              className={destructive}
             >
-              Delete account
+              Delete account…
             </button>
           </Card>
         </div>

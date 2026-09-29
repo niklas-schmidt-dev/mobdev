@@ -51,9 +51,9 @@ Not automated. With a Cloudflare account that has the `mobdev.sh` zone:
 1. `bunx wrangler d1 create mobdev` and put the ID into both `wrangler.jsonc` files.
 2. `bunx wrangler d1 migrations apply mobdev --remote`
 3. `bun run deploy:relay` (creates `relay.mobdev.sh`).
-4. In a WorkOS production environment, add the redirect URI `https://mobdev.sh/api/auth/callback`,
-   the sign-out URI `https://mobdev.sh/` and the initiate login URI
-   `https://mobdev.sh/api/auth/sign-in`.
-5. `bunx wrangler secret put WORKOS_CLIENT_ID`, `WORKOS_API_KEY` and `WORKOS_COOKIE_PASSWORD`
+4. WorkOS project "Mobdev", environment "Production" (client ID is in `wrangler.jsonc`) already has
+   the redirect URI `https://mobdev.sh/api/auth/callback`, sign-out URI `https://mobdev.sh/` and
+   CORS origin. Optionally set the initiate login URI to `https://mobdev.sh/api/auth/sign-in`.
+5. `bunx wrangler secret put WORKOS_API_KEY` (Production secret key) and `WORKOS_COOKIE_PASSWORD`
    (32+ random characters).
 6. `bun run deploy:web` (creates `mobdev.sh`).

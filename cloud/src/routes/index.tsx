@@ -1,6 +1,6 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { AppMock } from "../components/app-mock";
-import { Code, Page } from "../components/site";
+import { Code, Icon, Page, buttonPrimary, moreLink } from "../components/site";
 
 export const Route = createFileRoute("/")({
   component: Home,
@@ -8,32 +8,26 @@ export const Route = createFileRoute("/")({
 
 const steps = [
   {
-    title: "The screen, over USB",
-    body: "Your iPhone shows up on the Mac like it does for QuickTime. Mobdev reads each frame. No app, no developer mode.",
+    icon: "plug",
+    title: "The screen, over USB.",
+    body: "Your iPhone shows up on the Mac the way it does for QuickTime. Mobdev reads every frame.",
   },
   {
-    title: "Taps, over Bluetooth",
-    body: "The Mac pairs as a keyboard and pointer. With AssistiveTouch on, iOS turns its clicks into taps and swipes.",
+    icon: "bluetooth",
+    title: "Taps, over Bluetooth.",
+    body: "The Mac pairs as a keyboard and pointer. With AssistiveTouch on, iOS turns clicks into taps.",
   },
   {
-    title: "Your agent, over MCP",
-    body: "Claude Code, Codex, Cursor or any MCP client gets screenshot, tap, type, open_app and tap_text.",
+    icon: "sparkle",
+    title: "Your agent, over MCP.",
+    body: "Claude Code, Codex, Cursor or any MCP client can see, tap, type and open apps.",
   },
-];
-
-const features = [
-  ["Real apps, real accounts", "Agents use the App Store, iMessage, Wallet and your logins, because it is your phone."],
-  ["Finds text on screen", "tap_text and read_screen use Apple’s Vision framework on the Mac. Fewer screenshots, fewer tokens."],
-  ["Live mirror", "Click to tap, drag to swipe and type on the phone yourself while the agent works."],
-  ["Every action logged", "The Activity view shows each tool call, from this Mac or from far away."],
-  ["Reach it from anywhere", "Turn on remote access and agents on other machines connect through a relay. No open ports."],
-  ["2 MB, native", "A SwiftUI app with Liquid Glass. No Electron, no account needed, no telemetry."],
-];
+] as const;
 
 const faqs = [
   [
     "Does the iPhone need developer mode or an app?",
-    "No. Mobdev only uses the USB screen feed and a Bluetooth keyboard and pointer, which iOS supports for everyone. Turn on AssistiveTouch once.",
+    "No. Mobdev only uses the USB screen feed and a Bluetooth keyboard and pointer, which every iPhone supports. You turn on AssistiveTouch once.",
   ],
   [
     "What do I need?",
@@ -45,154 +39,241 @@ const faqs = [
   ],
   [
     "Can I run the relay myself?",
-    "Yes. The relay is a small Go server in the repository, or a Docker image. The hosted relay just saves you the setup.",
+    "Yes. It is a small Go server in the repository, or a Docker image. The hosted relay just saves you the setup.",
   ],
   [
-    "How many phones?",
-    "As many as you plug in, for free. Today Mobdev drives one phone per Mac; several Macs can share one account.",
+    "How many phones can I use?",
+    "As many as you own, for free. Today each Mac drives one iPhone, and one account can connect several Macs.",
   ],
-];
+] as const;
 
 function Home() {
   return (
     <Page>
       {/* Hero */}
-      <section className="relative overflow-hidden">
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-x-0 -top-40 h-[640px] bg-[radial-gradient(60%_50%_at_50%_30%,rgba(209,237,165,0.16),transparent_70%)]"
-        />
-        <div className="relative mx-auto max-w-6xl px-5 pb-20 pt-20 text-center sm:pt-28">
-          <p className="glass mx-auto mb-7 inline-flex items-center gap-2 rounded-full px-3.5 py-1 text-xs text-muted">
-            <span className="size-1.5 rounded-full bg-lime" />
-            Free and open source · Early release
-          </p>
-          <h1 className="text-balance mx-auto max-w-4xl font-display text-5xl font-semibold tracking-[-0.035em] sm:text-7xl">
-            Give your AI agent a real iPhone.
-          </h1>
-          <p className="text-balance mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-muted sm:text-xl">
-            Mobdev lets Claude Code, Codex and any MCP agent see and tap the iPhone on your desk. Nothing to install on
-            the phone. No per-device fees.
-          </p>
-          <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
-            <Link
-              to="/docs"
-              hash="install"
-              className="rounded-full bg-lime px-6 py-3 font-medium text-ink transition hover:bg-lime-strong"
-            >
-              Get Mobdev for Mac
-            </Link>
-            <Link to="/docs" className="glass rounded-full px-6 py-3 font-medium transition hover:bg-white/10">
-              How it works
-            </Link>
-          </div>
-          <p className="mt-4 text-xs text-faint">macOS 26 or later · iPhone with a USB data cable</p>
-          <div className="mt-16">
-            <AppMock />
-          </div>
+      <section className="px-5 pb-24 pt-20 text-center sm:pt-28">
+        <p className="text-[21px] font-semibold">Mobdev for Mac</p>
+        <h1 className="headline text-balance mx-auto mt-2 max-w-3xl text-[48px] sm:text-[80px]">
+          Your agent.
+          <br />A real iPhone.
+        </h1>
+        <p className="text-balance mx-auto mt-6 max-w-2xl text-[19px] leading-[1.45] text-muted sm:text-[21px]">
+          Mobdev lets Claude Code, Codex and any MCP agent see and tap the iPhone on your desk. Nothing to install on
+          the phone. Free and open source.
+        </p>
+        <div className="mt-9 flex flex-wrap items-center justify-center gap-x-7 gap-y-4">
+          <Link to="/docs" hash="install" className={buttonPrimary}>
+            Get Mobdev
+          </Link>
+          <a href="#how" className={moreLink}>
+            See how it works ›
+          </a>
+        </div>
+        <p className="mt-5 text-[13px] text-faint">Requires macOS 26 and an iPhone with a USB data cable.</p>
+        <div className="mt-16 sm:mt-20">
+          <AppMock />
         </div>
       </section>
 
       {/* How it works */}
-      <section className="mx-auto max-w-6xl px-5 py-20">
-        <h2 className="text-balance max-w-2xl font-display text-3xl font-semibold tracking-tight sm:text-4xl">
-          Three ordinary connections. No tricks on the phone.
-        </h2>
-        <div className="mt-10 grid gap-4 md:grid-cols-3">
-          {steps.map((step, index) => (
-            <div key={step.title} className="glass rounded-3xl p-6">
-              <p className="font-mono text-xs text-lime">0{index + 1}</p>
-              <h3 className="mt-3 text-lg font-semibold">{step.title}</h3>
-              <p className="mt-2 leading-relaxed text-muted">{step.body}</p>
-            </div>
-          ))}
-        </div>
-        <div className="mt-8 grid items-center gap-6 rounded-3xl border border-white/10 bg-ink-raised p-6 md:grid-cols-[1fr_1.1fr] md:p-8">
-          <div>
-            <h3 className="text-xl font-semibold">One line to connect Claude Code</h3>
-            <p className="mt-2 leading-relaxed text-muted">
-              The app shows the exact command for your agent. No token in the config: Mobdev reads it locally and
-              starts in the background when your agent calls it.
-            </p>
+      <section id="how" className="scroll-mt-12 bg-mist px-5 py-24 sm:py-32">
+        <div className="mx-auto max-w-5xl">
+          <h2 className="headline text-balance mx-auto max-w-3xl text-center text-[40px] sm:text-[56px]">
+            Three connections.
+            <br />
+            Nothing on the phone.
+          </h2>
+          <div className="mt-16 grid gap-5 md:grid-cols-3">
+            {steps.map((step) => (
+              <div key={step.title} className="rounded-3xl bg-white p-8">
+                <Icon name={step.icon} className="size-8 text-blue" />
+                <h3 className="mt-6 text-[21px] font-semibold tracking-tight">{step.title}</h3>
+                <p className="mt-2 text-[17px] leading-[1.47] text-muted">{step.body}</p>
+              </div>
+            ))}
           </div>
-          <Code>{"claude mcp add --scope user mobdev -- \\\n  /Applications/Mobdev.app/Contents/MacOS/Mobdev mcp"}</Code>
         </div>
+      </section>
+
+      {/* Statement */}
+      <section className="bg-black px-5 py-28 text-center text-white sm:py-40">
+        <p className="headline text-balance mx-auto max-w-4xl text-[40px] sm:text-[64px]">
+          No developer mode.
+          <br />
+          No app on the phone.
+          <br />
+          <span className="bg-gradient-to-r from-[#2997ff] via-[#a78bfa] to-[#ff7ab8] bg-clip-text text-transparent">
+            No per-device fees.
+          </span>
+        </p>
+        <p className="text-balance mx-auto mt-8 max-w-xl text-[19px] leading-[1.45] text-[#a1a1a6]">
+          Agents use your real apps and accounts: the App Store, Messages, Wallet. Because it is simply your phone.
+        </p>
       </section>
 
       {/* Features */}
-      <section className="mx-auto max-w-6xl px-5 py-20">
-        <h2 className="text-balance max-w-2xl font-display text-3xl font-semibold tracking-tight sm:text-4xl">
-          Built for agents. Pleasant for people.
-        </h2>
-        <div className="mt-10 grid gap-px overflow-hidden rounded-3xl border border-white/10 bg-white/10 sm:grid-cols-2 lg:grid-cols-3">
-          {features.map(([title, body]) => (
-            <div key={title} className="bg-ink p-6">
-              <h3 className="font-semibold">{title}</h3>
-              <p className="mt-2 leading-relaxed text-muted">{body}</p>
+      <section className="px-5 py-24 sm:py-32">
+        <div className="mx-auto max-w-5xl">
+          <h2 className="headline text-balance max-w-3xl text-[40px] sm:text-[56px]">
+            Made for agents.
+            <br />
+            Easy for you.
+          </h2>
+          <div className="mt-14 grid gap-5 md:grid-cols-3">
+            <div className="rounded-3xl bg-mist p-8 md:col-span-2">
+              <Icon name="bolt" className="size-8 text-blue" />
+              <h3 className="mt-6 text-[24px] font-semibold tracking-tight">Connect Claude Code in one line.</h3>
+              <p className="mt-2 max-w-lg text-[17px] leading-[1.47] text-muted">
+                The app shows the exact command for your agent. No token in the config: Mobdev reads it locally and
+                starts in the background when your agent calls.
+              </p>
+              <div className="mt-6">
+                <Code surface="white">{"claude mcp add --scope user mobdev -- \\\n  /Applications/Mobdev.app/Contents/MacOS/Mobdev mcp"}</Code>
+              </div>
             </div>
-          ))}
+            <div className="flex flex-col rounded-3xl bg-mist p-8">
+              <p className="headline text-[64px] text-ink">14</p>
+              <p className="mt-auto text-[17px] leading-[1.47] text-muted">
+                tools, from <span className="text-ink">tap</span> and <span className="text-ink">swipe</span> to{" "}
+                <span className="text-ink">open_app</span> and <span className="text-ink">tap_text</span>.
+              </p>
+            </div>
+            <div className="rounded-3xl bg-mist p-8">
+              <Icon name="text" className="size-8 text-blue" />
+              <h3 className="mt-6 text-[21px] font-semibold tracking-tight">Reads the screen.</h3>
+              <p className="mt-2 text-[17px] leading-[1.47] text-muted">
+                On-device text recognition finds buttons by their label. Fewer screenshots, fewer tokens.
+              </p>
+            </div>
+            <div className="rounded-3xl bg-mist p-8">
+              <Icon name="phone" className="size-8 text-blue" />
+              <h3 className="mt-6 text-[21px] font-semibold tracking-tight">Take over anytime.</h3>
+              <p className="mt-2 text-[17px] leading-[1.47] text-muted">
+                The live mirror lets you click, swipe and type on the phone while the agent works.
+              </p>
+            </div>
+            <div className="flex flex-col rounded-3xl bg-mist p-8">
+              <p className="headline text-[64px] text-ink">2 MB</p>
+              <p className="mt-auto text-[17px] leading-[1.47] text-muted">
+                A native SwiftUI app with Liquid Glass. No Electron, no account, no telemetry.
+              </p>
+            </div>
+            <div className="rounded-3xl bg-mist p-8 md:col-span-2">
+              <Icon name="globe" className="size-8 text-blue" />
+              <h3 className="mt-6 text-[24px] font-semibold tracking-tight">Reach it from anywhere.</h3>
+              <p className="mt-2 max-w-lg text-[17px] leading-[1.47] text-muted">
+                Turn on remote access and agents on other machines connect through a relay. Your Mac keeps one outgoing
+                connection, so no port is ever opened.
+              </p>
+            </div>
+            <div className="rounded-3xl bg-mist p-8">
+              <Icon name="list" className="size-8 text-blue" />
+              <h3 className="mt-6 text-[21px] font-semibold tracking-tight">Every action logged.</h3>
+              <p className="mt-2 text-[17px] leading-[1.47] text-muted">
+                See each tool call in the app, from this Mac or from afar.
+              </p>
+            </div>
+          </div>
         </div>
+      </section>
+
+      {/* Privacy */}
+      <section className="bg-mist px-5 py-24 text-center sm:py-32">
+        <Icon name="lock" className="mx-auto size-10 text-ink" />
+        <h2 className="headline text-balance mx-auto mt-6 max-w-3xl text-[40px] sm:text-[56px]">
+          Your screen stays on your Mac.
+        </h2>
+        <p className="text-balance mx-auto mt-6 max-w-2xl text-[19px] leading-[1.45] text-muted">
+          Text recognition runs locally. The API only answers on this Mac and needs a token. The relay forwards requests
+          and stores nothing, and you can run your own.
+        </p>
+        <Link to="/privacy" className={`${moreLink} mt-6 inline-block`}>
+          Read the privacy details ›
+        </Link>
       </section>
 
       {/* Pricing */}
-      <section id="pricing" className="mx-auto max-w-6xl scroll-mt-20 px-5 py-20">
-        <h2 className="text-balance max-w-2xl font-display text-3xl font-semibold tracking-tight sm:text-4xl">
-          Your phone. Your Mac. No meter running.
-        </h2>
-        <p className="mt-4 max-w-2xl leading-relaxed text-muted">
-          You already own the hardware. Mobdev does not charge per device, and the hosted relay is free while it is in
-          beta. Prefer your own server? Run the relay yourself.
-        </p>
-        <div className="mt-10 grid gap-4 lg:grid-cols-3">
-          <div className="rounded-3xl border border-lime/40 bg-lime/[0.06] p-7">
-            <h3 className="text-lg font-semibold">Mobdev</h3>
-            <p className="mt-4 font-display text-5xl font-semibold tracking-tight">$0</p>
-            <p className="mt-1 text-sm text-muted">any number of phones</p>
-            <ul className="mt-6 space-y-2 text-sm text-paper/90">
-              <li>Mac app, MCP and HTTP API</li>
-              <li>Hosted relay, free during beta</li>
-              <li>Self-hosted relay, MIT licensed</li>
-            </ul>
-            <Link
-              to="/dashboard"
-              className="mt-7 inline-block rounded-full bg-lime px-5 py-2.5 text-sm font-medium text-ink hover:bg-lime-strong"
-            >
-              Create a free account
-            </Link>
+      <section id="pricing" className="scroll-mt-12 px-5 py-24 sm:py-32">
+        <div className="mx-auto max-w-5xl">
+          <h2 className="headline text-balance mx-auto max-w-3xl text-center text-[40px] sm:text-[56px]">
+            Free. For every phone
+            <br />
+            you own.
+          </h2>
+          <p className="text-balance mx-auto mt-6 max-w-2xl text-center text-[19px] leading-[1.45] text-muted">
+            You already have the Mac and the iPhone. Mobdev does not charge per device, and the hosted relay is free
+            while it is in beta.
+          </p>
+          <div className="mt-14 grid gap-5 lg:grid-cols-3">
+            <div className="rounded-3xl p-8 ring-2 ring-blue">
+              <p className="text-[21px] font-semibold">Mobdev</p>
+              <p className="headline mt-5 text-[56px]">$0</p>
+              <p className="text-[15px] text-muted">for any number of phones</p>
+              <ul className="mt-7 space-y-3 border-t border-line pt-6 text-[15px]">
+                <li>Mac app, MCP and HTTP API</li>
+                <li>Hosted relay, free during beta</li>
+                <li>Self-hosted relay, MIT licensed</li>
+              </ul>
+              <Link to="/dashboard" className={`${buttonPrimary} mt-8 w-full`}>
+                Create an account
+              </Link>
+            </div>
+            <div className="rounded-3xl bg-mist p-8">
+              <p className="text-[21px] font-semibold text-muted">TapKit</p>
+              <p className="headline mt-5 text-[56px] text-muted">$49</p>
+              <p className="text-[15px] text-muted">per phone, per month</p>
+              <p className="mt-7 border-t border-line pt-6 text-[15px] leading-[1.47] text-muted">
+                The same idea on your own Mac and iPhone. Commands and screenshots go through their cloud.
+              </p>
+            </div>
+            <div className="rounded-3xl bg-mist p-8">
+              <p className="text-[21px] font-semibold text-muted">MobAI</p>
+              <p className="headline mt-5 text-[56px] text-muted">$9.99</p>
+              <p className="text-[15px] text-muted">per month beyond one device</p>
+              <p className="mt-7 border-t border-line pt-6 text-[15px] leading-[1.47] text-muted">
+                A test automation workbench for iOS and Android. Closed source.
+              </p>
+            </div>
           </div>
-          <div className="rounded-3xl border border-white/10 p-7">
-            <h3 className="text-lg font-semibold text-muted">TapKit</h3>
-            <p className="mt-4 font-display text-5xl font-semibold tracking-tight">$49</p>
-            <p className="mt-1 text-sm text-muted">per phone, per month</p>
-            <p className="mt-6 text-sm leading-relaxed text-muted">
-              Same approach on your own Mac and iPhone. Commands and screenshots go through their cloud.
-            </p>
-          </div>
-          <div className="rounded-3xl border border-white/10 p-7">
-            <h3 className="text-lg font-semibold text-muted">MobAI</h3>
-            <p className="mt-4 font-display text-5xl font-semibold tracking-tight">$9.99</p>
-            <p className="mt-1 text-sm text-muted">per month for more than one device</p>
-            <p className="mt-6 text-sm leading-relaxed text-muted">
-              Test automation workbench for iOS and Android. Closed source.
-            </p>
-          </div>
+          <p className="mt-6 text-center text-[12px] text-faint">
+            Other prices as listed on the vendors’ websites in September 2026.
+          </p>
         </div>
-        <p className="mt-4 text-xs text-faint">Other prices as listed on the vendors’ websites in September 2026.</p>
       </section>
 
       {/* FAQ */}
-      <section className="mx-auto max-w-3xl px-5 py-20">
-        <h2 className="font-display text-3xl font-semibold tracking-tight sm:text-4xl">Questions</h2>
-        <div className="mt-8 divide-y divide-white/10 border-y border-white/10">
-          {faqs.map(([question, answer]) => (
-            <details key={question} className="group py-5">
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 font-medium">
-                {question}
-                <span className="text-faint transition group-open:rotate-45">+</span>
-              </summary>
-              <p className="mt-3 leading-relaxed text-muted">{answer}</p>
-            </details>
-          ))}
+      <section className="bg-mist px-5 py-24 sm:py-32">
+        <div className="mx-auto max-w-3xl">
+          <h2 className="headline text-center text-[40px] sm:text-[56px]">Questions? Answers.</h2>
+          <div className="mt-12 divide-y divide-line border-y border-line">
+            {faqs.map(([question, answer]) => (
+              <details key={question} className="group">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-6 py-6 text-[19px] font-semibold tracking-tight">
+                  {question}
+                  <span
+                    aria-hidden="true"
+                    className="text-[24px] font-light text-muted transition-transform duration-200 group-open:rotate-45"
+                  >
+                    +
+                  </span>
+                </summary>
+                <p className="-mt-2 pb-6 text-[17px] leading-[1.47] text-muted">{answer}</p>
+              </details>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Closing */}
+      <section className="px-5 py-24 text-center sm:py-32">
+        <h2 className="headline text-balance mx-auto max-w-3xl text-[40px] sm:text-[56px]">Hand your agent a phone.</h2>
+        <div className="mt-9 flex flex-wrap items-center justify-center gap-x-7 gap-y-4">
+          <Link to="/docs" hash="install" className={buttonPrimary}>
+            Get Mobdev
+          </Link>
+          <Link to="/docs" className={moreLink}>
+            Read the docs ›
+          </Link>
         </div>
       </section>
     </Page>

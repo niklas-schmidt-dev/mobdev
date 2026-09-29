@@ -18,9 +18,11 @@
   // Lets the dashboard disconnect Macs when a token is revoked. Not reachable over HTTP.
   "services": [{ "binding": "RELAY", "service": "mobdev-relay", "entrypoint": "RelayAdmin" }],
   "vars": {
+    // WorkOS project "Mobdev", environment "Production".
+    "WORKOS_CLIENT_ID": "client_01M3PBNSYHV4KWR86PW67T7QMK",
     "RELAY_URL": "https://relay.mobdev.sh",
     "WORKOS_REDIRECT_URI": "https://mobdev.sh/api/auth/callback"
   },
-  // Secrets (wrangler secret put): WORKOS_CLIENT_ID, WORKOS_API_KEY, WORKOS_COOKIE_PASSWORD.
+  // Secrets (wrangler secret put): WORKOS_API_KEY, WORKOS_COOKIE_PASSWORD.
   "observability": { "enabled": true }
 }

@@ -1,50 +1,62 @@
+@import "@fontsource-variable/inter/opsz.css";
 @import "tailwindcss";
 
 @theme {
-  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Helvetica Neue", system-ui, sans-serif;
-  --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", "Helvetica Neue", system-ui, sans-serif;
-  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+  /* Inter everywhere, including code. Optical sizing gives headlines display letterforms. */
+  --font-sans: "Inter Variable", "Inter", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --font-mono: "Inter Variable", "Inter", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
 
-  --color-ink: #0b0d0b;
-  --color-ink-raised: #121512;
-  --color-paper: #f5f5f2;
-  --color-muted: #a1a39c;
-  --color-faint: #6d706a;
-  --color-lime: #d1eda5;
-  --color-lime-strong: #b9e07f;
+  --color-ink: #1d1d1f;
+  --color-muted: #6e6e73;
+  --color-faint: #86868b;
+  --color-line: #d2d2d7;
+  --color-mist: #f5f5f7;
+  --color-blue: #0071e3;
+  --color-blue-hover: #0077ed;
+  --color-link: #0066cc;
   --color-forest: #142017;
+  --color-lime: #d1eda5;
 }
 
 :root {
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 html {
-  background: var(--color-ink);
-  color: var(--color-paper);
+  background: #fff;
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-optical-sizing: auto;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
 }
 
 ::selection {
-  background: color-mix(in oklab, var(--color-lime) 35%, transparent);
+  background: color-mix(in oklab, var(--color-blue) 22%, transparent);
 }
 
-/* Frosted surfaces, the web cousin of the app's Liquid Glass. */
-@utility glass {
-  background: color-mix(in oklab, white 5%, transparent);
-  border: 1px solid color-mix(in oklab, white 10%, transparent);
-  backdrop-filter: blur(24px) saturate(160%);
-  -webkit-backdrop-filter: blur(24px) saturate(160%);
+:focus-visible {
+  outline: 2px solid var(--color-blue);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+
+/* The translucent bar Apple uses for navigation. */
+@utility nav-glass {
+  background: rgb(255 255 255 / 0.72);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
 }
 
 @utility text-balance {
   text-wrap: balance;
 }
 
-:focus-visible {
-  outline: 2px solid var(--color-lime);
-  outline-offset: 3px;
+@utility headline {
+  font-weight: 650;
+  letter-spacing: -0.028em;
+  line-height: 1.05;
 }
 
 @media (prefers-reduced-motion: reduce) {
