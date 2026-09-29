@@ -28,4 +28,10 @@ public protocol PhoneBackend: Sendable {
     func type(_ strokes: [KeyStroke]) async throws
     func press(_ stroke: KeyStroke) async throws
     func press(_ button: ConsumerUsage) async throws
+    /// Installing, launching and debugging apps, for devices in Developer Mode. Nil when unavailable.
+    var apps: AppBackend? { get }
+}
+
+extension PhoneBackend {
+    public var apps: AppBackend? { nil }
 }

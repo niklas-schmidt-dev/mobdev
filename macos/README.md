@@ -116,9 +116,40 @@ on the Mac, pass `device` (an id or name from `list_devices`) to pick one.
 | `find_text` | `text` | |
 | `tap_text` | `text`, `index` | Taps a visible label |
 | `wait_for_text` | `text`, `timeout`, `gone` | |
+| `list_apps` | `all` | Apps installed for development, or every app |
+| `install_app` | `path` | An `.app` or `.ipa` built for iPhone, from a path on this Mac |
+| `uninstall_app` | `bundle_id` | Only apps installed for development |
+| `launch_app` | `bundle_id`, `arguments`, `environment`, `restart` | Captures what the app prints |
+| `stop_app` | `bundle_id` | |
+| `open_url` | `url` | Deep links, universal links, web pages |
+| `logs` | `bundle_id`, `after`, `lines`, `contains` | Output of launched apps and how they ended |
+| `crash_reports` | `app`, `name`, `limit` | Lists reports; `name` reads one |
 
 Text recognition uses Apple's Vision framework on the Mac; no screen content leaves the machine
 unless your agent sends it to its model.
+
+### Developer tools
+
+The last eight tools close the loop for apps you build: the agent builds with `xcodebuild`,
+installs the build, launches it, drives it with the tools above and reads its output and crash
+reports. They use Xcode's `devicectl`, so they need Xcode on the Mac and **Developer Mode** on the
+iPhone (Settings > Privacy & Security > Developer Mode). Everything else works without either.
+
+```sh
+xcodebuild -scheme MyApp -destination 'generic/platform=iOS' -derivedDataPath build build
+# install_app {"path": "/path/to/build/Build/Products/Debug-iphoneos/MyApp.app"}
+# launch_app  {"bundle_id": "com.example.MyApp"}
+# logs        {"bundle_id": "com.example.MyApp"}      → print, NSLog and os_log lines
+```
+
+- `launch_app` sets `OS_ACTIVITY_DT_MODE` so `Logger` and `os_log` messages reach the console, as
+  in Xcode. `logs` returns a `cursor`; pass it as `after` to get only newer lines. When the app
+  exits or crashes, `logs` says so, and `crash_reports` lists the report.
+- `crash_reports` with `name` copies the report to `~/Library/Application Support/dev.mobdev.mac/crash-reports`
+  and returns the exception, the reason and the crashed thread. Frames of your own code carry
+  addresses for `atos` when the report has no symbols.
+- `install_app` reads the path on the Mac that runs Mobdev, also when the agent connects through a
+  relay. `uninstall_app` refuses App Store and system apps.
 
 ## HTTP API
 
@@ -189,9 +220,17 @@ scripts/build-app.sh            # build/Mobdev Dev.app, the separate development
 Vision text recognition never returns on GitHub's virtualized macOS runners, so the OCR tests
 are skipped when `CI` is set and only run on real Macs.
 
+The developer tools are tested against scripted `devicectl` answers. To run them against a real
+device or simulator (Xcode 27's `devicectl` drives both), point the opt-in test at a device and an
+app that prints after launch; it installs, launches and uninstalls the app:
+
+```sh
+MOBDEV_TEST_DEVICE=<udid> MOBDEV_TEST_APP=/path/to/App.app swift test --filter DeveloperIntegration
+```
+
 `MobdevCore` contains everything testable: HID reports and gestures (`HID/`), screen capture and
-text recognition (`Capture/`), tools (`Phone/`), HTTP, MCP and the stdio bridge (`Server/`) and the
-relay client (`Relay/`). The `Mobdev` target is the SwiftUI app: a `NavigationSplitView` with
+text recognition (`Capture/`), tools (`Phone/`), `devicectl` for the developer tools
+(`Developer/`), HTTP, MCP and the stdio bridge (`Server/`) and the relay client (`Relay/`). The `Mobdev` target is the SwiftUI app: a `NavigationSplitView` with
 Liquid Glass controls, an inspector for setup, a `Table` for activity and a Settings scene. Tests
 use a fake phone that renders real text, so OCR, `tap_text` and coordinates are exercised without
 hardware. `scripts/make-icon.swift` renders the app icon on the macOS 26 grid.

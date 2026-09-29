@@ -14,6 +14,7 @@ public final class HardwareDevice: PhoneBackend, @unchecked Sendable {
     private let peripheral: HIDPeripheral
     private let layout: Locked<KeyboardLayout>
     private let state: Locked<(info: DeviceInfo?, captureName: String, host: UUID?, input: HIDInput?)>
+    private let control = Locked<DeviceControl?>(nil)
 
     init(
         id: String, captureID: String, captureName: String, info: DeviceInfo?, host: UUID?,
@@ -96,6 +97,18 @@ public final class HardwareDevice: PhoneBackend, @unchecked Sendable {
 
     public func move(to point: NormalizedPoint) async throws {
         try await requireInput().move(to: point)
+    }
+
+    /// Developer tools through Xcode's devicectl, once the device's UDID is known. The same instance
+    /// stays for the UDID so captured app output survives between calls.
+    public var apps: AppBackend? {
+        guard let udid = info?.id else { return nil }
+        return control.withLock { control in
+            if let control, control.udid == udid { return control }
+            let created = DeviceControl(udid: udid, reportsFolder: MobdevPaths.crashReportsFolder)
+            control = created
+            return created
+        }
     }
 }
 

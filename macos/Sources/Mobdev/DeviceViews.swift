@@ -499,6 +499,14 @@ struct ToolIcon: View {
         case "find_text": "magnifyingglass"
         case "wait_for_text": "hourglass"
         case "list_devices": "iphone.gen3"
+        case "list_apps": "apps.iphone"
+        case "install_app": "arrow.down.app.fill"
+        case "uninstall_app": "trash.fill"
+        case "launch_app": "play.fill"
+        case "stop_app": "stop.fill"
+        case "open_url": "link"
+        case "logs": "text.alignleft"
+        case "crash_reports": "exclamationmark.triangle.fill"
         default: "info.circle.fill"
         }
     }
@@ -510,6 +518,8 @@ struct ToolIcon: View {
         case "type_text", "press_key": .indigo
         case "home", "open_app": .green
         case "screenshot", "read_screen", "find_text", "wait_for_text": .orange
+        case "install_app", "uninstall_app", "launch_app", "stop_app", "open_url": .teal
+        case "list_apps", "logs", "crash_reports": .brown
         default: .gray
         }
     }

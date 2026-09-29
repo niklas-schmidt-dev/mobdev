@@ -62,26 +62,36 @@ public final class PhoneTools: Sendable {
         types as a Bluetooth keyboard and pointer. Coordinates are pixels of the image returned by \
         `screenshot` (origin top-left); the size never changes while the phone keeps its orientation. \
         Prefer `tap_text` and `find_text` for visible labels, and `open_app` to launch an app by name. \
-        Actions return a fresh screenshot unless `screenshot` is false. The phone must stay unlocked.
+        Actions return a fresh screenshot unless `screenshot` is false. The phone must stay unlocked. \
+        With Developer Mode on the iPhone and Xcode on the Mac, `install_app`, `launch_app`, `logs` and \
+        `crash_reports` close the loop for apps you build: install a build, run it, read its output.
         """
+
+    /// A tool's input schema. Tools with `screenshot` return a screenshot after acting.
+    static func schema(_ properties: [String: JSONValue], required: [String] = [], screenshot: Bool = true)
+        -> JSONValue
+    {
+        var properties = properties
+        if screenshot {
+            properties["screenshot"] = [
+                "type": "boolean", "description": "Return a screenshot after the action (default true over MCP)",
+            ]
+        }
+        return [
+            "type": "object",
+            "properties": .object(properties),
+            "required": .array(required.map(JSONValue.string)),
+            "additionalProperties": false,
+        ]
+    }
 
     public static let definitions: [ToolDefinition] = {
         let point: [String: JSONValue] = [
             "x": ["type": "number", "description": "X in screenshot pixels"],
             "y": ["type": "number", "description": "Y in screenshot pixels"],
         ]
-        let screenshotFlag: JSONValue = [
-            "type": "boolean", "description": "Return a screenshot after the action (default true over MCP)",
-        ]
         func schema(_ properties: [String: JSONValue], required: [String] = [], screenshot: Bool = true) -> JSONValue {
-            var properties = properties
-            if screenshot { properties["screenshot"] = screenshotFlag }
-            return [
-                "type": "object",
-                "properties": .object(properties),
-                "required": .array(required.map(JSONValue.string)),
-                "additionalProperties": false,
-            ]
+            PhoneTools.schema(properties, required: required, screenshot: screenshot)
         }
         return [
             ToolDefinition(
@@ -174,7 +184,7 @@ public final class PhoneTools: Sendable {
                         "timeout": ["type": "number", "description": "Seconds, default 10, at most 60"],
                         "gone": ["type": "boolean"],
                     ], required: ["text"]), readOnly: true),
-        ]
+        ] + appDefinitions
     }()
 
     public static func definition(named name: String) -> ToolDefinition? {
@@ -185,12 +195,13 @@ public final class PhoneTools: Sendable {
     public func call(
         _ name: String, arguments: JSONValue?, source: String, screenshotByDefault: Bool
     ) async throws -> ToolOutput {
-        guard Self.definition(named: name) != nil else { throw UnknownToolError(name: name) }
+        guard let definition = Self.definition(named: name) else { throw UnknownToolError(name: name) }
         let args = Arguments(arguments ?? [:])
         do {
             var output = try await run(name, args)
             let wantsScreenshot = args.bool("screenshot") ?? screenshotByDefault
-            if wantsScreenshot, output.image == nil, !(Self.definition(named: name)?.readOnly ?? true) {
+            let offersScreenshot = definition.inputSchema["properties"]?["screenshot"] != nil && !definition.readOnly
+            if wantsScreenshot, output.image == nil, offersScreenshot {
                 try await Task.sleep(nanoseconds: UInt64(settleDelay * 1_000_000_000))
                 output.image = phone.frame().flatMap(ImageTools.screenshot)
             }
@@ -335,7 +346,7 @@ public final class PhoneTools: Sendable {
                 try await pause(0.5)
             }
         default:
-            throw UnknownToolError(name: name)
+            return try await runAppTool(name, args)
         }
     }
 

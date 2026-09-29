@@ -18,12 +18,17 @@ final class FakePhone: PhoneBackend, @unchecked Sendable {
     let events = Locked<[Event]>([])
     let bluetoothConnected: Bool
     let layout: KeyboardLayout
+    let apps: AppBackend?
 
     /// Text lines drawn at (x, y) in pixels from the top-left of a 1179×2556 screen.
-    init(lines: [(String, CGFloat, CGFloat)], bluetoothConnected: Bool = true, layout: KeyboardLayout = .us) {
+    init(
+        lines: [(String, CGFloat, CGFloat)], bluetoothConnected: Bool = true, layout: KeyboardLayout = .us,
+        apps: AppBackend? = nil
+    ) {
         image = Self.render(lines: lines, width: 1179, height: 2556)
         self.bluetoothConnected = bluetoothConnected
         self.layout = layout
+        self.apps = apps
     }
 
     func status() -> PhoneStatus {

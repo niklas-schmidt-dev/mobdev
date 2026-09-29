@@ -28,6 +28,9 @@ public enum MobdevPaths {
     /// Devices seen before, so they are listed (with their activity) while unplugged.
     public static var devicesFile: URL { home.appendingPathComponent("devices.json") }
 
+    /// Crash reports copied from devices by `crash_reports`, one folder per device.
+    public static var crashReportsFolder: URL { home.appendingPathComponent("crash-reports", isDirectory: true) }
+
     /// A device's activity log, one JSON object per line.
     public static func activityFile(device: String) -> URL {
         let safe = device.filter { $0.isLetter || $0.isNumber || $0 == "-" }
