@@ -46,14 +46,19 @@ bun run build
 
 ## Deploy
 
-Not automated. With a Cloudflare account that has the `mobdev.sh` zone:
+Live since 2026-09-29 in the Cloudflare account "Niklas Schmidt": D1 `mobdev`
+(`f79069d6-9e8e-4ea4-8b50-a6a0f5fd6ba9`), workers `mobdev-relay` (`relay.mobdev.sh`) and
+`mobdev-web` (`mobdev.sh`). WorkOS project "Mobdev", environment "Production" (client ID in
+`wrangler.jsonc`) has the redirect URI, sign-out URI and CORS origin for `mobdev.sh`.
 
-1. `bunx wrangler d1 create mobdev` and put the ID into both `wrangler.jsonc` files.
-2. `bunx wrangler d1 migrations apply mobdev --remote`
-3. `bun run deploy:relay` (creates `relay.mobdev.sh`).
-4. WorkOS project "Mobdev", environment "Production" (client ID is in `wrangler.jsonc`) already has
-   the redirect URI `https://mobdev.sh/api/auth/callback`, sign-out URI `https://mobdev.sh/` and
-   CORS origin. Optionally set the initiate login URI to `https://mobdev.sh/api/auth/sign-in`.
-5. `bunx wrangler secret put WORKOS_API_KEY` (Production secret key) and `WORKOS_COOKIE_PASSWORD`
-   (32+ random characters).
-6. `bun run deploy:web` (creates `mobdev.sh`).
+To ship changes:
+
+```sh
+bunx wrangler d1 migrations apply mobdev --remote   # only when migrations/ changed
+bun run deploy:relay                                 # disconnects Macs briefly; they reconnect
+bun run deploy:web
+```
+
+Secrets of `mobdev-web` (`bunx wrangler secret put <name>`): `WORKOS_API_KEY` (Production secret
+key) and `WORKOS_COOKIE_PASSWORD` (set). Without the API key the public pages work and the
+dashboard says accounts are being set up.

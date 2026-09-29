@@ -10,12 +10,12 @@
     "bindings": [{ "name": "RELAY_SPACE", "class_name": "RelaySpace" }]
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["RelaySpace"] }],
-  // Create with `wrangler d1 create mobdev` and paste the id here and in ../wrangler.jsonc.
+  // Production database; same ID as ../wrangler.jsonc.
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "mobdev",
-      "database_id": "00000000-0000-4000-8000-000000000000",
+      "database_id": "f79069d6-9e8e-4ea4-8b50-a6a0f5fd6ba9",
       "migrations_dir": "../migrations"
     }
   ],
