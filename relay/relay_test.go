@@ -253,12 +253,17 @@ func TestAccessTokenGatesHosts(t *testing.T) {
 
 func TestNewerConnectionReplacesOlder(t *testing.T) {
 	server := newServer(t, testConfig())
-	first := fakeHost(t, server.URL, testSecret, "studio")
+	// Only this test reads the first connection, so it sees the close frame itself.
+	first, _, err := dialHost(t, server.URL, testSecret, "studio", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer first.CloseNow()
 	waitForHosts(t, server.URL, ClientKey(testSecret), 1)
 	fakeHost(t, server.URL, testSecret, "studio")
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	_, _, err := first.Read(ctx)
+	_, _, err = first.Read(ctx)
 	if websocket.CloseStatus(err) != CloseReplaced {
 		t.Fatalf("first connection: %v", err)
 	}
