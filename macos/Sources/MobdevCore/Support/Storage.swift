@@ -25,6 +25,14 @@ public enum MobdevPaths {
     public static var tokenFile: URL { home.appendingPathComponent("token") }
     public static var relaySecretFile: URL { home.appendingPathComponent("relay-secret") }
     public static var settingsFile: URL { home.appendingPathComponent("settings.json") }
+    /// Devices seen before, so they are listed (with their activity) while unplugged.
+    public static var devicesFile: URL { home.appendingPathComponent("devices.json") }
+
+    /// A device's activity log, one JSON object per line.
+    public static func activityFile(device: String) -> URL {
+        let safe = device.filter { $0.isLetter || $0.isNumber || $0 == "-" }
+        return home.appendingPathComponent("activity", isDirectory: true).appendingPathComponent("\(safe).jsonl")
+    }
 
     /// The port from `MOBDEV_PORT`, the settings file, or the default.
     public static func port(settings: AppSettings) -> UInt16 {

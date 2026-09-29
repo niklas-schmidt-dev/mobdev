@@ -1,40 +1,60 @@
 import MobdevCore
 import SwiftUI
 
-struct PhoneView: View {
+/// One device's live screen on a Liquid Glass stage, with controls and a floating setup panel.
+struct DeviceScreenView: View {
     @Environment(AppModel.self) private var model
-    @State private var showInspector = true
+    let id: String
+    @AppStorage("showSetupPanel") private var showSetup = true
+
+    /// The setup panel floats over the stage instead of being an inspector column: resizing the
+    /// column animated the whole stage and its video layer frame by frame, which made the window flicker.
+    static let panelWidth: CGFloat = 320
+
+    private var status: PhoneStatus? { model.state(id)?.status }
 
     var body: some View {
         ZStack {
-            Backdrop(colors: model.status.screen.isConnected ? model.ambient : [])
-            if let size = model.status.frameSize, model.phone.capture.session != nil {
-                PhoneStage(frameSize: CGSize(width: size.width, height: size.height))
-            } else {
-                ConnectPhone()
+            Backdrop(colors: status?.screen.isConnected == true ? model.ambient[id] ?? [] : [])
+            Group {
+                if let size = status?.frameSize, model.device(id)?.capture.session != nil {
+                    PhoneStage(id: id, frameSize: CGSize(width: size.width, height: size.height))
+                } else {
+                    ConnectPhone(id: id)
+                }
+            }
+            // Only moves, so the phone keeps its size and the video layer is not resized.
+            .offset(x: showSetup ? -(Self.panelWidth + 12) / 2 : 0)
+        }
+        .overlay(alignment: .trailing) {
+            if showSetup {
+                SetupInspector(id: id)
+                    .scrollContentBackground(.hidden)
+                    .frame(width: Self.panelWidth)
+                    .frame(maxHeight: .infinity)
+                    .glassEffect(.regular, in: .rect(cornerRadius: 26))
+                    .padding(.trailing, 12)
+                    .padding(.vertical, 12)
+                    .transition(.move(edge: .trailing).combined(with: .opacity))
             }
         }
-        .navigationTitle(model.deviceName)
-        .navigationSubtitle(model.statusLine)
         .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
         .toolbar {
             ToolbarItemGroup {
-                Button("Home", systemImage: "house") { model.home() }
-                    .disabled(!model.status.bluetooth.isConnected)
+                Button("Home", systemImage: "house") { model.home(id) }
+                    .disabled(status?.bluetooth.isConnected != true)
                     .help("Go to the home screen")
-                Button("Screenshot", systemImage: "camera") { model.saveScreenshot() }
-                    .disabled(model.status.frameSize == nil)
+                Button("Screenshot", systemImage: "camera") { model.saveScreenshot(id) }
+                    .disabled(status?.frameSize == nil)
                     .help("Save a screenshot")
             }
             ToolbarSpacer(.fixed)
             ToolbarItem {
-                Button("Setup", systemImage: "sidebar.trailing") { showInspector.toggle() }
-                    .help(showInspector ? "Hide setup" : "Show setup")
+                Button("Setup", systemImage: "sidebar.trailing") {
+                    withAnimation(.smooth(duration: 0.35)) { showSetup.toggle() }
+                }
+                .help(showSetup ? "Hide setup" : "Show setup")
             }
-        }
-        .inspector(isPresented: $showInspector) {
-            SetupInspector()
-                .inspectorColumnWidth(min: 280, ideal: 320, max: 400)
         }
     }
 }
@@ -59,21 +79,24 @@ private struct Backdrop: View {
 
 private struct PhoneStage: View {
     @Environment(AppModel.self) private var model
+    let id: String
     let frameSize: CGSize
     @State private var focused = false
 
     var body: some View {
         GeometryReader { proxy in
             let bezel: CGFloat = 10
+            // Room for the setup panel is always kept, so opening it never resizes the phone.
             let available = CGSize(
-                width: max(proxy.size.width - 80, 100), height: max(proxy.size.height - 150, 100))
+                width: max(proxy.size.width - 80 - DeviceScreenView.panelWidth, 100),
+                height: max(proxy.size.height - 150, 100))
             let scale = min(available.width / frameSize.width, available.height / frameSize.height)
             let screen = CGSize(width: frameSize.width * scale, height: frameSize.height * scale)
             let radius = screen.width * 0.14
 
             VStack(spacing: 22) {
                 PhoneMirrorView(
-                    session: model.phone.capture.session, input: model.phone.input,
+                    id: id, session: model.device(id)?.capture.session, input: model.device(id)?.input,
                     layout: model.settings.keyboardLayout, focused: $focused
                 )
                 .frame(width: screen.width, height: screen.height)
@@ -102,7 +125,7 @@ private struct PhoneStage: View {
                 .accessibilityLabel("iPhone screen")
                 .accessibilityHint("Click to tap, drag to swipe, type while focused")
 
-                ControlBar(focused: focused)
+                ControlBar(id: id, focused: focused)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
@@ -112,15 +135,16 @@ private struct PhoneStage: View {
 /// Floating Liquid Glass controls under the phone.
 private struct ControlBar: View {
     @Environment(AppModel.self) private var model
+    let id: String
     let focused: Bool
     @State private var text = ""
 
     var body: some View {
-        let canTouch = model.status.bluetooth.isConnected
+        let canTouch = model.state(id)?.status.bluetooth.isConnected == true
         VStack(spacing: 10) {
             GlassEffectContainer(spacing: 12) {
                 HStack(spacing: 12) {
-                    Button { model.home() } label: {
+                    Button { model.home(id) } label: {
                         Image(systemName: "house.fill").frame(width: 22, height: 22)
                     }
                     .buttonStyle(.glass)
@@ -134,7 +158,7 @@ private struct ControlBar: View {
                         TextField("Type on iPhone", text: $text)
                             .textFieldStyle(.plain)
                             .onSubmit {
-                                model.type(text)
+                                model.type(text, on: id)
                                 text = ""
                             }
                     }
@@ -143,7 +167,7 @@ private struct ControlBar: View {
                     .glassEffect(.regular.interactive(), in: .capsule)
                     .disabled(!canTouch)
 
-                    Button { model.saveScreenshot() } label: {
+                    Button { model.saveScreenshot(id) } label: {
                         Image(systemName: "camera.fill").frame(width: 22, height: 22)
                     }
                     .buttonStyle(.glass)
@@ -170,9 +194,10 @@ private struct ControlBar: View {
 
 private struct ConnectPhone: View {
     @Environment(AppModel.self) private var model
+    let id: String
 
     var body: some View {
-        switch model.status.screen {
+        switch model.state(id)?.status.screen ?? model.setupScreen {
         case .cameraDenied:
             ContentUnavailableView {
                 Label("Camera Access Needed", systemImage: "video.slash")
@@ -187,7 +212,7 @@ private struct ConnectPhone: View {
                 "Screen Capture Failed", systemImage: "exclamationmark.triangle", description: Text(message))
         default:
             ContentUnavailableView {
-                Label("Connect Your iPhone", systemImage: "iphone.gen3")
+                Label("Connect \(model.state(id)?.name ?? "Your iPhone")", systemImage: "iphone.gen3")
                     .symbolEffect(.pulse, options: .repeating)
             } description: {
                 Text("Plug it in with a USB data cable, unlock it and tap Trust.\nIf your Mac asks to allow the accessory, click Allow.")
@@ -201,13 +226,19 @@ private struct ConnectPhone: View {
 
 struct SetupInspector: View {
     @Environment(AppModel.self) private var model
+    let id: String
+
+    private var status: PhoneStatus {
+        model.state(id)?.status
+            ?? PhoneStatus(screen: model.setupScreen, bluetooth: model.setupBluetooth, keyboardLayout: model.settings.keyboardLayout)
+    }
 
     var body: some View {
         Form {
             Section {
                 StepRow(title: "Screen", detail: screenDetail, state: screenState)
                 StepRow(title: "Bluetooth", detail: bluetoothDetail, state: bluetoothState)
-                if model.status.bluetooth == .unauthorized {
+                if status.bluetooth == .unauthorized {
                     Button("Open Bluetooth Settings") { model.openPrivacySettings("Privacy_Bluetooth") }
                 }
                 StepRow(
@@ -224,16 +255,6 @@ struct SetupInspector: View {
                     selection: Binding(get: { model.settings.keyboardLayout }, set: { model.setKeyboardLayout($0) })
                 ) {
                     ForEach(KeyboardLayout.allCases) { Text($0.displayName).tag($0) }
-                }
-                if model.captureDevices.count > 1 {
-                    Picker(
-                        "Phone",
-                        selection: Binding(
-                            get: { model.settings.captureDeviceID ?? model.captureDevices.first?.id },
-                            set: { model.selectCaptureDevice($0) })
-                    ) {
-                        ForEach(model.captureDevices) { Text($0.name).tag(Optional($0.id)) }
-                    }
                 }
             } header: {
                 Text("Keyboard")
@@ -252,7 +273,7 @@ struct SetupInspector: View {
     }
 
     private var screenState: StepRow.State {
-        switch model.status.screen {
+        switch status.screen {
         case .connected: .done
         case .cameraDenied, .failed: .attention
         default: .waiting
@@ -260,15 +281,15 @@ struct SetupInspector: View {
     }
 
     private var screenDetail: String {
-        switch model.status.screen {
+        switch status.screen {
         case .connected(let name, let width, let height): width > 0 ? "\(name) · \(width) × \(height)" : name
         case .searching, .starting: "Connect with a USB data cable and tap Trust."
-        default: model.status.screen.summary
+        default: status.screen.summary
         }
     }
 
     private var bluetoothState: StepRow.State {
-        switch model.status.bluetooth {
+        switch status.bluetooth {
         case .connected: .done
         case .advertising, .starting: .waiting
         default: .attention
@@ -276,10 +297,10 @@ struct SetupInspector: View {
     }
 
     private var bluetoothDetail: String {
-        switch model.status.bluetooth {
+        switch status.bluetooth {
         case .connected: "Paired. \(MobdevPaths.appName) can tap and type."
         case .advertising: "On the iPhone: Settings › Bluetooth, then tap “\(HIDPeripheral.macName)” under Other Devices."
-        default: model.status.bluetooth.summary
+        default: status.bluetooth.summary
         }
     }
 }

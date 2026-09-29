@@ -47,7 +47,7 @@ struct ToolFailure: Error, CustomStringConvertible {
 
 /// The phone actions shared by MCP, the REST API and the relay.
 public final class PhoneTools: Sendable {
-    private let phone: PhoneBackend
+    let phone: PhoneBackend
     private let activity: ActivityLog
     private let settleDelay: TimeInterval
 

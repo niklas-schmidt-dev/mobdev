@@ -17,6 +17,15 @@ if CommandLine.arguments.dropFirst().first == "mcp" {
     }
 }
 
+// `Mobdev devices` prints the USB-connected iPhones and iPads as JSON.
+if CommandLine.arguments.dropFirst().first == "devices" {
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+    FileHandle.standardOutput.write((try? encoder.encode(USBDevices.read())) ?? Data("[]".utf8))
+    print()
+    exit(0)
+}
+
 if CommandLine.arguments.dropFirst().first == "--version" {
     print("Mobdev \(MCPHandler.serverVersion)")
     exit(0)

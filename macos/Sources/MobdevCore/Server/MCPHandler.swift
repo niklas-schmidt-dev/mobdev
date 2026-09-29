@@ -10,9 +10,9 @@ public final class MCPHandler: Sendable {
     /// The app's version in release builds; tests and `swift run` report 0.1.0.
     public static let serverVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.1.0"
 
-    private let tools: PhoneTools
+    private let tools: any ToolCalling
 
-    public init(tools: PhoneTools) {
+    public init(tools: any ToolCalling) {
         self.tools = tools
     }
 
@@ -121,7 +121,7 @@ public final class MCPHandler: Sendable {
         case "ping":
             return result(id: id, [:], modern: modern)
         case "tools/list":
-            return result(id: id, ["tools": .array(PhoneTools.definitions.map(\.mcpJSON))], modern: modern)
+            return result(id: id, ["tools": .array(tools.definitions.map(\.mcpJSON))], modern: modern)
         case "tools/call":
             guard let name = params["name"]?.stringValue else {
                 return rpcError(id: id, code: -32602, message: "params.name is required", status: modern ? 400 : 200)

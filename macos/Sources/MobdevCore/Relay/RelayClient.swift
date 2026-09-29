@@ -45,6 +45,7 @@ public final class RelayClient: @unchecked Sendable {
     private let stateBox = Locked<RelayState>(.off)
     private let loop = Locked<Task<Void, Never>?>(nil)
     private let socket = Locked<URLSessionWebSocketTask?>(nil)
+    private let devicesBox = Locked<[DeviceSummary]?>(nil)
     private let session: URLSession
     private let pingInterval: TimeInterval
 
@@ -172,6 +173,7 @@ public final class RelayClient: @unchecked Sendable {
                         if !established.get() {
                             established.set(true)
                             self.setState(.connected)
+                            if let devices = self.devicesBox.get() { await Self.send(devices: devices, on: task) }
                         }
                         continue
                     }
@@ -192,6 +194,26 @@ public final class RelayClient: @unchecked Sendable {
             task.cancel(with: .goingAway, reason: nil)
         }
         return established.get()
+    }
+
+    /// The devices the relay should list for this Mac: sent once connected and whenever they change.
+    public func updateDevices(_ devices: [DeviceSummary]) {
+        let changed = devicesBox.withLock { current -> Bool in
+            guard current != devices else { return false }
+            current = devices
+            return true
+        }
+        guard changed, stateBox.get() == .connected, let task = socket.get() else { return }
+        Task { await Self.send(devices: devices, on: task) }
+    }
+
+    private static func send(devices: [DeviceSummary], on task: URLSessionWebSocketTask) async {
+        struct Frame: Encodable {
+            let type = "devices"
+            let devices: [DeviceSummary]
+        }
+        guard let data = try? JSONEncoder().encode(Frame(devices: devices)) else { return }
+        try? await task.send(.string(String(decoding: data, as: UTF8.self)))
     }
 
     private func answer(_ envelope: RelayEnvelope) async -> RelayEnvelope {

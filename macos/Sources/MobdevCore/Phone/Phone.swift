@@ -1,5 +1,3 @@
-import AVFoundation
-import CoreBluetooth
 import CoreGraphics
 import Foundation
 
@@ -30,71 +28,4 @@ public protocol PhoneBackend: Sendable {
     func type(_ strokes: [KeyStroke]) async throws
     func press(_ stroke: KeyStroke) async throws
     func press(_ button: ConsumerUsage) async throws
-}
-
-/// A real iPhone: screen over USB, input over Bluetooth LE.
-public final class HardwarePhone: PhoneBackend, @unchecked Sendable {
-    public let capture: ScreenCapture
-    public let peripheral: HIDPeripheral
-    public let input: HIDInput
-    private let layout: Locked<KeyboardLayout>
-
-    public init(keyboardLayout: KeyboardLayout, onChange: @escaping @Sendable () -> Void) {
-        capture = ScreenCapture(onStateChange: { _ in onChange() })
-        peripheral = HIDPeripheral(localName: MobdevPaths.appName, onStateChange: { _ in onChange() })
-        input = HIDInput(sink: peripheral)
-        layout = Locked(keyboardLayout)
-    }
-
-    /// Whether macOS has asked for camera access yet. The iPhone screen counts as a camera, so
-    /// starting the capture before that shows the prompt.
-    public static var screenAccessDetermined: Bool {
-        AVCaptureDevice.authorizationStatus(for: .video) != .notDetermined
-    }
-
-    /// Whether macOS has asked for Bluetooth access yet. Starting Bluetooth before that shows the prompt.
-    public static var bluetoothAccessDetermined: Bool { CBManager.authorization != .notDetermined }
-
-    public func startScreen(preferredCaptureDeviceID: String?) {
-        capture.start(preferredDeviceID: preferredCaptureDeviceID)
-    }
-
-    public func startBluetooth() {
-        peripheral.start()
-    }
-
-    public var keyboardLayout: KeyboardLayout {
-        get { layout.get() }
-        set { layout.set(newValue) }
-    }
-
-    public func status() -> PhoneStatus {
-        PhoneStatus(screen: capture.state, bluetooth: peripheral.state, keyboardLayout: layout.get())
-    }
-
-    public func frame() -> CGImage? { capture.frame() }
-
-    public func tap(at point: NormalizedPoint, hold: TimeInterval) async throws {
-        try await input.tap(at: point, hold: hold)
-    }
-
-    public func swipe(from start: NormalizedPoint, to end: NormalizedPoint, duration: TimeInterval) async throws {
-        try await input.swipe(from: start, to: end, duration: duration)
-    }
-
-    public func scroll(at point: NormalizedPoint, ticks: Int) async throws {
-        try await input.scroll(at: point, ticks: ticks)
-    }
-
-    public func type(_ strokes: [KeyStroke]) async throws {
-        try await input.type(strokes)
-    }
-
-    public func press(_ stroke: KeyStroke) async throws {
-        try await input.press(stroke)
-    }
-
-    public func press(_ button: ConsumerUsage) async throws {
-        try await input.consumer(button)
-    }
 }

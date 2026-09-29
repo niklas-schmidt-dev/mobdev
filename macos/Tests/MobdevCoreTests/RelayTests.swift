@@ -42,7 +42,7 @@ import Testing
 
         let phone = FakePhone(lines: [("Settings", 420, 300)])
         let tools = PhoneTools(phone: phone, activity: ActivityLog(), settleDelay: 0)
-        let router = APIRouter(tools: tools, phone: phone, token: { "unused" }, port: { 0 })
+        let router = APIRouter(tools: tools, token: { "unused" }, port: { 0 })
         let client = RelayClient(handler: { request in await router.handle(request, from: .relay) })
         let secret = "mdh_" + SecretStore.randomHex(bytes: 32)
         client.start(url: base, secret: secret, hostName: "test-mac", accessToken: nil)

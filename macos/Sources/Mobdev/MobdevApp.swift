@@ -68,7 +68,7 @@ private struct MenuBarContent: View {
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        Text("\(model.deviceName): \(model.statusLine)")
+        Text(model.primary.map { "\($0.name): \(model.statusLine)" } ?? model.statusLine)
         if model.settings.relayEnabled {
             Text("Relay: \(model.relayState.summary)")
         }

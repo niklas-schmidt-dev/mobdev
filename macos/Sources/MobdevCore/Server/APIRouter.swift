@@ -9,19 +9,16 @@ public final class APIRouter: Sendable {
         case relay
     }
 
-    private let tools: PhoneTools
+    private let tools: any ToolCalling
     private let mcp: MCPHandler
-    private let phone: PhoneBackend
     private let token: @Sendable () -> String
     private let port: @Sendable () -> UInt16
 
     public init(
-        tools: PhoneTools, phone: PhoneBackend, token: @escaping @Sendable () -> String,
-        port: @escaping @Sendable () -> UInt16
+        tools: any ToolCalling, token: @escaping @Sendable () -> String, port: @escaping @Sendable () -> UInt16
     ) {
         self.tools = tools
         self.mcp = MCPHandler(tools: tools)
-        self.phone = phone
         self.token = token
         self.port = port
     }
@@ -37,9 +34,10 @@ public final class APIRouter: Sendable {
         case (_, "/mcp"):
             return await mcp.handle(request, source: source)
         case ("GET", "/v1/status"):
-            return rest(try? await tools.call("status", arguments: nil, source: source, screenshotByDefault: false))
+            let device = request.query["device"].map { JSONValue(["device": .string($0)]) }
+            return rest(try? await tools.call("status", arguments: device, source: source, screenshotByDefault: false))
         case ("GET", "/v1/tools"):
-            return .json(.array(PhoneTools.definitions.map(\.mcpJSON)))
+            return .json(.array(tools.definitions.map(\.mcpJSON)))
         case ("GET", "/v1/screenshot"):
             return screenshot(request)
         case ("POST", let path) where path.hasPrefix("/v1/tools/"):
@@ -97,6 +95,12 @@ public final class APIRouter: Sendable {
     }
 
     private func screenshot(_ request: HTTPRequest) -> HTTPResponse {
+        let phone: PhoneBackend
+        do {
+            phone = try tools.phone(for: request.query["device"])
+        } catch {
+            return .error(String(describing: error), status: 409)
+        }
         guard phone.status().screen.isConnected, let frame = phone.frame() else {
             return .error("The iPhone screen is not available. \(phone.status().screen.summary).", status: 409)
         }

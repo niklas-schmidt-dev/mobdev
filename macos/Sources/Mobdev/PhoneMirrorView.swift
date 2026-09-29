@@ -6,13 +6,14 @@ import SwiftUI
 /// The live iPhone screen. Click to tap, drag to swipe, scroll to scroll, and type while it
 /// has focus. ⌘V types the Mac clipboard.
 struct PhoneMirrorView: NSViewRepresentable {
+    let id: String
     let session: AVCaptureSession?
-    let input: HIDInput
+    let input: HIDInput?
     let layout: KeyboardLayout
     @Binding var focused: Bool
 
     func makeNSView(context: Context) -> MirrorNSView {
-        let view = MirrorNSView.shared
+        let view = MirrorNSView.view(for: id)
         view.onFocusChange = { focused in DispatchQueue.main.async { self.focused = focused } }
         return view
     }
@@ -27,10 +28,17 @@ struct PhoneMirrorView: NSViewRepresentable {
 }
 
 final class MirrorNSView: NSView {
-    /// One mirror for the app's lifetime. Adding or removing a preview layer makes the capture
-    /// session tear down and rebuild its graph on the main thread, which stalled every switch to
-    /// and from the phone pane, so the layer stays attached while other panes are shown.
-    static let shared = MirrorNSView()
+    /// One mirror per device for the app's lifetime. Adding or removing a preview layer makes the
+    /// capture session tear down and rebuild its graph on the main thread, which stalled every
+    /// switch to and from the phone pane, so each layer stays attached while other panes are shown.
+    private static var views: [String: MirrorNSView] = [:]
+
+    static func view(for id: String) -> MirrorNSView {
+        if let existing = views[id] { return existing }
+        let view = MirrorNSView()
+        views[id] = view
+        return view
+    }
 
     let previewLayer = AVCaptureVideoPreviewLayer()
     var input: HIDInput?

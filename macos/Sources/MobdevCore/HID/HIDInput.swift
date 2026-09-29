@@ -202,3 +202,18 @@ public final class HIDInput: @unchecked Sendable {
         if seconds > 0 { Thread.sleep(forTimeInterval: seconds) }
     }
 }
+
+/// Sends reports to one Bluetooth host, so each iPhone gets its own input.
+public struct HostSink: ReportSink {
+    public let peripheral: HIDPeripheral
+    public let host: UUID
+
+    public init(peripheral: HIDPeripheral, host: UUID) {
+        self.peripheral = peripheral
+        self.host = host
+    }
+
+    public func send(_ id: ReportID, _ bytes: [UInt8]) throws {
+        try peripheral.send(id, bytes, to: host)
+    }
+}

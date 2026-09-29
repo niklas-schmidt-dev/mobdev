@@ -14,7 +14,7 @@ final class TestServer: Sendable {
         let tools = PhoneTools(phone: phone, activity: ActivityLog(), settleDelay: 0)
         let portBox = Locked<UInt16>(0)
         let token = self.token
-        let router = APIRouter(tools: tools, phone: phone, token: { token }, port: { portBox.get() })
+        let router = APIRouter(tools: tools, token: { token }, port: { portBox.get() })
         self.router = router
         server = HTTPServer(port: 0) { request in await router.handle(request, from: .local) }
         try await server.start()

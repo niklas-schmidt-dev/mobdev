@@ -29,6 +29,15 @@ public enum BluetoothState: Sendable, Equatable {
     }
 }
 
+/// An iPhone or iPad connected to the Mac's Bluetooth keyboard and pointer.
+public struct BluetoothHost: Sendable, Equatable, Identifiable {
+    public let id: UUID
+    /// The device name iOS shares over Bluetooth, e.g. "iPhone von Niklas". iOS sometimes sends just "iPhone".
+    public let name: String?
+    /// The product type from Device Information, e.g. "iPhone15,2".
+    public let model: String?
+}
+
 public enum HIDError: Error, CustomStringConvertible {
     case notConnected
 
@@ -55,6 +64,7 @@ public final class HIDPeripheral: NSObject, CBPeripheralManagerDelegate, CBCentr
     private let onStateChange: @Sendable (BluetoothState) -> Void
     private let stateBox = Locked<BluetoothState>(.starting)
     private let hostCount = Locked(0)
+    private let hostList = Locked<[BluetoothHost]>([])
 
     // Everything below is only touched on `queue`.
     private var manager: CBPeripheralManager?
@@ -77,6 +87,7 @@ public final class HIDPeripheral: NSObject, CBPeripheralManagerDelegate, CBCentr
         let central: CBCentral
         var kind = Kind.identifying
         var name: String?
+        var model: String?
     }
 
     public init(localName: String = "Mobdev", onStateChange: @escaping @Sendable (BluetoothState) -> Void = { _ in }) {
@@ -86,6 +97,9 @@ public final class HIDPeripheral: NSObject, CBPeripheralManagerDelegate, CBCentr
     }
 
     public var state: BluetoothState { stateBox.get() }
+
+    /// The iPhones and iPads that receive input, in the order they connected.
+    public var connectedHosts: [BluetoothHost] { hostList.get() }
 
     public func start() {
         queue.async {
@@ -106,11 +120,20 @@ public final class HIDPeripheral: NSObject, CBPeripheralManagerDelegate, CBCentr
 
     /// Sends one input report to every subscribed iPhone or iPad.
     public func send(_ id: ReportID, _ bytes: [UInt8]) throws {
-        guard hostCount.get() > 0 else { throw HIDError.notConnected }
+        try send(id, bytes, to: nil)
+    }
+
+    /// Sends one input report to one host, or to every iPhone and iPad when `host` is nil.
+    public func send(_ id: ReportID, _ bytes: [UInt8], to host: UUID?) throws {
+        if let host {
+            guard hostList.get().contains(where: { $0.id == host }) else { throw HIDError.notConnected }
+        } else {
+            guard hostCount.get() > 0 else { throw HIDError.notConnected }
+        }
         queue.async {
             guard let characteristic = self.inputs[id] else { return }
             let phones = self.hosts.values.filter {
-                $0.kind == .phone
+                $0.kind == .phone && (host == nil || $0.central.identifier == host)
                     && self.subscriptions[$0.central.identifier]?.contains(ObjectIdentifier(characteristic)) == true
             }
             guard !phones.isEmpty else { return }
@@ -369,6 +392,7 @@ public final class HIDPeripheral: NSObject, CBPeripheralManagerDelegate, CBCentr
             ?? !(name ?? "").localizedCaseInsensitiveContains("watch")
         host.kind = isPhone ? .phone : .other
         host.name = name
+        host.model = model
         hosts[identifier] = host
         Log.info("bluetooth host \(name ?? "unnamed") (\(model ?? "no model")): \(isPhone ? "controlled" : "ignored")")
         updateHostCount()
@@ -390,10 +414,22 @@ public final class HIDPeripheral: NSObject, CBPeripheralManagerDelegate, CBCentr
 
     private func updateHostCount() {
         let inputIDs = Set(inputs.values.map(ObjectIdentifier.init))
-        let count = hosts.filter { identifier, host in
+        let phones = hosts.filter { identifier, host in
             host.kind == .phone && !(subscriptions[identifier] ?? []).isDisjoint(with: inputIDs)
-        }.count
+        }
+        let count = phones.count
+        let list = phones.map { BluetoothHost(id: $0.key, name: $0.value.name, model: $0.value.model) }
+            .sorted { $0.id.uuidString < $1.id.uuidString }
+        let listChanged = hostList.withLock { current -> Bool in
+            guard current != list else { return false }
+            current = list
+            return true
+        }
         hostCount.set(count)
+        // The same number of hosts can hide a different host; tell observers either way.
+        if listChanged, case .connected(let hosts) = stateBox.get(), hosts == count {
+            onStateChange(.connected(hosts: count))
+        }
         if count > 0 {
             setState(.connected(hosts: count))
         } else if published {

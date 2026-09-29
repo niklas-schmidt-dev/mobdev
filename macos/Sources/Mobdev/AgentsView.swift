@@ -41,7 +41,7 @@ struct AgentsView: View {
                         .foregroundStyle(model.serverFailed ? .red : .green)
                 }
                 LabeledContent("Tools") {
-                    Text(PhoneTools.definitions.map(\.name).joined(separator: ", "))
+                    Text(DeviceTools.definitions.map(\.name).joined(separator: ", "))
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.trailing)
                 }

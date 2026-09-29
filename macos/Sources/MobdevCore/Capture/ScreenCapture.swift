@@ -42,11 +42,20 @@ public final class ScreenCapture: NSObject, AVCaptureVideoDataOutputSampleBuffer
     private let preferredID = Locked<String?>(nil)
     private let sessionBox = Locked<AVCaptureSession?>(nil)
     private let started = Locked(false)
+    private let onlyDeviceID: String?
     private var observers: [NSObjectProtocol] = []
 
-    public init(onStateChange: @escaping @Sendable (ScreenState) -> Void = { _ in }) {
+    /// `onlyDeviceID` pins the capture to one device; without it the preferred or first iPhone is used.
+    public init(onlyDeviceID: String? = nil, onStateChange: @escaping @Sendable (ScreenState) -> Void = { _ in }) {
+        self.onlyDeviceID = onlyDeviceID
         self.onStateChange = onStateChange
         super.init()
+    }
+
+    /// iPhones and iPads that can be captured right now.
+    public static func devices() -> [CaptureDeviceInfo] {
+        allowScreenCaptureDevices()
+        return phoneDevices().map { CaptureDeviceInfo(id: $0.uniqueID, name: $0.localizedName) }
     }
 
     public var state: ScreenState { stateBox.get() }
@@ -96,6 +105,13 @@ public final class ScreenCapture: NSObject, AVCaptureVideoDataOutputSampleBuffer
         }
     }
 
+    /// Stops capturing and watching; used when a device's entry is replaced.
+    public func stop() {
+        for observer in observers { NotificationCenter.default.removeObserver(observer) }
+        observers = []
+        queue.async { self.stopSession() }
+    }
+
     public func availableDevices() -> [CaptureDeviceInfo] {
         Self.phoneDevices().map { CaptureDeviceInfo(id: $0.uniqueID, name: $0.localizedName) }
     }
@@ -109,7 +125,7 @@ public final class ScreenCapture: NSObject, AVCaptureVideoDataOutputSampleBuffer
 
     // MARK: Session
 
-    private static func allowScreenCaptureDevices() {
+    static func allowScreenCaptureDevices() {
         var address = CMIOObjectPropertyAddress(
             mSelector: CMIOObjectPropertySelector(kCMIOHardwarePropertyAllowScreenCaptureDevices),
             mScope: CMIOObjectPropertyScope(kCMIOObjectPropertyScopeGlobal),
@@ -133,7 +149,13 @@ public final class ScreenCapture: NSObject, AVCaptureVideoDataOutputSampleBuffer
         }
         let devices = Self.phoneDevices()
         let preferred = preferredID.get()
-        guard let device = devices.first(where: { $0.uniqueID == preferred }) ?? devices.first else {
+        let candidate: AVCaptureDevice?
+        if let onlyDeviceID {
+            candidate = devices.first { $0.uniqueID == onlyDeviceID }
+        } else {
+            candidate = devices.first { $0.uniqueID == preferred } ?? devices.first
+        }
+        guard let device = candidate else {
             setState(.searching)
             return
         }

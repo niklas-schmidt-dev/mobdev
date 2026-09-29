@@ -11,20 +11,57 @@ final class ChangeSignal: Sendable {
     func connect(_ handler: @escaping @Sendable () -> Void) { self.handler.set(handler) }
 }
 
+/// A device as the interface shows it.
+struct DeviceState: Identifiable, Equatable {
+    let id: String
+    var name: String
+    var info: DeviceInfo?
+    var status: PhoneStatus
+    var onUSB: Bool
+    var activityCount: Int
+
+    var modelName: String { info?.modelName ?? "iPhone" }
+    var isConnected: Bool { status.screen.isConnected }
+    var isReady: Bool { status.frameSize != nil && status.bluetooth.isConnected }
+
+    /// One line for the window subtitle, sidebar and menu bar.
+    var statusLine: String {
+        switch (status.screen, status.bluetooth) {
+        case (.cameraDenied, _): "Camera access needed"
+        case (.failed, _): "Screen capture failed"
+        case (.connected, .connected): "Ready for agents"
+        case (.connected, .unauthorized): "Bluetooth access needed"
+        case (.connected, .poweredOff): "Bluetooth is off"
+        case (.connected, _): "Pair over Bluetooth to control"
+        default: onUSB ? "Unlock the iPhone to see its screen" : "Not connected"
+        }
+    }
+}
+
+/// One action in the activity across all devices.
+struct ActivityItem: Identifiable, Equatable {
+    let deviceID: String
+    let deviceName: String
+    let entry: ActivityLog.Entry
+    var id: UUID { entry.id }
+}
+
 @MainActor
 @Observable
 final class AppModel {
     static let shared = AppModel()
 
     var settings: AppSettings
-    var status: PhoneStatus
+    /// Every device seen, connected ones first.
+    private(set) var devices: [DeviceState] = []
     var serverSummary = "Starting…"
     var serverFailed = false
     var relayState: RelayState = .off
-    var activity: [ActivityLog.Entry] = []
-    var captureDevices: [CaptureDeviceInfo] = []
-    /// Average colors of the top and bottom of the phone screen, for the backdrop behind it.
-    var ambient: [Color] = []
+    /// The newest actions across all devices.
+    private(set) var activity: [ActivityItem] = []
+    /// Small live pictures of each connected device and the average colors of its screen.
+    private(set) var thumbnails: [String: CGImage] = [:]
+    private(set) var ambient: [String: [Color]] = [:]
     /// The setup assistant. It opens by itself until macOS has asked for camera and Bluetooth
     /// access, so both prompts appear on the page that explains them.
     var showsOnboarding = false
@@ -33,14 +70,14 @@ final class AppModel {
     private(set) var token: String
     private(set) var relaySecret: String
 
-    let phone: HardwarePhone
-    @ObservationIgnored private let activityLog = ActivityLog()
+    let hub: DeviceHub
     @ObservationIgnored private let router: APIRouter
     @ObservationIgnored private let server: HTTPServer
     @ObservationIgnored private let relay: RelayClient
     @ObservationIgnored private let tokenBox: Locked<String>
     @ObservationIgnored private let portBox = Locked<UInt16>(0)
     @ObservationIgnored private var started = false
+    @ObservationIgnored private var observedLogs = Set<ObjectIdentifier>()
 
     init() {
         let settings = AppSettings.load()
@@ -52,13 +89,11 @@ final class AppModel {
         self.tokenBox = tokenBox
 
         let signal = ChangeSignal()
-        let phone = HardwarePhone(keyboardLayout: settings.keyboardLayout) { signal.fire() }
-        self.phone = phone
-        status = phone.status()
-
-        let tools = PhoneTools(phone: phone, activity: activityLog)
+        let hub = DeviceHub(keyboardLayout: settings.keyboardLayout) { signal.fire() }
+        self.hub = hub
+        let tools = DeviceTools(hub: hub)
         let portBox = self.portBox
-        let router = APIRouter(tools: tools, phone: phone, token: { tokenBox.get() }, port: { portBox.get() })
+        let router = APIRouter(tools: tools, token: { tokenBox.get() }, port: { portBox.get() })
         self.router = router
         server = HTTPServer(port: MobdevPaths.port(settings: settings)) { request in
             await router.handle(request, from: .local)
@@ -70,15 +105,14 @@ final class AppModel {
 
         signal.connect { [weak self] in Task { @MainActor in self?.refresh() } }
         relaySignal.connect { [weak self] in Task { @MainActor in self?.relayState = self?.relay.state ?? .off } }
-        activityLog.observe { [weak self] entries in Task { @MainActor in self?.activity = entries } }
     }
 
     func start() async {
         guard !started else { return }
         started = true
         try? settings.save()
-        if HardwarePhone.screenAccessDetermined { startScreen() }
-        if HardwarePhone.bluetoothAccessDetermined { startBluetooth() }
+        if DeviceHub.screenAccessDetermined { startScreen() }
+        if DeviceHub.bluetoothAccessDetermined { startBluetooth() }
         showsOnboarding = !screenStarted || !bluetoothStarted
         do {
             try await server.start()
@@ -94,63 +128,99 @@ final class AppModel {
         Task.detached(priority: .utility) { TextRecognizer.warmUp() }
         Task { [weak self] in
             while let self {
-                await self.sampleAmbient()
+                await self.samplePictures()
                 try? await Task.sleep(for: .seconds(2))
             }
         }
     }
 
     func refresh() {
-        status = phone.status()
-        if status.frameSize == nil { ambient = [] }
-        // Device discovery can take a moment, so it stays off the main thread.
-        let capture = phone.capture
-        Task {
-            let devices = await Task.detached(priority: .utility) { capture.availableDevices() }.value
-            if devices != captureDevices { captureDevices = devices }
+        let hardware = hub.devices
+        let states = hardware.map { device in
+            DeviceState(
+                id: device.id, name: device.name, info: device.info, status: device.status(), onUSB: device.isOnUSB,
+                activityCount: device.activity.all.count)
         }
-        if ambient.isEmpty { Task { await sampleAmbient() } }
+        if states != devices { devices = states }
+        for device in hardware where !observedLogs.contains(ObjectIdentifier(device.activity)) {
+            observedLogs.insert(ObjectIdentifier(device.activity))
+            device.activity.observe { [weak self] _ in Task { @MainActor in self?.refreshActivity() } }
+        }
+        refreshActivity()
+        relay.updateDevices(hardware.map(DeviceSummary.init))
+        for id in thumbnails.keys where !(states.first { $0.id == id }?.isConnected ?? false) {
+            thumbnails[id] = nil
+            ambient[id] = nil
+        }
     }
 
-    /// Averages the colors of the current frame for the backdrop. Rendering a full-size frame takes
-    /// a while, so it happens off the main thread, and views only update when the colors change.
-    private func sampleAmbient() async {
-        guard status.frameSize != nil else { return }
-        let phone = self.phone
-        let colors = await Task.detached(priority: .utility) { phone.frame().map(Ambient.colors(of:)) }.value
-        if let colors, status.frameSize != nil, colors != ambient { ambient = colors }
+    private func refreshActivity() {
+        let merged = hub.devices.flatMap { device in
+            device.activity.all.prefix(300).map { ActivityItem(deviceID: device.id, deviceName: device.name, entry: $0) }
+        }
+        .sorted { $0.entry.date > $1.entry.date }
+        let recent = Array(merged.prefix(500))
+        if recent != activity { activity = recent }
+        for index in devices.indices {
+            let count = hub.devices.first { $0.id == devices[index].id }?.activity.all.count ?? 0
+            if devices[index].activityCount != count { devices[index].activityCount = count }
+        }
+    }
+
+    /// Thumbnails for the overview and backdrop colors for each connected device. Rendering full
+    /// frames takes a while, so it happens off the main thread, and views only update on change.
+    private func samplePictures() async {
+        for device in hub.devices where device.capture.state.isConnected {
+            let id = device.id
+            let result = await Task.detached(priority: .utility) { () -> (CGImage, [Color])? in
+                guard let frame = device.frame() else { return nil }
+                return (ImageTools.scaled(frame, longEdge: 420), Ambient.colors(of: frame))
+            }.value
+            guard let (thumbnail, colors) = result else { continue }
+            thumbnails[id] = thumbnail
+            if ambient[id] != colors { ambient[id] = colors }
+        }
     }
 
     var port: UInt16 { portBox.get() == 0 ? MobdevPaths.port(settings: settings) : portBox.get() }
-    var isReady: Bool { status.frameSize != nil && status.bluetooth.isConnected }
 
-    var deviceName: String {
-        if case .connected(let name, _, _) = status.screen { return name }
-        return "iPhone"
+    func device(_ id: String) -> HardwareDevice? { hub.devices.first { $0.id == id } }
+    func state(_ id: String) -> DeviceState? { devices.first { $0.id == id } }
+
+    /// The device the menu bar and setup assistant talk about: a ready one, else one with a screen.
+    var primary: DeviceState? {
+        devices.first(where: \.isReady) ?? devices.first(where: \.isConnected) ?? devices.first
     }
 
-    /// One line for the window subtitle, sidebar and menu bar.
+    var isReady: Bool { devices.contains(where: \.isReady) }
+
+    /// Screen setup across devices: a connected screen, else camera access and the search.
+    var setupScreen: ScreenState {
+        devices.first(where: \.isConnected)?.status.screen ?? hub.screenAccess
+    }
+
+    /// Bluetooth setup across devices: connected once any iPhone is paired.
+    var setupBluetooth: BluetoothState { hub.peripheral.state }
+
     var statusLine: String {
-        switch (status.screen, status.bluetooth) {
-        case (.cameraDenied, _): "Camera access needed"
-        case (.failed, _): "Screen capture failed"
-        case (.connected, .connected): "Ready for agents"
-        case (.connected, .unauthorized): "Bluetooth access needed"
-        case (.connected, .poweredOff): "Bluetooth is off"
-        case (.connected, _): "Pair over Bluetooth to control"
-        default: "Connect with a USB cable"
-        }
+        guard let primary else { return screenStarted ? "Connect an iPhone with a USB cable" : "Not set up" }
+        let ready = devices.filter(\.isReady).count
+        return ready > 1 ? "\(ready) iPhones ready" : primary.statusLine
     }
 
-    func clearActivity() { activityLog.clear() }
+    func clearActivity(device: String? = nil) {
+        for hardware in hub.devices where device == nil || hardware.id == device { hardware.activity.clear() }
+    }
+
+    func forget(_ id: String) { hub.forget(id) }
 
     // MARK: Setup
 
-    /// Starts reading the iPhone screen; the first time, macOS asks for camera access.
+    /// Starts reading iPhone screens; the first time, macOS asks for camera access.
     func startScreen() {
         guard !screenStarted else { return }
         screenStarted = true
-        phone.startScreen(preferredCaptureDeviceID: settings.captureDeviceID)
+        hub.startScreens()
         refresh()
     }
 
@@ -158,7 +228,7 @@ final class AppModel {
     func startBluetooth() {
         guard !bluetoothStarted else { return }
         bluetoothStarted = true
-        phone.startBluetooth()
+        hub.startBluetooth()
         refresh()
     }
 
@@ -172,22 +242,17 @@ final class AppModel {
     /// Moves the pointer to the middle of the iPhone without tapping. With AssistiveTouch on, iOS
     /// shows it as a round pointer.
     func showPointer() {
-        Task { try? await phone.input.move(to: NormalizedPoint(x: 0.5, y: 0.5)) }
+        guard let id = primary?.id, let device = device(id) else { return }
+        Task { try? await device.move(to: NormalizedPoint(x: 0.5, y: 0.5)) }
     }
 
     // MARK: Settings
 
     func setKeyboardLayout(_ layout: KeyboardLayout) {
         settings.keyboardLayout = layout
-        phone.keyboardLayout = layout
+        hub.keyboardLayout = layout
         save()
         refresh()
-    }
-
-    func selectCaptureDevice(_ id: String?) {
-        settings.captureDeviceID = id
-        phone.capture.select(deviceID: id)
-        save()
     }
 
     func regenerateToken() {
@@ -317,20 +382,21 @@ final class AppModel {
 
     // MARK: Manual control
 
-    func home() {
-        Task { try? await phone.press(.home) }
+    func home(_ id: String) {
+        guard let device = device(id) else { return }
+        Task { try? await device.press(.home) }
     }
 
-    func type(_ text: String) {
-        guard let strokes = try? settings.keyboardLayout.strokes(typing: text) else {
+    func type(_ text: String, on id: String) {
+        guard let device = device(id), let strokes = try? settings.keyboardLayout.strokes(typing: text) else {
             NSSound.beep()
             return
         }
-        Task { try? await phone.type(strokes) }
+        Task { try? await device.type(strokes) }
     }
 
-    func saveScreenshot() {
-        guard let frame = phone.frame(), let image = ImageTools.encode(frame, png: true) else {
+    func saveScreenshot(_ id: String) {
+        guard let device = device(id), let frame = device.frame(), let image = ImageTools.encode(frame, png: true) else {
             NSSound.beep()
             return
         }
@@ -338,7 +404,7 @@ final class AppModel {
         panel.allowedContentTypes = [.png]
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd 'at' HH.mm.ss"
-        panel.nameFieldStringValue = "iPhone \(formatter.string(from: Date())).png"
+        panel.nameFieldStringValue = "\(device.name) \(formatter.string(from: Date())).png"
         if panel.runModal() == .OK, let url = panel.url {
             try? image.data.write(to: url)
         }

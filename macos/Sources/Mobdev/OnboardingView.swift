@@ -97,9 +97,9 @@ struct OnboardingView: View {
                     Button("Show Pointer", systemImage: "cursorarrow.rays") { model.showPointer() }
                         .buttonStyle(.glass)
                         .controlSize(.large)
-                        .disabled(!model.status.bluetooth.isConnected)
+                        .disabled(!model.setupBluetooth.isConnected)
                     Text(
-                        model.status.bluetooth.isConnected
+                        model.setupBluetooth.isConnected
                             ? "A round pointer appears in the middle of your iPhone when it’s on."
                             : "Pair over Bluetooth first to try it."
                     )
@@ -178,12 +178,12 @@ struct OnboardingView: View {
             return ("Get Started", true, advance)
         case .screen:
             if !model.screenStarted { return ("Allow Access", true, model.startScreen) }
-            if model.status.screen == .cameraDenied {
+            if model.setupScreen == .cameraDenied {
                 return ("Open Privacy Settings", true, { model.openPrivacySettings("Privacy_Camera") })
             }
         case .bluetooth:
             if !model.bluetoothStarted { return ("Turn On Bluetooth", true, model.startBluetooth) }
-            if model.status.bluetooth == .unauthorized {
+            if model.setupBluetooth == .unauthorized {
                 return ("Open Privacy Settings", true, { model.openPrivacySettings("Privacy_Bluetooth") })
             }
         case .done:
@@ -200,19 +200,19 @@ struct OnboardingView: View {
     private func isComplete(_ step: Step) -> Bool {
         switch step {
         case .screen:
-            switch model.status.screen {
+            switch model.setupScreen {
             case .searching, .connected, .failed: model.screenStarted
             default: false
             }
-        case .connect: model.status.screen.isConnected
-        case .bluetooth: model.status.bluetooth.isConnected
+        case .connect: model.setupScreen.isConnected
+        case .bluetooth: model.setupBluetooth.isConnected
         case .welcome, .assistiveTouch, .keyboard, .done: true
         }
     }
 
     private var screenStatus: StatusPill.Status? {
         guard model.screenStarted else { return nil }
-        switch model.status.screen {
+        switch model.setupScreen {
         case .cameraDenied: return .problem("Turned off in Privacy & Security")
         case .starting: return .waiting("Waiting for your answer…")
         default: return .done("Screen access allowed")
@@ -220,7 +220,7 @@ struct OnboardingView: View {
     }
 
     private var connectStatus: StatusPill.Status? {
-        switch model.status.screen {
+        switch model.setupScreen {
         case .connected(let name, _, _): .done("\(name) connected")
         case .failed(let message): .problem(message)
         case .cameraDenied: .problem("Allow screen access first")
@@ -231,13 +231,13 @@ struct OnboardingView: View {
 
     private var bluetoothStatus: StatusPill.Status? {
         guard model.bluetoothStarted else { return nil }
-        switch model.status.bluetooth {
+        switch model.setupBluetooth {
         case .starting: return .waiting("Starting Bluetooth…")
         case .advertising: return .waiting("Waiting for your iPhone…")
         case .connected: return .done("Paired")
         case .unauthorized: return .problem("Turned off in Privacy & Security")
         case .poweredOff: return .problem("Turn on Bluetooth on this Mac")
-        case .unsupported, .failed: return .problem(model.status.bluetooth.summary)
+        case .unsupported, .failed: return .problem(model.setupBluetooth.summary)
         }
     }
 
