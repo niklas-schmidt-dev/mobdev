@@ -191,6 +191,9 @@ private struct ConnectPhone: View {
                     .symbolEffect(.pulse, options: .repeating)
             } description: {
                 Text("Plug it in with a USB data cable, unlock it and tap Trust.\nIf your Mac asks to allow the accessory, click Allow.")
+            } actions: {
+                Button("Set Up iPhone…") { model.showsOnboarding = true }
+                    .buttonStyle(.glassProminent)
             }
         }
     }

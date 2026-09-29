@@ -39,6 +39,7 @@ struct MobdevApp: App {
         .defaultSize(width: 1180, height: 860)
         .commands {
             CommandGroup(after: .appInfo) {
+                SetUpIPhoneButton()
                 if Updates.shared.isAvailable {
                     Button("Check for Updates…") { Updates.shared.checkForUpdates() }
                 }
@@ -72,6 +73,7 @@ private struct MenuBarContent: View {
             Text("Relay: \(model.relayState.summary)")
         }
         Divider()
+        if !model.isReady { SetUpIPhoneButton() }
         if Updates.shared.isAvailable {
             Button("Check for Updates…") { Updates.shared.checkForUpdates() }
         }
@@ -81,5 +83,18 @@ private struct MenuBarContent: View {
         }
         Button("Quit \(MobdevPaths.appName)") { NSApp.terminate(nil) }
             .keyboardShortcut("q")
+    }
+}
+
+/// Opens the setup assistant over the main window.
+private struct SetUpIPhoneButton: View {
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        Button("Set Up iPhone…") {
+            openWindow(id: "main")
+            NSApp.activate(ignoringOtherApps: true)
+            AppModel.shared.showsOnboarding = true
+        }
     }
 }

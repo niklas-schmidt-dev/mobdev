@@ -41,6 +41,7 @@ public final class ScreenCapture: NSObject, AVCaptureVideoDataOutputSampleBuffer
     private let context = CIContext(options: [.cacheIntermediates: false])
     private let preferredID = Locked<String?>(nil)
     private let sessionBox = Locked<AVCaptureSession?>(nil)
+    private let started = Locked(false)
     private var observers: [NSObjectProtocol] = []
 
     public init(onStateChange: @escaping @Sendable (ScreenState) -> Void = { _ in }) {
@@ -53,7 +54,9 @@ public final class ScreenCapture: NSObject, AVCaptureVideoDataOutputSampleBuffer
     /// The running session, for a live preview layer.
     public var session: AVCaptureSession? { sessionBox.get() }
 
+    /// Starts watching for the iPhone. Later calls do nothing.
     public func start(preferredDeviceID: String? = nil) {
+        guard !started.withLock({ let was = $0; $0 = true; return was }) else { return }
         preferredID.set(preferredDeviceID)
         Self.allowScreenCaptureDevices()
         let center = NotificationCenter.default

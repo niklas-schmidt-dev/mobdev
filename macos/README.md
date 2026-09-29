@@ -46,6 +46,10 @@ automatic updates. Both apps share the Mac's Bluetooth, so quit one before testi
 
 ## Set up the iPhone (once)
 
+On first launch a setup assistant walks through these steps. It asks for camera and Bluetooth
+access on the page that explains them and checks each step off as soon as the Mac detects it. Open
+it again with **Mobdev › Set Up iPhone…**.
+
 1. Plug it in, unlock it and tap **Trust**. If the Mac asks to allow the accessory, click **Allow**.
    The screen appears in Mobdev.
 2. On the iPhone open **Settings > Bluetooth** and tap this Mac or **Mobdev** to pair.

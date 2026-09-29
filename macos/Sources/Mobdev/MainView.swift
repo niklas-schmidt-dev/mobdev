@@ -30,6 +30,10 @@ struct MainView: View {
             }
         }
         .frame(minWidth: 860, minHeight: 660)
+        .sheet(isPresented: Bindable(model).showsOnboarding, onDismiss: model.finishOnboarding) {
+            OnboardingView()
+                .environment(model)
+        }
     }
 }
 

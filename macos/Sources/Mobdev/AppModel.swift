@@ -25,6 +25,11 @@ final class AppModel {
     var captureDevices: [CaptureDeviceInfo] = []
     /// Average colors of the top and bottom of the phone screen, for the backdrop behind it.
     var ambient: [Color] = []
+    /// The setup assistant. It opens by itself until macOS has asked for camera and Bluetooth
+    /// access, so both prompts appear on the page that explains them.
+    var showsOnboarding = false
+    private(set) var screenStarted = false
+    private(set) var bluetoothStarted = false
     private(set) var token: String
     private(set) var relaySecret: String
 
@@ -72,7 +77,9 @@ final class AppModel {
         guard !started else { return }
         started = true
         try? settings.save()
-        phone.start(preferredCaptureDeviceID: settings.captureDeviceID)
+        if HardwarePhone.screenAccessDetermined { startScreen() }
+        if HardwarePhone.bluetoothAccessDetermined { startBluetooth() }
+        showsOnboarding = !screenStarted || !bluetoothStarted
         do {
             try await server.start()
             portBox.set(server.port)
@@ -135,6 +142,37 @@ final class AppModel {
     }
 
     func clearActivity() { activityLog.clear() }
+
+    // MARK: Setup
+
+    /// Starts reading the iPhone screen; the first time, macOS asks for camera access.
+    func startScreen() {
+        guard !screenStarted else { return }
+        screenStarted = true
+        phone.startScreen(preferredCaptureDeviceID: settings.captureDeviceID)
+        refresh()
+    }
+
+    /// Starts the Bluetooth keyboard and pointer; the first time, macOS asks for Bluetooth access.
+    func startBluetooth() {
+        guard !bluetoothStarted else { return }
+        bluetoothStarted = true
+        phone.startBluetooth()
+        refresh()
+    }
+
+    /// Closes the setup assistant. Skipped steps start anyway, so macOS asks for what is missing.
+    func finishOnboarding() {
+        showsOnboarding = false
+        startScreen()
+        startBluetooth()
+    }
+
+    /// Moves the pointer to the middle of the iPhone without tapping. With AssistiveTouch on, iOS
+    /// shows it as a round pointer.
+    func showPointer() {
+        Task { try? await phone.input.move(to: NormalizedPoint(x: 0.5, y: 0.5)) }
+    }
 
     // MARK: Settings
 

@@ -1,3 +1,5 @@
+import AVFoundation
+import CoreBluetooth
 import CoreGraphics
 import Foundation
 
@@ -44,9 +46,21 @@ public final class HardwarePhone: PhoneBackend, @unchecked Sendable {
         layout = Locked(keyboardLayout)
     }
 
-    public func start(preferredCaptureDeviceID: String?) {
-        peripheral.start()
+    /// Whether macOS has asked for camera access yet. The iPhone screen counts as a camera, so
+    /// starting the capture before that shows the prompt.
+    public static var screenAccessDetermined: Bool {
+        AVCaptureDevice.authorizationStatus(for: .video) != .notDetermined
+    }
+
+    /// Whether macOS has asked for Bluetooth access yet. Starting Bluetooth before that shows the prompt.
+    public static var bluetoothAccessDetermined: Bool { CBManager.authorization != .notDetermined }
+
+    public func startScreen(preferredCaptureDeviceID: String?) {
         capture.start(preferredDeviceID: preferredCaptureDeviceID)
+    }
+
+    public func startBluetooth() {
+        peripheral.start()
     }
 
     public var keyboardLayout: KeyboardLayout {
