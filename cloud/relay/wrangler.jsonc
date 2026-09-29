@@ -19,5 +19,14 @@
       "migrations_dir": "../migrations"
     }
   ],
-  "observability": { "enabled": true }
+  // Per location and approximate; the monthly allowance in Autumn is the real limit.
+  // AGENT_LIMIT must match AGENT_BURST in src/protocol.ts.
+  "ratelimits": [
+    { "name": "AGENT_LIMIT", "namespace_id": "4101", "simple": { "limit": 50, "period": 10 } },
+    { "name": "CONNECT_LIMIT", "namespace_id": "4102", "simple": { "limit": 10, "period": 60 } }
+  ],
+  // Secrets (wrangler secret put -c relay/wrangler.jsonc): AUTUMN_SECRET_KEY. Without it the relay
+  // neither meters nor bills.
+  // Every agent request logs about three events; keeping 1 in 20 keeps logs from dominating cost.
+  "observability": { "enabled": true, "head_sampling_rate": 0.05 }
 }

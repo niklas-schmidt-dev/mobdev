@@ -1,5 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import type { ReactNode } from "react";
+import { AGENT_BURST, MAX_IN_FLIGHT_PER_MAC } from "../../relay/src/protocol";
+import { FREE_PLAN, PRO_PLAN, allowanceText } from "../../shared/plans";
 import { Code, Page, buttonPrimary } from "../components/site";
 import { pageMeta } from "../lib/meta";
 import { GITHUB_URL } from "../lib/releases";
@@ -181,6 +183,21 @@ function Docs() {
                 leaves your Mac. Anyone with it can control the phone; “New Client Key” in the app revokes it. Revoking
                 the access token in the dashboard disconnects the Mac.
               </p>
+              <h3 className="pt-2 text-[21px] font-semibold tracking-tight text-ink">Limits of the hosted relay</h3>
+              <p>
+                {FREE_PLAN.name} connects {FREE_PLAN.macs} Mac and includes {allowanceText(FREE_PLAN)}. {PRO_PLAN.name}{" "}
+                (${PRO_PLAN.priceUsd} USD a month, plus applicable tax) connects {PRO_PLAN.macs} Macs and includes {allowanceText(PRO_PLAN)}. Active
+                time counts while a Mac works on a request; a connected Mac that waits costs nothing. The dashboard shows
+                what you used. Mobdev on the Mac and a relay you run yourself have no limits.
+              </p>
+              <p>When a limit is reached, the relay answers with HTTP 429 and a Retry-After header:</p>
+              <ul className="list-disc space-y-2 pl-5">
+                <li>
+                  More than {AGENT_BURST.limit} requests in {AGENT_BURST.seconds} seconds with one client key.
+                </li>
+                <li>More than {MAX_IN_FLIGHT_PER_MAC} requests waiting for the same Mac.</li>
+                <li>The month’s requests or active time used up. Retry-After points to when they renew.</li>
+              </ul>
             </Section>
 
             <Section id="self-host" title="Run your own relay">

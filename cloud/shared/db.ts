@@ -91,15 +91,27 @@ export async function deleteAccessToken(db: D1Database, accountId: string, token
   return results.map((row) => row.space_id);
 }
 
+export interface AccessRow {
+  id: string;
+  account_id: string;
+  email: string;
+  /** How many Macs the plan allowed when Autumn last answered; used while it cannot be reached. */
+  macs_allowed: number | null;
+}
+
 /** Resolves an access token presented by a Mac. */
-export async function findAccessToken(
-  db: D1Database,
-  token: string,
-): Promise<{ id: string; account_id: string } | null> {
+export async function findAccessToken(db: D1Database, token: string): Promise<AccessRow | null> {
   return db
-    .prepare("SELECT id, account_id FROM access_tokens WHERE token_hash = ?1")
+    .prepare(
+      `SELECT t.id, t.account_id, a.email, a.macs_allowed FROM access_tokens t
+       JOIN accounts a ON a.id = t.account_id WHERE t.token_hash = ?1`,
+    )
     .bind(await sha256Hex(token))
-    .first<{ id: string; account_id: string }>();
+    .first<AccessRow>();
+}
+
+export async function cacheMacsAllowed(db: D1Database, accountId: string, macs: number): Promise<void> {
+  await db.prepare("UPDATE accounts SET macs_allowed = ?1 WHERE id = ?2").bind(macs, accountId).run();
 }
 
 export async function touchAccessToken(db: D1Database, tokenId: string): Promise<void> {

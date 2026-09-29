@@ -1,6 +1,7 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
+import { FREE_PLAN, PRO_PLAN, allowanceText } from "../../shared/plans";
 import { AppMock } from "../components/app-mock";
-import { Code, Icon, Page, buttonPrimary, moreLink } from "../components/site";
+import { Code, Icon, Page, buttonPrimary, buttonSecondary, moreLink } from "../components/site";
 import { GITHUB_URL } from "../lib/releases";
 
 export const Route = createFileRoute("/")({
@@ -84,7 +85,11 @@ const faqs = [
   ],
   [
     "How many phones can I use?",
-    "As many as you own, for free. One Mac drives several iPhones at once, and one account connects several Macs.",
+    `As many as you own, for free. One Mac drives several iPhones at once. Through the hosted relay, Free connects ${FREE_PLAN.macs} Mac and ${PRO_PLAN.name} ${PRO_PLAN.macs}.`,
+  ],
+  [
+    "What counts toward the hosted relay’s limits?",
+    "Each request an agent sends to your Mac through the relay, and the time your Mac spends answering it. A connected Mac that waits costs nothing. Mobdev on the Mac itself and a relay you run yourself have no limits.",
   ],
 ] as const;
 
@@ -275,21 +280,39 @@ function Home() {
             you own.
           </h2>
           <p className="text-balance mx-auto mt-6 max-w-2xl text-center text-[19px] leading-[1.45] text-muted">
-            You already have the Mac and the iPhone. Mobdev does not charge per device, and the hosted relay is free
-            while it is in beta.
+            You already have the Mac and the iPhone, so Mobdev never charges per device. {PRO_PLAN.name} is for the
+            hosted relay, when agents on other computers need more Macs or more time.
           </p>
-          <div className="mt-14 grid grid-cols-1 gap-5 lg:grid-cols-3">
-            <div className="rounded-3xl p-8 ring-2 ring-blue">
-              <p className="text-[21px] font-semibold">Mobdev</p>
+          <div className="mt-14 grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-4">
+            <div className="flex flex-col rounded-3xl p-8 ring-2 ring-blue">
+              <p className="text-[21px] font-semibold">{FREE_PLAN.name}</p>
               <p className="headline mt-5 text-[56px]">$0</p>
               <p className="text-[15px] text-muted">for any number of phones</p>
-              <ul className="mt-7 space-y-3 border-t border-line pt-6 text-[15px]">
+              <ul className="mt-7 flex-1 space-y-3 border-t border-line pt-6 text-[15px]">
                 <li>Mac app, MCP and HTTP API</li>
-                <li>Hosted relay, free during beta</li>
                 <li>Self-hosted relay, MIT licensed</li>
+                <li>
+                  Hosted relay for {FREE_PLAN.macs} Mac: {allowanceText(FREE_PLAN)}
+                </li>
               </ul>
               <Link to="/dashboard" className={`${buttonPrimary} mt-8 w-full`}>
-                Create an account
+                Get started
+              </Link>
+            </div>
+            <div className="flex flex-col rounded-3xl p-8 ring-1 ring-line">
+              <p className="text-[21px] font-semibold">{PRO_PLAN.name}</p>
+              <p className="headline mt-5 text-[56px]">${PRO_PLAN.priceUsd}</p>
+              <p className="text-[15px] text-muted">per month, for up to {PRO_PLAN.macs} Macs</p>
+              <p className="mt-1 text-[13px] text-muted">USD, plus applicable tax</p>
+              <ul className="mt-7 flex-1 space-y-3 border-t border-line pt-6 text-[15px]">
+                <li>Everything in {FREE_PLAN.name}</li>
+                <li>
+                  Hosted relay for {PRO_PLAN.macs} Macs: {allowanceText(PRO_PLAN)}
+                </li>
+                <li>Cancel any time</li>
+              </ul>
+              <Link to="/dashboard" className={`${buttonSecondary} mt-8 w-full`}>
+                Get {PRO_PLAN.name}
               </Link>
             </div>
             <div className="rounded-3xl bg-mist p-8">

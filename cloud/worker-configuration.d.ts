@@ -7,6 +7,7 @@ interface __BaseEnv_Env {
 	WORKOS_API_KEY: string;
 	WORKOS_COOKIE_PASSWORD: string;
 	WORKOS_REDIRECT_URI: string;
+	AUTUMN_SECRET_KEY: string;
 	RELAY_URL: string;
 	RELAY: Service /* entrypoint RelayAdmin from mobdev-relay */;
 }
@@ -18,7 +19,7 @@ type StringifyValues<EnvType extends Record<string, unknown>> = {
 	[Binding in keyof EnvType]: EnvType[Binding] extends string ? EnvType[Binding] : string;
 };
 declare namespace NodeJS {
-	interface ProcessEnv extends StringifyValues<Pick<Cloudflare.Env, "WORKOS_CLIENT_ID" | "WORKOS_API_KEY" | "WORKOS_COOKIE_PASSWORD" | "WORKOS_REDIRECT_URI" | "RELAY_URL">> {}
+	interface ProcessEnv extends StringifyValues<Pick<Cloudflare.Env, "WORKOS_CLIENT_ID" | "WORKOS_API_KEY" | "WORKOS_COOKIE_PASSWORD" | "WORKOS_REDIRECT_URI" | "AUTUMN_SECRET_KEY" | "RELAY_URL">> {}
 }
 
 // Begin runtime types

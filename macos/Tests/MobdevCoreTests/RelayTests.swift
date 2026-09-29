@@ -207,6 +207,20 @@ struct RelayProcess {
         for _ in 0..<60 where allowed.state != .connected { try await Task.sleep(for: .milliseconds(50)) }
         #expect(allowed.state == .connected)
     }
+
+    /// The hosted relay answers 429 when the plan allows no more Macs; the client says so.
+    @Test func planLimitIsReported() async throws {
+        let relay = HTTPServer(port: 0) { _ in .error("this account's plan allows 1 connected Mac", status: 429) }
+        try await relay.start()
+        defer { relay.stop() }
+        let client = RelayClient(handler: { _ in HTTPResponse(status: 200) })
+        client.start(
+            url: URL(string: "http://127.0.0.1:\(relay.port)")!, secret: "mdh_" + SecretStore.randomHex(bytes: 32),
+            hostName: "mac", accessToken: "mda_" + SecretStore.randomHex(bytes: 32))
+        defer { client.stop() }
+        for _ in 0..<60 where client.state == .connecting { try await Task.sleep(for: .milliseconds(50)) }
+        #expect(client.state == .failed(RelayError.limited.description))
+    }
 }
 
 @Suite struct RelayInviteTests {

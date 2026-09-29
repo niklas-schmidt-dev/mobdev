@@ -39,6 +39,8 @@ public final class RelayClient: @unchecked Sendable {
     /// Close codes the relay uses: another connection took over, or the access token was revoked.
     static let closeReplaced = 4000
     static let closeRevoked = 4001
+    /// Wait after the relay refuses the connection with 429.
+    static let limitedRetry: TimeInterval = 300
 
     private let handler: Handler
     private let onStateChange: @Sendable (RelayState) -> Void
@@ -133,6 +135,10 @@ public final class RelayClient: @unchecked Sendable {
             if status == 401 || status == 403 {
                 setState(.failed(RelayError.rejected(status).description))
                 backoff = 30
+            } else if status == 429 {
+                // The plan allows no more Macs, or this Mac reconnected too often. Retrying soon won't help.
+                setState(.failed(RelayError.limited.description))
+                backoff = Self.limitedRetry
             } else if task.closeCode.rawValue == Self.closeReplaced {
                 setState(.failed(RelayError.replaced.description))
                 backoff = 30
@@ -246,6 +252,7 @@ public enum RelayError: Error, CustomStringConvertible {
     case rejected(Int)
     case replaced
     case revoked
+    case limited
     case unreachable
 
     public var description: String {
@@ -256,6 +263,8 @@ public enum RelayError: Error, CustomStringConvertible {
         case .rejected: "The relay rejected this Mac's key."
         case .replaced: "Another Mac connected with the same key and name."
         case .revoked: "The access token for this relay was revoked. Create a new one in the dashboard."
+        case .limited:
+            "The relay has no room for this Mac: your plan's Mac limit is reached, or it reconnected too often. Retrying in 5 minutes."
         case .unreachable: "Cannot reach the relay. Retrying…"
         }
     }

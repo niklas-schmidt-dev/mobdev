@@ -1,6 +1,7 @@
 import { createFileRoute, redirect, useRouter } from "@tanstack/react-router";
 import { useState, type FormEvent, type ReactNode } from "react";
 import type { Device } from "../../shared/devices";
+import { PRO_PLAN, allowanceText } from "../../shared/plans";
 import { Code, CopyButton, Page, buttonPrimary } from "../components/site";
 import { pageMeta } from "../lib/meta";
 import {
@@ -8,12 +9,18 @@ import {
   deleteAccount,
   forgetMac,
   loadDashboard,
+  openBillingPortal,
   revokeToken,
+  upgradePlan,
+  type BillingData,
   type DashboardData,
 } from "../server/dashboard";
 
 export const Route = createFileRoute("/dashboard")({
   head: () => ({ meta: pageMeta("Account — Mobdev", "/dashboard") }),
+  // Stripe Checkout returns to /dashboard?upgraded=1.
+  validateSearch: (search: Record<string, unknown>): { upgraded?: boolean } =>
+    search.upgraded ? { upgraded: true } : {},
   loader: async ({ location }) => {
     const data = await loadDashboard();
     if (data.state === "signed-out") {
@@ -126,8 +133,114 @@ function DeviceRow({ device, macOnline }: { device: Device; macOnline: boolean }
   );
 }
 
+const numbers = new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 });
+
+function day(timestamp: number): string {
+  return new Date(timestamp).toLocaleDateString("en-US", { month: "long", day: "numeric" });
+}
+
+function Usage({ label, used, limit, unit }: { label: string; used: number; limit: number | null; unit?: string }) {
+  const share = limit === null || limit <= 0 ? 0 : Math.min(1, used / limit);
+  const tone = share >= 1 ? "bg-[#e30000]" : share >= 0.8 ? "bg-[#ff9500]" : "bg-blue";
+  const amount = `${numbers.format(used)} of ${limit === null ? "unlimited" : numbers.format(limit)}${unit ? ` ${unit}` : ""}`;
+  return (
+    <div>
+      <div className="flex items-baseline justify-between gap-3 text-[15px]">
+        <span className="font-medium">{label}</span>
+        <span className="text-muted">{amount}</span>
+      </div>
+      <div
+        role="progressbar"
+        aria-label={label}
+        aria-valuetext={amount}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(share * 100)}
+        className="mt-2 h-1.5 overflow-hidden rounded-full bg-mist"
+      >
+        <div className={`h-full rounded-full ${tone}`} style={{ width: `${share * 100}%` }} />
+      </div>
+    </div>
+  );
+}
+
+function PlanCard({
+  billing,
+  online,
+  upgraded,
+  busy,
+  open,
+}: {
+  billing: BillingData;
+  online: number;
+  upgraded: boolean;
+  busy: boolean;
+  open: (action: () => Promise<{ url: string | null }>) => void;
+}) {
+  const { plan } = billing;
+  const hours = (seconds: number) => Math.round(seconds / 360) / 10;
+  return (
+    <Card
+      title="Plan"
+      subtitle={`${plan.name}${plan.priceUsd ? ` · $${plan.priceUsd} USD a month, plus applicable tax` : ""}. Limits apply to the hosted relay; Mobdev on your Mac has none.`}
+    >
+      {billing.pastDue && (
+        <p role="alert" className="mb-5 rounded-2xl bg-[#fff2f2] px-5 py-4 text-[15px] text-[#b00000]">
+          The last payment failed. Update your payment method under “Manage billing”.
+        </p>
+      )}
+      {upgraded && plan.priceUsd === 0 && (
+        <p className="mb-5 rounded-2xl bg-mist px-5 py-4 text-[15px] text-muted">
+          Thanks! Stripe is confirming your payment. Reload this page in a moment to see {PRO_PLAN.name}.
+        </p>
+      )}
+      <div className="space-y-5">
+        <Usage
+          label="Requests"
+          used={billing.requests.used}
+          limit={billing.requests.unlimited ? null : billing.requests.granted}
+        />
+        <Usage
+          label="Active time"
+          used={hours(billing.activeSeconds.used)}
+          limit={billing.activeSeconds.unlimited ? null : hours(billing.activeSeconds.granted)}
+          unit="hours"
+        />
+        <Usage label="Connected Macs" used={online} limit={billing.macs} />
+      </div>
+      <p className="mt-5 text-[14px] leading-[1.47] text-muted">
+        Active time counts while a Mac works on an agent’s request, not while it waits.
+        {billing.resetsAt ? ` Requests and active time renew on ${day(billing.resetsAt)}.` : ""}
+        {billing.endsAt ? ` ${plan.name} ends on ${day(billing.endsAt)}; the Free plan applies after that.` : ""}
+      </p>
+      <div className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-3">
+        {plan.priceUsd === 0 ? (
+          <>
+            <button type="button" disabled={busy} onClick={() => open(() => upgradePlan())} className={buttonPrimary}>
+              Upgrade to {PRO_PLAN.name} · ${PRO_PLAN.priceUsd} a month
+            </button>
+            <p className="text-[14px] text-muted">
+              USD, plus applicable tax. {PRO_PLAN.macs} Macs, {allowanceText(PRO_PLAN)}.
+            </p>
+          </>
+        ) : (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => open(() => openBillingPortal())}
+            className="text-[15px] text-link hover:underline underline-offset-4"
+          >
+            Manage billing
+          </button>
+        )}
+      </div>
+    </Card>
+  );
+}
+
 function Dashboard({ data }: { data: DashboardData }) {
   const router = useRouter();
+  const { upgraded = false } = Route.useSearch();
   const [name, setName] = useState("");
   const [created, setCreated] = useState<{ name: string; token: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -146,6 +259,23 @@ function Dashboard({ data }: { data: DashboardData }) {
     } finally {
       setBusy(false);
     }
+  }
+
+  /** Runs a billing action and follows the Stripe page it returns. */
+  async function open(action: () => Promise<{ url: string | null }>) {
+    setBusy(true);
+    setError(null);
+    try {
+      const { url } = await action();
+      if (url) {
+        window.location.assign(url);
+        return;
+      }
+      await router.invalidate();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    }
+    setBusy(false);
   }
 
   async function onCreate(event: FormEvent) {
@@ -276,6 +406,17 @@ function Dashboard({ data }: { data: DashboardData }) {
               </ul>
             )}
           </Card>
+
+          {data.billing === "unavailable" && (
+            <Card title="Plan">
+              <p className="text-[15px] text-muted">
+                Your plan could not be loaded right now. Your Macs and agents keep working; try again in a moment.
+              </p>
+            </Card>
+          )}
+          {typeof data.billing === "object" && (
+            <PlanCard billing={data.billing} online={online} upgraded={upgraded} busy={busy} open={open} />
+          )}
 
           <Card title="Access tokens" subtitle="Revoking a token disconnects every Mac that uses it.">
             {data.tokens.length === 0 ? (

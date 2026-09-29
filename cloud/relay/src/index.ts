@@ -1,10 +1,14 @@
 import { Buffer } from "node:buffer";
 import { WorkerEntrypoint } from "cloudflare:workers";
-import { findAccessToken, listHosts, touchAccessToken } from "../../shared/db";
+import { cacheMacsAllowed, findAccessToken, listHosts, touchAccessToken, type AccessRow } from "../../shared/db";
 import type { MacDevices } from "../../shared/devices";
 import { bearer, hostName, isAccessToken, isClientKey, isHostSecret, spaceForClientKey, spaceForSecret } from "../../shared/keys";
+import { FREE_PLAN } from "../../shared/plans";
+import { autumnFor, hasRelayPlan, macsAllowed, quotaFromCustomer, type Quota } from "./billing";
 import type { RelayEnv } from "./env";
 import {
+  AGENT_BURST,
+  DASHBOARD_URL,
   FORWARDED_REQUEST_HEADERS,
   FORWARDED_RESPONSE_HEADERS,
   MAX_BODY_BYTES,
@@ -54,21 +58,28 @@ async function connectHost(request: Request, url: URL, env: RelayEnv, ctx: Execu
     return jsonError(426, "expected a WebSocket upgrade");
   }
   const token = request.headers.get("X-Relay-Access");
-  const access = isAccessToken(token) ? await findAccessToken(env.DB, token) : null;
-  if (!access) return jsonError(403, "this relay needs an access token from https://mobdev.sh/dashboard");
+  if (!isAccessToken(token)) return jsonError(403, `this relay needs an access token from ${DASHBOARD_URL}`);
   const secret = bearer(request);
   if (!isHostSecret(secret)) return jsonError(401, "missing or malformed host secret");
   const name = hostName(url.searchParams.get("name"));
   if (!name) return jsonError(400, "host name must be 1-64 characters of a-z, 0-9, '.', '_' or '-'");
 
   const spaceId = await spaceForSecret(secret);
+  if (!(await env.CONNECT_LIMIT.limit({ key: `${spaceId}/${name}` })).success) {
+    return jsonError(429, "this Mac reconnected too often; try again in a minute", { "Retry-After": "60" });
+  }
+  const access = await findAccessToken(env.DB, token);
+  if (!access) return jsonError(403, `this relay needs an access token from ${DASHBOARD_URL}`);
+
+  const plan = await planForConnect(env, ctx, access);
   const online = await env.DB.prepare(
     "SELECT COUNT(*) AS count FROM hosts WHERE account_id = ?1 AND online = 1 AND NOT (space_id = ?2 AND name = ?3)",
   )
     .bind(access.account_id, spaceId, name)
     .first<{ count: number }>();
-  if ((online?.count ?? 0) >= MAX_ONLINE_HOSTS_PER_ACCOUNT) {
-    return jsonError(429, `at most ${MAX_ONLINE_HOSTS_PER_ACCOUNT} Macs can be connected per account`);
+  if ((online?.count ?? 0) >= plan.macs) {
+    const allowed = plan.macs === 1 ? "1 connected Mac" : `${plan.macs} connected Macs`;
+    return jsonError(429, `this account's plan allows ${allowed}; disconnect one or upgrade at ${DASHBOARD_URL}`);
   }
   ctx.waitUntil(touchAccessToken(env.DB, access.id));
 
@@ -79,13 +90,46 @@ async function connectHost(request: Request, url: URL, env: RelayEnv, ctx: Execu
     "X-Mobdev-Account": access.account_id,
     "X-Mobdev-Token": access.id,
   });
+  if (plan.billing) headers.set("X-Mobdev-Billing", JSON.stringify(plan.billing));
   return env.RELAY_SPACE.getByName(spaceId).fetch(new Request(url, { headers }));
+}
+
+/**
+ * How many Macs the account may connect and, when the relay bills, what it may still use this
+ * period. Creates the Autumn customer on the Free plan if needed. While Autumn is unreachable, the
+ * Mac limit it last reported applies and requests pass until it answers again.
+ */
+async function planForConnect(
+  env: RelayEnv,
+  ctx: ExecutionContext,
+  access: AccessRow,
+): Promise<{ macs: number; billing: { quota: Quota | null } | null }> {
+  const autumn = autumnFor(env);
+  if (!autumn) return { macs: MAX_ONLINE_HOSTS_PER_ACCOUNT, billing: null };
+  try {
+    const customer = await autumn.customer(access.account_id, access.email);
+    if (!hasRelayPlan(customer)) throw new Error("Autumn has no relay plan for this account; push autumn.config.ts");
+    const macs = Math.min(macsAllowed(customer), MAX_ONLINE_HOSTS_PER_ACCOUNT);
+    if (macs !== access.macs_allowed) ctx.waitUntil(cacheMacsAllowed(env.DB, access.account_id, macs));
+    return { macs, billing: { quota: quotaFromCustomer(customer) } };
+  } catch (error) {
+    console.warn("could not read the plan from Autumn; using the last known one", error);
+    return { macs: access.macs_allowed ?? FREE_PLAN.macs, billing: { quota: null } };
+  }
 }
 
 async function forwardToHost(request: Request, url: URL, env: RelayEnv): Promise<Response> {
   const key = bearer(request);
   if (!isClientKey(key)) return jsonError(401, "missing or malformed client key", { "WWW-Authenticate": "Bearer" });
-  const space = env.RELAY_SPACE.getByName(await spaceForClientKey(key));
+  const spaceId = await spaceForClientKey(key);
+  if (!(await env.AGENT_LIMIT.limit({ key: spaceId })).success) {
+    return jsonError(
+      429,
+      `too many requests for this Mac key: at most ${AGENT_BURST.limit} every ${AGENT_BURST.seconds} seconds`,
+      { "Retry-After": String(AGENT_BURST.seconds) },
+    );
+  }
+  const space = env.RELAY_SPACE.getByName(spaceId);
 
   if (url.pathname === "/v1/relay/hosts" && request.method === "GET") {
     return Response.json({ hosts: await space.hosts() });

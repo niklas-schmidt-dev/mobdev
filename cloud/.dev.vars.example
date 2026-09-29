@@ -4,3 +4,6 @@ WORKOS_API_KEY=sk_test_...
 WORKOS_COOKIE_PASSWORD=at-least-32-characters-of-randomness
 WORKOS_REDIRECT_URI=https://web.<namespace>.localhost/api/auth/callback
 RELAY_URL=https://relay.<namespace>.localhost
+# Optional: an Autumn sandbox secret key (am_sk_test_…). Empty turns billing off. The relay reads its
+# own copy from relay/.dev.vars.
+AUTUMN_SECRET_KEY=

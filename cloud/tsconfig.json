@@ -14,5 +14,14 @@
     "resolveJsonModule": true,
     "types": ["vite/client", "node", "@cloudflare/vitest-plugin/types"]
   },
-  "include": ["src", "shared", "relay/src", "test", "worker-configuration.d.ts", "vite.config.ts", "vitest.config.ts"]
+  "include": [
+    "src",
+    "shared",
+    "relay/src",
+    "test",
+    "worker-configuration.d.ts",
+    "autumn.config.ts",
+    "vite.config.ts",
+    "vitest.config.ts"
+  ]
 }

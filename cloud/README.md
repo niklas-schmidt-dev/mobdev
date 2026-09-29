@@ -7,6 +7,7 @@ The website, dashboard and hosted relay. Everything runs on Cloudflare.
 | Website and dashboard | `src/`, worker `mobdev-web`, `mobdev.sh` | TanStack Start. Sign-in with WorkOS AuthKit. Dashboard issues access tokens and lists Macs. |
 | Hosted relay | `relay/`, worker `mobdev-relay`, `relay.mobdev.sh` | One Durable Object per space. Macs connect with hibernatable WebSockets, so an idle Mac costs nothing. Same protocol as [`../relay`](../relay). |
 | Database | D1 `mobdev`, `migrations/` | Accounts, hashed access tokens, which Macs are connected and the iPhones they report. No request or screenshot content. |
+| Billing | [Autumn](https://docs.useautumn.com) on Stripe, `autumn.config.ts` | Plans, monthly allowances and usage per account; checkout and billing portal. |
 
 The relay is a separate worker so deploying the website never disconnects Macs. The website
 reaches it only through a service binding (`RelayAdmin`), for example to disconnect Macs when a
@@ -19,8 +20,53 @@ token is revoked.
 - Agents call `https://relay.mobdev.sh/h/<mac>/mcp` with the Mac's client key (`mdc_…`), derived
   from the host secret. The relay routes by `sha256(client key)` and never sees the secret.
 - Revoking a token deletes it and closes its Macs' connections (close code 4001).
-- Limits: 16 MB per request, 90 s per request, 32 Macs per key, 10 connected Macs and 20 tokens
-  per account.
+- Limits: 16 MB per request, 90 s per request, 32 Macs per key, 20 tokens per account, and at
+  most 10 connected Macs per account whatever the plan says.
+
+## Plans, limits and billing
+
+The plans are in `shared/plans.ts`; `autumn.config.ts` pushes them to Autumn, and the website
+shows the same numbers. Free: 1 Mac, 20,000 requests and 10 active hours a month. Pro, $9 USD a
+month plus applicable tax: 3 Macs, 1,000,000 requests and 300 active hours. Local use and self-hosted relays have no
+limits.
+
+What keeps cost bounded, cheapest check first:
+
+| Limit | Where | Answer |
+|---|---|---|
+| 50 agent requests per 10 s per client key; 10 connects per minute per Mac | Rate limiting bindings in `relay/wrangler.jsonc`, checked in the worker before the Durable Object | `429`, `Retry-After` |
+| 4 requests in flight per Mac | `RelaySpace.forward` | `429`, `Retry-After: 1` |
+| Connected Macs per plan | `connectHost`, from Autumn's `macs` balance; the last value is cached in `accounts.macs_allowed` for when Autumn is down | `429` on connect; the Mac app waits 5 minutes |
+| Requests and active seconds per month | Autumn balances `relay_requests`, `relay_active_seconds`, cached in each connection | `429`, `Retry-After` until renewal |
+
+How usage gets to Autumn: each Mac connection has a meter in its WebSocket attachment (so it
+survives hibernation) that counts forwarded requests and the time with at least one request in
+flight. That time is what Durable Object duration costs. About 30 s after a request finishes, a
+Durable Object alarm sends one batch per connection with `balances.track`. Idempotency keys make
+retries safe. The answer carries the remaining balance, which the connection enforces locally
+without calling Autumn per request. A Mac that disconnects leaves its meter in storage until the
+batch is confirmed. If Autumn is unreachable, requests pass, usage waits, and the relay retries
+every minute. Relay deploys can lose up to 30 s of uncounted usage.
+
+Relay logs are sampled at 5 % (`head_sampling_rate`): at three log events per agent request,
+full logging would cost more than the requests themselves.
+
+The relay reads Autumn only with `AUTUMN_SECRET_KEY` set. Without it, it neither meters nor bills
+and only the fixed limits apply, which is how local development runs by default.
+
+Setting up Autumn (once per environment):
+
+1. Create the Autumn organization and connect Stripe. Keep the default currency USD: Pro's price
+   has no currency of its own and takes the organization's. The config enables Stripe Tax
+   (`settings.automaticTax: true`). Before pushing it, complete Stripe Tax setup, confirm active
+   tax registrations, and set the default price tax behavior to **exclusive** ($9 plus applicable
+   tax). Without a registration in the customer's location, Stripe calculates zero tax.
+   Save the live Customer portal settings with cancellation, payment methods and invoices enabled.
+2. `bunx atmn login`, then `bunx atmn push` to preview and `bunx atmn push --yes` to apply the
+   plans (`--prod` for production).
+3. Set `AUTUMN_SECRET_KEY` on both workers:
+   `bunx wrangler secret put AUTUMN_SECRET_KEY` and
+   `bunx wrangler secret put AUTUMN_SECRET_KEY -c relay/wrangler.jsonc`.
 
 ## Device registry
 
@@ -59,11 +105,12 @@ portless run --name "web.$DEV_NAMESPACE" bun run dev
 Both share the local D1 in `.wrangler/state`. Set `WORKOS_REDIRECT_URI` and `RELAY_URL` in
 `.dev.vars` to the Portless URLs (`portless get web.$DEV_NAMESPACE`), and add the redirect URI to
 the WorkOS sandbox. Point the Mac app's relay URL at the relay's Portless URL to test remote
-access with a real Mac.
+access with a real Mac. To test billing, put an Autumn sandbox key in `AUTUMN_SECRET_KEY` of
+both `.dev.vars` and `relay/.dev.vars`.
 
 ```sh
 bun run typecheck
-bun run test        # relay worker, Durable Object and D1 queries in the Workers runtime
+bun run test        # relay worker, Durable Object, D1 and a fake Autumn in the Workers runtime
 bun run build
 ```
 
@@ -83,5 +130,6 @@ bun run deploy:web
 ```
 
 Secrets of `mobdev-web` (`bunx wrangler secret put <name>`): `WORKOS_API_KEY` (Production secret
-key) and `WORKOS_COOKIE_PASSWORD` (set). Without the API key the public pages work and the
-dashboard says accounts are being set up.
+key), `WORKOS_COOKIE_PASSWORD` (set) and `AUTUMN_SECRET_KEY`. Without the API key the public pages
+work and the dashboard says accounts are being set up. Without the Autumn key the dashboard shows
+no plan. `mobdev-relay` needs `AUTUMN_SECRET_KEY` too.

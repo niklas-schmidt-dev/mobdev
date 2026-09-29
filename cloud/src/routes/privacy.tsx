@@ -35,10 +35,18 @@ function Privacy() {
           relay, may keep standard request metadata such as IP addresses for security.
         </p>
 
+        <h2 className="mt-10 text-[24px] font-semibold tracking-tight text-ink">Plans and payments</h2>
+        <p className="mt-3">
+          Autumn keeps track of your plan and usage, and Stripe handles payments. Autumn receives your user ID and email
+          address and, per Mac connection, how many requests the relay forwarded and how long the Mac was busy with
+          them, never their content. Card details go straight to Stripe; we never see them.
+        </p>
+
         <h2 className="mt-10 text-[24px] font-semibold tracking-tight text-ink">Deleting your data</h2>
         <p className="mt-3">
           Revoking an access token deletes it. “Delete account” in the dashboard removes your account, tokens and Mac
-          records at once and disconnects your Macs.
+          records at once, disconnects your Macs and deletes your record at Autumn. A paid plan has to be cancelled
+          first. Stripe keeps invoices as long as tax law requires.
         </p>
       </article>
     </Page>
