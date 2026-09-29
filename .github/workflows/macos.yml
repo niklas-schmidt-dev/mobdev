@@ -19,6 +19,7 @@ concurrency:
 jobs:
   test:
     runs-on: xcode-27
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -27,7 +28,8 @@ jobs:
           cache: false
       - name: Test
         working-directory: macos
-        run: swift test
+        # Avoid the Swift Build test-launch hang on the Xcode 27 hosted runner.
+        run: swift test --build-system native
 
   release:
     needs: test
