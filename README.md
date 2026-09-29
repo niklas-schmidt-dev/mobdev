@@ -17,7 +17,7 @@ take screenshots, tap, type, open apps and tap visible text.
 
 | Folder | What | Stack |
 |---|---|---|
-| [`macos/`](macos/README.md) | The Mac app, MCP server, HTTP API and stdio bridge | SwiftUI, macOS 26+, no dependencies |
+| [`macos/`](macos/README.md) | The Mac app, MCP server, HTTP API and stdio bridge | SwiftUI, macOS 26+, Sparkle for updates |
 | [`relay/`](relay/README.md) | Self-hosted relay for remote access | Go, one binary or Docker image |
 | [`cloud/`](cloud/README.md) | mobdev.sh: website, dashboard and hosted relay | TanStack Start, Cloudflare Workers, Durable Objects, D1, WorkOS |
 
