@@ -28,9 +28,10 @@ function Privacy() {
         <h2 className="mt-10 text-[24px] font-semibold tracking-tight text-ink">The relay</h2>
         <p className="mt-3">
           The relay records which Macs are connected: a name you choose, when it connected and disconnected, and an ID
-          derived from your Mac’s key. Agent requests and responses, including screenshots, only pass through memory
-          and are never written to disk or logs. Cloudflare, which runs the relay, may keep standard request metadata
-          such as IP addresses for security.
+          derived from your Mac’s key. For each Mac it also keeps the iPhones and iPads it last reported: their name,
+          model, iOS version, a device ID and whether they are ready. Agent requests and responses, including
+          screenshots, only pass through memory and are never written to disk or logs. Cloudflare, which runs the
+          relay, may keep standard request metadata such as IP addresses for security.
         </p>
 
         <h2 className="mt-10 text-[24px] font-semibold tracking-tight text-ink">Deleting your data</h2>

@@ -1,5 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
-import { recordHostOffline, recordHostOnline } from "../../shared/db";
+import { recordHostDevices, recordHostOffline, recordHostOnline } from "../../shared/db";
+import { devicesFromFrame, type Device, type MacDevices } from "../../shared/devices";
 import {
   CLOSE_REPLACED,
   CLOSE_REVOKED,
@@ -25,6 +26,19 @@ interface Pending {
   timer: ReturnType<typeof setTimeout>;
   socket: WebSocket;
 }
+
+/**
+ * The latest device list of a connected Mac, in storage under `devices:<name>` so it survives
+ * hibernation. Dropped when the Mac disconnects; D1 keeps the last list for the dashboard and
+ * /v1/account/devices, and deleting the Mac there deletes it for good.
+ */
+interface StoredDevices {
+  devices: Device[];
+  updatedAt: number;
+}
+
+const DEVICES_PREFIX = "devices:";
+const devicesKey = (name: string) => DEVICES_PREFIX + name;
 
 /**
  * One space: the Macs that share a host secret and the agents that hold its client key.
@@ -58,6 +72,7 @@ export class RelaySpace extends DurableObject<RelayEnv> {
     const { 0: client, 1: server } = new WebSocketPair();
     this.ctx.acceptWebSocket(server, [attachment.name]);
     server.serializeAttachment(attachment);
+    await this.pruneDevices(); // Macs dropped by a restart never reported a close.
     await recordHostOnline(this.env.DB, attachment);
     return new Response(null, { status: 101, webSocket: client });
   }
@@ -65,6 +80,27 @@ export class RelaySpace extends DurableObject<RelayEnv> {
   /** Names of the connected Macs. */
   async hosts(): Promise<string[]> {
     return this.names();
+  }
+
+  /** The connected Macs with the devices they reported, newest connection first. */
+  async devices(): Promise<MacDevices[]> {
+    const connected = new Map<string, number>();
+    for (const socket of this.ctx.getWebSockets()) {
+      if (socket.readyState !== WebSocket.OPEN) continue;
+      const attachment = socket.deserializeAttachment() as Attachment | null;
+      if (attachment) connected.set(attachment.name, Math.max(connected.get(attachment.name) ?? 0, attachment.connectedAt));
+    }
+    const names = [...connected.keys()];
+    const stored = await this.ctx.storage.get<StoredDevices>(names.map(devicesKey));
+    return names
+      .map((name) => ({
+        name,
+        online: true,
+        connected_at: connected.get(name) ?? null,
+        disconnected_at: null,
+        devices: stored.get(devicesKey(name))?.devices ?? [],
+      }))
+      .sort((a, b) => (b.connected_at ?? 0) - (a.connected_at ?? 0) || a.name.localeCompare(b.name));
   }
 
   /** Sends an agent request to a Mac and waits for its answer. */
@@ -118,15 +154,29 @@ export class RelaySpace extends DurableObject<RelayEnv> {
         closed++;
       }
     }
+    await this.pruneDevices();
     return closed;
   }
 
   async webSocketMessage(socket: WebSocket, message: string | ArrayBuffer): Promise<void> {
     if (typeof message !== "string") return;
-    let data: { type?: string; id?: string; status?: number; headers?: Record<string, string>; body?: string };
+    let data: {
+      type?: unknown;
+      id?: string;
+      status?: number;
+      headers?: Record<string, string>;
+      body?: string;
+      devices?: unknown;
+    } | null;
     try {
       data = JSON.parse(message);
     } catch {
+      return;
+    }
+    if (typeof data !== "object" || data === null) return;
+    if (data.type === "devices") {
+      const devices = devicesFromFrame(message, data);
+      if (devices) await this.storeDevices(socket, devices);
       return;
     }
     if (data.type !== "response" || !data.id) return;
@@ -151,12 +201,32 @@ export class RelaySpace extends DurableObject<RelayEnv> {
     for (const [id, pending] of this.pending) {
       if (pending.socket === socket) this.settle(id, errorResponse(502, "the Mac disconnected"));
     }
+    await this.pruneDevices();
     const attachment = socket.deserializeAttachment() as Attachment | null;
     if (!attachment) return;
     const others = this.ctx
       .getWebSockets(attachment.name)
       .filter((ws) => ws !== socket && ws.readyState === WebSocket.OPEN);
     if (others.length === 0) await recordHostOffline(this.env.DB, attachment.spaceId, attachment.name);
+  }
+
+  /** Keeps a Mac's latest device list here and in D1, where the account endpoint reads it. */
+  private async storeDevices(socket: WebSocket, devices: Device[]): Promise<void> {
+    // A replaced or revoked connection no longer speaks for its Mac.
+    if (socket.readyState !== WebSocket.OPEN) return;
+    const attachment = socket.deserializeAttachment() as Attachment | null;
+    if (!attachment) return;
+    const stored: StoredDevices = { devices, updatedAt: Date.now() };
+    await this.ctx.storage.put(devicesKey(attachment.name), stored);
+    await recordHostDevices(this.env.DB, attachment.spaceId, attachment.name, devices, stored.updatedAt);
+  }
+
+  /** Drops the stored lists of Macs that are no longer connected. */
+  private async pruneDevices(): Promise<void> {
+    const connected = new Set(this.names());
+    const keys = await this.ctx.storage.list({ prefix: DEVICES_PREFIX, limit: 128 });
+    const stale = [...keys.keys()].filter((key) => !connected.has(key.slice(DEVICES_PREFIX.length)));
+    if (stale.length > 0) await this.ctx.storage.delete(stale);
   }
 
   private settle(id: string, response: RelayResponse): void {

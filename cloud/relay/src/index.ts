@@ -1,6 +1,7 @@
 import { Buffer } from "node:buffer";
 import { WorkerEntrypoint } from "cloudflare:workers";
-import { findAccessToken, touchAccessToken } from "../../shared/db";
+import { findAccessToken, listHosts, touchAccessToken } from "../../shared/db";
+import type { MacDevices } from "../../shared/devices";
 import { bearer, hostName, isAccessToken, isClientKey, isHostSecret, spaceForClientKey, spaceForSecret } from "../../shared/keys";
 import type { RelayEnv } from "./env";
 import {
@@ -15,16 +16,38 @@ export { RelaySpace } from "./space";
 
 /**
  * The hosted Mobdev relay (relay.mobdev.sh). Same protocol as the self-hosted Go relay,
- * plus access tokens from the dashboard so only signed-up accounts can register Macs.
+ * plus access tokens from the dashboard so only signed-up accounts can register Macs, and a list
+ * of every Mac and iPhone of an account (/v1/account/devices).
  */
 export default {
   async fetch(request: Request, env: RelayEnv, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname === "/healthz") return new Response("ok\n", { headers: { "content-type": "text/plain" } });
     if (url.pathname === "/v1/host/connect") return connectHost(request, url, env, ctx);
+    if (url.pathname === "/v1/account/devices") return accountDevices(request, env, ctx);
     return forwardToHost(request, url, env);
   },
 } satisfies ExportedHandler<RelayEnv>;
+
+/**
+ * Every Mac of the access token's account with the devices it last reported, for the Mac app.
+ * Reads D1 only, so it does not wake the account's spaces.
+ */
+async function accountDevices(request: Request, env: RelayEnv, ctx: ExecutionContext): Promise<Response> {
+  if (request.method !== "GET") return jsonError(405, "use GET", { Allow: "GET" });
+  const token = bearer(request);
+  const access = isAccessToken(token) ? await findAccessToken(env.DB, token) : null;
+  if (!access) return jsonError(401, "missing, unknown or revoked access token", { "WWW-Authenticate": "Bearer" });
+  ctx.waitUntil(touchAccessToken(env.DB, access.id));
+  const macs: MacDevices[] = (await listHosts(env.DB, access.account_id)).map((host) => ({
+    name: host.name,
+    online: host.online === 1,
+    connected_at: host.connected_at,
+    disconnected_at: host.disconnected_at,
+    devices: host.devices,
+  }));
+  return Response.json({ macs }, { headers: { "Cache-Control": "no-store" } });
+}
 
 async function connectHost(request: Request, url: URL, env: RelayEnv, ctx: ExecutionContext): Promise<Response> {
   if (request.headers.get("Upgrade")?.toLowerCase() !== "websocket") {
@@ -66,6 +89,9 @@ async function forwardToHost(request: Request, url: URL, env: RelayEnv): Promise
 
   if (url.pathname === "/v1/relay/hosts" && request.method === "GET") {
     return Response.json({ hosts: await space.hosts() });
+  }
+  if (url.pathname === "/v1/relay/devices" && request.method === "GET") {
+    return Response.json({ macs: await space.devices() });
   }
 
   let path = url.pathname;

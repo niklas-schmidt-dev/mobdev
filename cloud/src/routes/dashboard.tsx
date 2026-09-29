@@ -1,5 +1,6 @@
 import { createFileRoute, redirect, useRouter } from "@tanstack/react-router";
 import { useState, type FormEvent, type ReactNode } from "react";
+import type { Device } from "../../shared/devices";
 import { Code, CopyButton, Page, buttonPrimary } from "../components/site";
 import {
   createToken,
@@ -66,6 +67,63 @@ function Card({ title, subtitle, children }: { title: string; subtitle?: string;
 }
 
 const destructive = "text-[15px] text-[#e30000] transition-opacity hover:opacity-70 disabled:opacity-40";
+
+function deviceStatus(device: Device, macOnline: boolean): { label: string; dot: string } {
+  if (!macOnline) return { label: "Offline", dot: "bg-line" };
+  if (device.ready) return { label: "Ready", dot: "bg-[#34c759]" };
+  if (device.screen && !device.bluetooth) return { label: "Screen only", dot: "bg-[#ff9500]" };
+  if (device.bluetooth && !device.screen) return { label: "Bluetooth only", dot: "bg-[#ff9500]" };
+  return { label: "Not ready", dot: "bg-[#ff9500]" };
+}
+
+function DeviceGlyph({ tablet }: { tablet: boolean }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className="size-5 shrink-0 text-faint"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      aria-hidden="true"
+    >
+      {tablet ? <rect x="4" y="3" width="16" height="18" rx="2.5" /> : <rect x="7" y="2.5" width="10" height="19" rx="2.5" />}
+      <path d="M11 18.5h2" />
+    </svg>
+  );
+}
+
+function DeviceRow({ device, macOnline }: { device: Device; macOnline: boolean }) {
+  const tablet = device.device_class === "iPad";
+  const name = device.name || device.model_name || device.device_class || "iPhone";
+  const status = deviceStatus(device, macOnline);
+  const details = [
+    device.model_name || device.model,
+    device.os_version ? `${tablet ? "iPadOS" : "iOS"} ${device.os_version}` : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  // Below `sm` the status moves under the details so names keep their room.
+  const label = (className: string) => (
+    <span className={`items-center gap-1.5 text-[13px] text-muted ${className}`}>
+      <span className={`size-2 shrink-0 rounded-full ${status.dot}`} aria-hidden="true" />
+      {status.label}
+    </span>
+  );
+  return (
+    <li className="flex items-center gap-3 rounded-2xl bg-mist px-4 py-3">
+      <DeviceGlyph tablet={tablet} />
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-[15px] font-medium" title={name}>
+          {name}
+        </p>
+        {details && <p className="truncate text-[13px] text-muted">{details}</p>}
+        {label("mt-1 flex sm:hidden")}
+      </div>
+      {label("hidden shrink-0 sm:flex")}
+    </li>
+  );
+}
 
 function Dashboard({ data }: { data: DashboardData }) {
   const router = useRouter();
@@ -176,28 +234,41 @@ function Dashboard({ data }: { data: DashboardData }) {
             ) : (
               <ul className="divide-y divide-line/70">
                 {data.hosts.map((host) => (
-                  <li key={host.space_id + host.name} className="flex items-center gap-4 py-4 first:pt-0 last:pb-0">
-                    <span
-                      className={`size-2.5 shrink-0 rounded-full ${host.online ? "bg-[#34c759]" : "bg-line"}`}
-                      aria-hidden="true"
-                    />
-                    <div className="min-w-0">
-                      <p className="text-[17px] font-medium">{host.name}</p>
-                      <p className="text-[14px] text-muted">
-                        {host.online ? `Connected ${relative(host.connected_at)}` : `Last seen ${relative(host.disconnected_at)}`}
-                        {host.token_id && tokenNames.get(host.token_id) ? ` · ${tokenNames.get(host.token_id)}` : ""}
-                        <span className="sr-only">{host.online ? ", online" : ", offline"}</span>
-                      </p>
+                  <li key={host.space_id + host.name} className="py-4 first:pt-0 last:pb-0">
+                    <div className="flex items-center gap-4">
+                      <span
+                        className={`size-2.5 shrink-0 rounded-full ${host.online ? "bg-[#34c759]" : "bg-line"}`}
+                        aria-hidden="true"
+                      />
+                      <div className="min-w-0">
+                        <p className="text-[17px] font-medium">{host.name}</p>
+                        <p className="text-[14px] text-muted">
+                          {host.online ? `Connected ${relative(host.connected_at)}` : `Last seen ${relative(host.disconnected_at)}`}
+                          {host.token_id && tokenNames.get(host.token_id) ? ` · ${tokenNames.get(host.token_id)}` : ""}
+                          <span className="sr-only">{host.online ? ", online" : ", offline"}</span>
+                        </p>
+                      </div>
+                      {!host.online && (
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => run(() => forgetMac({ data: { spaceId: host.space_id, name: host.name } }))}
+                          className="ml-auto text-[15px] text-link hover:underline underline-offset-4"
+                        >
+                          Forget
+                        </button>
+                      )}
                     </div>
-                    {!host.online && (
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() => run(() => forgetMac({ data: { spaceId: host.space_id, name: host.name } }))}
-                        className="ml-auto text-[15px] text-link hover:underline underline-offset-4"
-                      >
-                        Forget
-                      </button>
+                    {host.devices.length > 0 ? (
+                      <ul className="mt-3 space-y-2 pl-[26px]" aria-label={`Devices of ${host.name}`}>
+                        {host.devices.map((device) => (
+                          <DeviceRow key={device.id} device={device} macOnline={host.online === 1} />
+                        ))}
+                      </ul>
+                    ) : (
+                      host.devices_updated_at !== null && (
+                        <p className="mt-1 pl-[26px] text-[14px] text-muted">No iPhone connected.</p>
+                      )
                     )}
                   </li>
                 ))}

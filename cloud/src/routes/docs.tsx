@@ -189,8 +189,8 @@ function Docs() {
                 <li>The local API binds to 127.0.0.1, needs a bearer token and rejects browser requests.</li>
                 <li>Text recognition runs on the Mac. No screen content leaves it unless your agent sends it to its model.</li>
                 <li>
-                  The hosted relay stores your email, hashed access tokens and which Macs are connected. Requests and
-                  screenshots only pass through memory. See <a href="/privacy">privacy</a>.
+                  The hosted relay stores your email, hashed access tokens, which Macs are connected and the iPhones they
+                  report. Requests and screenshots only pass through memory. See <a href="/privacy">privacy</a>.
                 </li>
                 <li>
                   Agents act on your real phone with your accounts. Keep a person in the loop for anything that sends

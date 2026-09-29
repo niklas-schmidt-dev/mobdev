@@ -6,7 +6,7 @@ The website, dashboard and hosted relay. Everything runs on Cloudflare.
 |---|---|---|
 | Website and dashboard | `src/`, worker `mobdev-web`, `mobdev.sh` | TanStack Start. Sign-in with WorkOS AuthKit. Dashboard issues access tokens and lists Macs. |
 | Hosted relay | `relay/`, worker `mobdev-relay`, `relay.mobdev.sh` | One Durable Object per space. Macs connect with hibernatable WebSockets, so an idle Mac costs nothing. Same protocol as [`../relay`](../relay). |
-| Database | D1 `mobdev`, `migrations/` | Accounts, hashed access tokens, which Macs are connected. No request or screenshot content. |
+| Database | D1 `mobdev`, `migrations/` | Accounts, hashed access tokens, which Macs are connected and the iPhones they report. No request or screenshot content. |
 
 The relay is a separate worker so deploying the website never disconnects Macs. The website
 reaches it only through a service binding (`RelayAdmin`), for example to disconnect Macs when a
@@ -21,6 +21,29 @@ token is revoked.
 - Revoking a token deletes it and closes its Macs' connections (close code 4001).
 - Limits: 16 MB per request, 90 s per request, 32 Macs per key, 10 connected Macs and 20 tokens
   per account.
+
+## Device registry
+
+Each Mac sends its relay a `devices` frame right after connecting and whenever its iPhones or
+their state change (format and validation in [`../relay/README.md`](../relay/README.md#devices),
+code in `shared/devices.ts`). Invalid or oversized frames are ignored. The relay keeps the latest
+valid list per Mac in D1 (`hosts.devices` as JSON, `hosts.devices_updated_at`), where it stays
+after the Mac disconnects until the Mac is forgotten or the account deleted, and while the Mac is
+connected also in its space's Durable Object storage.
+
+| Who | Request | |
+|---|---|---|
+| Mac app | `GET /v1/account/devices` with `Bearer mda_…` | Every Mac of the token's account, online first, then newest connection. Reads D1 only; marks the token as used. `401` for a missing, unknown or revoked token. |
+| Agent | `GET /v1/relay/devices` with `Bearer mdc_…` | The connected Macs of that key, from the Durable Object. Same as the Go relay. |
+
+```json
+{"macs":[{"name":"niklass-macbook-pro","online":true,"connected_at":1790700000000,"disconnected_at":null,
+  "devices":[{"id":"00008120-000639440C13C01E","name":"iPhone von Niklas","model":"iPhone15,2",
+    "model_name":"iPhone 14 Pro","os_version":"27.0","device_class":"iPhone","screen":true,"bluetooth":true,"ready":true}]}]}
+```
+
+`online` is what D1 recorded when Macs connected and disconnected; the dashboard also checks the
+relay. The dashboard lists each Mac's devices under it.
 
 ## Local development
 

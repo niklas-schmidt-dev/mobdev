@@ -1,3 +1,4 @@
+import { parseStoredDevices, type Device } from "./devices";
 import { randomHex, sha256Hex } from "./keys";
 
 export interface AccessTokenRow {
@@ -15,6 +16,9 @@ export interface HostRow {
   online: number;
   connected_at: number | null;
   disconnected_at: number | null;
+  /** The iPhones and iPads the Mac last reported; kept after it disconnects. */
+  devices: Device[];
+  devices_updated_at: number | null;
 }
 
 export const MAX_TOKENS_PER_ACCOUNT = 20;
@@ -125,15 +129,36 @@ export async function recordHostOffline(db: D1Database, spaceId: string, name: s
     .run();
 }
 
+/**
+ * Stores the devices a Mac reported. The timestamp check keeps a slower write of an older list
+ * from overwriting a newer one.
+ */
+export async function recordHostDevices(
+  db: D1Database,
+  spaceId: string,
+  name: string,
+  devices: Device[],
+  updatedAt: number,
+): Promise<void> {
+  await db
+    .prepare(
+      `UPDATE hosts SET devices = ?1, devices_updated_at = ?2
+       WHERE space_id = ?3 AND name = ?4 AND COALESCE(devices_updated_at, 0) <= ?2`,
+    )
+    .bind(JSON.stringify(devices), updatedAt, spaceId, name)
+    .run();
+}
+
+/** The account's Macs, online ones first, then the most recently connected. */
 export async function listHosts(db: D1Database, accountId: string): Promise<HostRow[]> {
   const { results } = await db
     .prepare(
-      `SELECT space_id, name, token_id, online, connected_at, disconnected_at FROM hosts
+      `SELECT space_id, name, token_id, online, connected_at, disconnected_at, devices, devices_updated_at FROM hosts
        WHERE account_id = ?1 ORDER BY online DESC, COALESCE(connected_at, 0) DESC LIMIT 100`,
     )
     .bind(accountId)
-    .all<HostRow>();
-  return results;
+    .all<Omit<HostRow, "devices"> & { devices: string | null }>();
+  return results.map((row) => ({ ...row, devices: parseStoredDevices(row.devices) }));
 }
 
 export async function forgetHost(db: D1Database, accountId: string, spaceId: string, name: string): Promise<void> {

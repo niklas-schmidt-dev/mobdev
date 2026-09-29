@@ -1,4 +1,4 @@
-import { SELF, env } from "cloudflare:test";
+import { SELF, env, runInDurableObject } from "cloudflare:test";
 import { exports } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 import {
@@ -9,7 +9,8 @@ import {
   upsertAccount,
   MAX_TOKENS_PER_ACCOUNT,
 } from "../shared/db";
-import { clientKeyForSecret, randomHex } from "../shared/keys";
+import type { MacDevices } from "../shared/devices";
+import { clientKeyForSecret, randomHex, spaceForSecret } from "../shared/keys";
 
 const BASE = "https://relay.mobdev.test";
 
@@ -178,12 +179,193 @@ describe("hosted relay", () => {
   });
 });
 
+const iPhone = {
+  id: "00008120-000639440C13C01E",
+  name: "iPhone von Niklas",
+  model: "iPhone15,2",
+  model_name: "iPhone 14 Pro",
+  os_version: "27.0",
+  device_class: "iPhone",
+  screen: true,
+  bluetooth: true,
+  ready: true,
+};
+
+function sendDevices(socket: WebSocket, devices: unknown) {
+  socket.send(JSON.stringify({ type: "devices", devices }));
+}
+
+async function accountDevices(token: string | null, init: RequestInit = {}) {
+  const response = await SELF.fetch(`${BASE}/v1/account/devices`, {
+    ...init,
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  return {
+    status: response.status,
+    body: (await response.json()) as { macs: MacDevices[]; ok?: boolean; error?: string },
+  };
+}
+
+/** Polls until the relay has caught up with frames sent over a WebSocket. */
+async function eventually<T>(read: () => Promise<T>, done: (value: T) => boolean): Promise<T> {
+  let value = await read();
+  for (let attempt = 0; attempt < 100 && !done(value); attempt++) {
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    value = await read();
+  }
+  return value;
+}
+
+describe("device registry", () => {
+  it("stores the devices a Mac reports and lists them for its account", async () => {
+    const { id, token } = await account();
+    const hostSecret = secret();
+    const mac = await fakeMac(hostSecret, token);
+    expect((await accountDevices(token)).body.macs).toMatchObject([{ name: "studio", online: true, devices: [] }]);
+
+    sendDevices(mac.socket, [{ ...iPhone, name: "x".repeat(150), serial: "dropped" }, { id: "ipad-1", device_class: "iPad" }]);
+    const listed = await eventually(
+      () => accountDevices(token),
+      (result) => result.body.macs[0]?.devices.length === 2,
+    );
+    expect(listed.status).toBe(200);
+    const devices = [
+      { ...iPhone, name: "x".repeat(100) },
+      { id: "ipad-1", name: "", model: "", model_name: "", os_version: "", device_class: "iPad", screen: false, bluetooth: false, ready: false },
+    ];
+    expect(listed.body).toEqual({
+      macs: [{ name: "studio", online: true, connected_at: expect.any(Number), disconnected_at: null, devices }],
+    });
+
+    // Agents with the Mac's client key see the connected Macs of that key.
+    const key = await clientKeyForSecret(hostSecret);
+    expect((await agent("/v1/relay/devices", key)).body).toEqual({
+      macs: [{ name: "studio", online: true, connected_at: expect.any(Number), disconnected_at: null, devices }],
+    });
+    expect((await listHosts(env.DB, id))[0]?.devices).toEqual(devices);
+
+    // Every token of the account may list, and using it counts.
+    const other = await createAccessToken(env.DB, id, "Laptop");
+    expect((await accountDevices(other.token)).body.macs.map((entry) => entry.name)).toEqual(["studio"]);
+    const tokens = await eventually(
+      () => listAccessTokens(env.DB, id),
+      (rows) => rows.some((row) => row.id === other.row.id && row.last_used_at !== null),
+    );
+    expect(tokens.find((row) => row.id === other.row.id)?.last_used_at).toEqual(expect.any(Number));
+
+    // A Mac without iPhones sends an empty list.
+    sendDevices(mac.socket, []);
+    const emptied = await eventually(
+      () => accountDevices(token),
+      (result) => result.body.macs[0]?.devices.length === 0,
+    );
+    expect(emptied.body.macs[0]?.devices).toEqual([]);
+  });
+
+  it("never shows another account's Macs", async () => {
+    const mine = await account();
+    const theirs = await account();
+    const myMac = await fakeMac(secret(), mine.token, "mine");
+    const theirMac = await fakeMac(secret(), theirs.token, "theirs");
+    sendDevices(myMac.socket, [iPhone]);
+    sendDevices(theirMac.socket, [{ ...iPhone, id: "their-phone" }]);
+    const own = await eventually(
+      () => accountDevices(mine.token),
+      (result) => result.body.macs[0]?.devices.length === 1,
+    );
+    expect(own.body.macs).toMatchObject([{ name: "mine", devices: [iPhone] }]);
+    const other = await eventually(
+      () => accountDevices(theirs.token),
+      (result) => result.body.macs[0]?.devices.length === 1,
+    );
+    expect(other.body.macs).toMatchObject([{ name: "theirs", devices: [{ id: "their-phone" }] }]);
+  });
+
+  it("rejects missing, unknown and revoked access tokens", async () => {
+    for (const token of [null, "mda_" + randomHex(32), await clientKeyForSecret(secret()), "not-a-token"]) {
+      const answer = await accountDevices(token);
+      expect(answer.status).toBe(401);
+      expect(answer.body).toEqual({ ok: false, error: expect.any(String) });
+    }
+    const { id, token, tokenId } = await account();
+    expect((await accountDevices(token)).status).toBe(200);
+    expect((await accountDevices(token, { method: "POST" })).status).toBe(405);
+    await deleteAccessToken(env.DB, id, tokenId);
+    expect((await accountDevices(token)).status).toBe(401);
+  });
+
+  it("ignores malformed and oversized frames and keeps at most 32 devices", async () => {
+    const { token } = await account();
+    const hostSecret = secret();
+    const mac = await fakeMac(hostSecret, token);
+    const key = await clientKeyForSecret(hostSecret);
+    sendDevices(mac.socket, [iPhone]);
+    await eventually(
+      () => accountDevices(token),
+      (result) => result.body.macs[0]?.devices.length === 1,
+    );
+
+    const oversized = JSON.stringify({ type: "devices", devices: [{ ...iPhone, name: "x".repeat(17_000) }] });
+    for (const frame of [
+      '{"type":"devices"',
+      '{"type":"devices"}',
+      '{"type":"devices","devices":{}}',
+      '{"type":"devices","devices":[null]}',
+      JSON.stringify({ type: "devices", devices: [{ name: "no id" }] }),
+      JSON.stringify({ type: "devices", devices: [{ ...iPhone, screen: "yes" }] }),
+      JSON.stringify({ type: "devices", devices: [{ ...iPhone, id: 42 }] }),
+      oversized,
+      "null",
+      "[]",
+    ]) {
+      mac.socket.send(frame);
+    }
+    // The Mac answers this after sending the frames above, so the relay has seen them all.
+    expect((await agent("/v1/status", key)).status).toBe(200);
+    expect((await accountDevices(token)).body.macs[0]?.devices).toEqual([iPhone]);
+    expect((await agent("/v1/relay/devices", key)).body).toMatchObject({ macs: [{ devices: [iPhone] }] });
+
+    const many = Array.from({ length: 40 }, (_, index) => ({ id: `device-${index}` }));
+    sendDevices(mac.socket, many);
+    const capped = await eventually(
+      () => accountDevices(token),
+      (result) => result.body.macs[0]?.devices.length !== 1,
+    );
+    expect(capped.body.macs[0]?.devices.map((device) => device.id)).toEqual(many.slice(0, 32).map((device) => device.id));
+  });
+
+  it("keeps the last list after the Mac disconnects", async () => {
+    const { id, token } = await account();
+    const hostSecret = secret();
+    const mac = await fakeMac(hostSecret, token, "desk");
+    sendDevices(mac.socket, [iPhone]);
+    await eventually(
+      () => accountDevices(token),
+      (result) => result.body.macs[0]?.devices.length === 1,
+    );
+    const space = env.RELAY_SPACE.getByName(await spaceForSecret(hostSecret));
+    const storedKeys = () => runInDurableObject(space, async (_, state) => [...(await state.storage.list()).keys()]);
+    expect(await storedKeys()).toEqual(["devices:desk"]);
+    mac.socket.close(1000, "bye");
+    const offline = await eventually(
+      () => accountDevices(token),
+      (result) => result.body.macs[0]?.online === false,
+    );
+    expect(offline.body.macs).toEqual([
+      { name: "desk", online: false, connected_at: expect.any(Number), disconnected_at: expect.any(Number), devices: [iPhone] },
+    ]);
+    expect((await listHosts(env.DB, id))[0]).toMatchObject({ online: 0, devices: [iPhone] });
+    expect((await agent("/v1/relay/devices", await clientKeyForSecret(hostSecret))).body).toEqual({ macs: [] });
+    // Only D1 keeps it, so forgetting the Mac or deleting the account removes it everywhere.
+    expect(await storedKeys()).toEqual([]);
+  });
+});
+
 describe("relay admin", () => {
   it("reports which Macs are really connected", async () => {
     const { token } = await account();
     const hostSecret = secret();
     const mac = await fakeMac(hostSecret, token, "desk");
-    const { spaceForSecret } = await import("../shared/keys");
     const space = await spaceForSecret(hostSecret);
     expect(await exports.RelayAdmin.connected([space, "0".repeat(64)])).toEqual({ [space]: ["desk"], ["0".repeat(64)]: [] });
     mac.socket.close(1000, "bye");
