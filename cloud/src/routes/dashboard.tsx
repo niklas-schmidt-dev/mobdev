@@ -15,7 +15,12 @@ export const Route = createFileRoute("/dashboard")({
   loader: async ({ location }) => {
     const data = await loadDashboard();
     if (data.state === "signed-out") {
-      throw redirect({ href: `/api/auth/sign-in?returnPathname=${encodeURIComponent(location.pathname)}` });
+      // A full page load: the sign-in route only exists on the server, so an in-app navigation
+      // after clicking a link to /dashboard would render "Not Found".
+      throw redirect({
+        href: `/api/auth/sign-in?returnPathname=${encodeURIComponent(location.pathname)}`,
+        reloadDocument: true,
+      });
     }
     return data;
   },
