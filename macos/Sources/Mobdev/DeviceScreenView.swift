@@ -49,19 +49,27 @@ struct DeviceScreenView: View {
     }
 }
 
-/// Beside the phone: setup steps while something is missing, then the device's activity.
+/// Beside the phone: the device's state (expanded into setup steps while something is missing),
+/// then its activity.
 private struct DevicePanel: View {
     @Environment(AppModel.self) private var model
     let id: String
 
     var body: some View {
         let entries = model.state(id).map { _ in model.device(id)?.activity.all ?? [] } ?? []
+        let ready = model.state(id)?.isReady ?? false
         VStack(spacing: 0) {
-            if let state = model.state(id), !state.isReady {
-                SetupSteps(id: id)
-                    .padding(16)
-                Divider().padding(.horizontal, 16)
+            Group {
+                if ready {
+                    StatusSummary(id: id)
+                } else {
+                    SetupSteps(id: id)
+                }
             }
+            .padding(16)
+            .transition(.opacity)
+            .animation(.smooth, value: ready)
+            Divider().padding(.horizontal, 16)
             HStack(spacing: 6) {
                 Text("Activity").font(.headline)
                 if !entries.isEmpty {
@@ -258,6 +266,37 @@ private struct ConnectPhone: View {
                     .buttonStyle(.glassProminent)
             }
         }
+    }
+}
+
+/// The ready device's state in three short rows, so the panel does not change its layout.
+private struct StatusSummary: View {
+    @Environment(AppModel.self) private var model
+    let id: String
+
+    var body: some View {
+        let status = model.state(id)?.status
+        VStack(alignment: .leading, spacing: 8) {
+            row("Screen", symbol: "rectangle.on.rectangle", value: screenText(status?.screen))
+            row("Bluetooth", symbol: "dot.radiowaves.left.and.right", value: "Paired")
+            row("Keyboard", symbol: "keyboard", value: model.settings.keyboardLayout.displayName)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func row(_ title: String, symbol: String, value: String) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+            Label(title, systemImage: symbol).labelStyle(.titleOnly)
+            Spacer()
+            Text(value).foregroundStyle(.secondary).lineLimit(1)
+        }
+        .font(.callout)
+    }
+
+    private func screenText(_ screen: ScreenState?) -> String {
+        if case .connected(_, let width, let height) = screen, width > 0 { return "\(width) × \(height)" }
+        return "Connected"
     }
 }
 
