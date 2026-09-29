@@ -1,5 +1,6 @@
 import CoreBluetooth
 import Foundation
+import SystemConfiguration
 
 public enum BluetoothState: Sendable, Equatable {
     case starting
@@ -32,7 +33,7 @@ public enum HIDError: Error, CustomStringConvertible {
     case notConnected
 
     public var description: String {
-        "No iPhone is paired over Bluetooth. On the iPhone open Settings > Bluetooth and select this Mac or \"Mobdev\"."
+        "No iPhone is paired over Bluetooth. On the iPhone open Settings > Bluetooth and tap “\(HIDPeripheral.macName)” under Other Devices."
     }
 }
 
@@ -41,7 +42,13 @@ public enum HIDError: Error, CustomStringConvertible {
 /// Classic Bluetooth HID is not an option: `bluetoothd` owns the L2CAP channels. The GATT
 /// details below (long-form 0x1812 UUID, encrypted report attributes, Report Reference
 /// descriptors, Service Changed for stale caches) follow the notes of sryo/clak and iphone-use.
-public final class HIDPeripheral: NSObject, CBPeripheralManagerDelegate, @unchecked Sendable {
+public final class HIDPeripheral: NSObject, CBPeripheralManagerDelegate, CBCentralManagerDelegate, CBPeripheralDelegate,
+    @unchecked Sendable
+{
+    /// The name iOS lists the Mac under in Settings › Bluetooth. iOS shows the computer name, not the
+    /// advertised local name.
+    public static var macName: String { SCDynamicStoreCopyComputerName(nil, nil) as String? ?? "this Mac" }
+
     public let localName: String
 
     private let queue = DispatchQueue(label: "dev.mobdev.bluetooth")
@@ -51,6 +58,11 @@ public final class HIDPeripheral: NSObject, CBPeripheralManagerDelegate, @unchec
 
     // Everything below is only touched on `queue`.
     private var manager: CBPeripheralManager?
+    /// Reads the model of each host. Other devices on the same Apple Account, such as an Apple
+    /// Watch, also connect to the Mac and subscribe to its keyboard; only iPhones and iPads count.
+    private var monitor: CBCentralManager?
+    private var hosts: [UUID: Host] = [:]
+    private var identifying: [UUID: CBPeripheral] = [:]
     private var servicesToAdd: [CBMutableService] = []
     private var published = false
     private var inputs: [ReportID: CBMutableCharacteristic] = [:]
@@ -59,6 +71,13 @@ public final class HIDPeripheral: NSObject, CBPeripheralManagerDelegate, @unchec
     private var subscriptions: [UUID: Set<ObjectIdentifier>] = [:]
     private var serviceChangedSent = Set<UUID>()
     private var outbox: [(CBMutableCharacteristic, Data, [CBCentral]?)] = []
+
+    private struct Host {
+        enum Kind { case identifying, phone, other }
+        let central: CBCentral
+        var kind = Kind.identifying
+        var name: String?
+    }
 
     public init(localName: String = "Mobdev", onStateChange: @escaping @Sendable (BluetoothState) -> Void = { _ in }) {
         self.localName = localName
@@ -72,6 +91,7 @@ public final class HIDPeripheral: NSObject, CBPeripheralManagerDelegate, @unchec
         queue.async {
             guard self.manager == nil else { return }
             self.manager = CBPeripheralManager(delegate: self, queue: self.queue)
+            self.monitor = CBCentralManager(delegate: self, queue: self.queue)
         }
     }
 
@@ -84,13 +104,18 @@ public final class HIDPeripheral: NSObject, CBPeripheralManagerDelegate, @unchec
         }
     }
 
-    /// Sends one input report to every subscribed host.
+    /// Sends one input report to every subscribed iPhone or iPad.
     public func send(_ id: ReportID, _ bytes: [UInt8]) throws {
         guard hostCount.get() > 0 else { throw HIDError.notConnected }
         queue.async {
             guard let characteristic = self.inputs[id] else { return }
+            let phones = self.hosts.values.filter {
+                $0.kind == .phone
+                    && self.subscriptions[$0.central.identifier]?.contains(ObjectIdentifier(characteristic)) == true
+            }
+            guard !phones.isEmpty else { return }
             if self.outbox.count > 1024 { self.outbox.removeFirst(self.outbox.count - 1024) }
-            self.outbox.append((characteristic, Data(bytes), nil))
+            self.outbox.append((characteristic, Data(bytes), phones.map(\.central)))
             self.drain()
         }
     }
@@ -166,6 +191,7 @@ public final class HIDPeripheral: NSObject, CBPeripheralManagerDelegate, @unchec
         manager.removeAllServices()
         published = false
         subscriptions = [:]
+        hosts = [:]
         serviceChangedSent = []
         outbox = []
         updateHostCount()
@@ -256,11 +282,14 @@ public final class HIDPeripheral: NSObject, CBPeripheralManagerDelegate, @unchec
         _ peripheral: CBPeripheralManager, central: CBCentral, didSubscribeTo characteristic: CBCharacteristic
     ) {
         subscriptions[central.identifier, default: []].insert(ObjectIdentifier(characteristic))
+        if hosts[central.identifier] == nil {
+            hosts[central.identifier] = Host(central: central)
+            identify(central.identifier)
+        }
         guard let (id, input) = inputs.first(where: { $0.value === characteristic }) else { return }
         outbox.append((input, Data(count: id.length), [central]))
         drain()
         updateHostCount()
-        if peripheral.isAdvertising, hostCount.get() > 0 { peripheral.stopAdvertising() }
     }
 
     public func peripheralManager(
@@ -268,11 +297,81 @@ public final class HIDPeripheral: NSObject, CBPeripheralManagerDelegate, @unchec
     ) {
         subscriptions[central.identifier]?.remove(ObjectIdentifier(characteristic))
         updateHostCount()
-        if hostCount.get() == 0 { advertise() }
     }
 
     public func peripheralManagerIsReady(toUpdateSubscribers peripheral: CBPeripheralManager) {
         drain()
+    }
+
+    // MARK: Identifying hosts
+
+    public func centralManagerDidUpdateState(_ central: CBCentralManager) {
+        guard central.state == .poweredOn else { return }
+        for (identifier, host) in hosts where host.kind == .identifying && identifying[identifier] == nil {
+            identify(identifier)
+        }
+    }
+
+    /// Reads the host's model number from its Device Information service over the existing link.
+    private func identify(_ identifier: UUID) {
+        guard let monitor, monitor.state == .poweredOn else { return }  // Retried once it powers on.
+        guard let peripheral = monitor.retrievePeripherals(withIdentifiers: [identifier]).first else {
+            classify(identifier, model: nil, name: nil)
+            return
+        }
+        identifying[identifier] = peripheral
+        peripheral.delegate = self
+        monitor.connect(peripheral)
+        queue.asyncAfter(deadline: .now() + 8) { [weak self] in
+            guard let self, let pending = self.identifying[identifier] else { return }
+            self.classify(identifier, model: nil, name: pending.name)
+        }
+    }
+
+    public func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
+        peripheral.discoverServices([CBUUID(string: "180A")])
+    }
+
+    public func centralManager(_ central: CBCentralManager, didFailToConnect peripheral: CBPeripheral, error: Error?) {
+        classify(peripheral.identifier, model: nil, name: peripheral.name)
+    }
+
+    public func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
+        guard let service = peripheral.services?.first(where: { $0.uuid == CBUUID(string: "180A") }) else {
+            classify(peripheral.identifier, model: nil, name: peripheral.name)
+            return
+        }
+        peripheral.discoverCharacteristics([CBUUID(string: "2A24")], for: service)
+    }
+
+    public func peripheral(_ peripheral: CBPeripheral, didDiscoverCharacteristicsFor service: CBService, error: Error?) {
+        guard let model = service.characteristics?.first(where: { $0.uuid == CBUUID(string: "2A24") }) else {
+            classify(peripheral.identifier, model: nil, name: peripheral.name)
+            return
+        }
+        peripheral.readValue(for: model)
+    }
+
+    public func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?) {
+        let model = characteristic.value.flatMap { String(data: $0, encoding: .utf8) }
+        classify(peripheral.identifier, model: model, name: peripheral.name)
+    }
+
+    /// iPhones and iPads report models like "iPhone17,1". Without a model the name decides, so a
+    /// host whose Device Information cannot be read still works unless it calls itself a watch.
+    private func classify(_ identifier: UUID, model: String?, name: String?) {
+        if let peripheral = identifying.removeValue(forKey: identifier) {
+            monitor?.cancelPeripheralConnection(peripheral)
+        }
+        guard var host = hosts[identifier], host.kind == .identifying else { return }
+        let isPhone =
+            model.map { $0.hasPrefix("iPhone") || $0.hasPrefix("iPad") }
+            ?? !(name ?? "").localizedCaseInsensitiveContains("watch")
+        host.kind = isPhone ? .phone : .other
+        host.name = name
+        hosts[identifier] = host
+        Log.info("bluetooth host \(name ?? "unnamed") (\(model ?? "no model")): \(isPhone ? "controlled" : "ignored")")
+        updateHostCount()
     }
 
     // MARK: Helpers
@@ -291,7 +390,9 @@ public final class HIDPeripheral: NSObject, CBPeripheralManagerDelegate, @unchec
 
     private func updateHostCount() {
         let inputIDs = Set(inputs.values.map(ObjectIdentifier.init))
-        let count = subscriptions.values.filter { !$0.isDisjoint(with: inputIDs) }.count
+        let count = hosts.filter { identifier, host in
+            host.kind == .phone && !(subscriptions[identifier] ?? []).isDisjoint(with: inputIDs)
+        }.count
         hostCount.set(count)
         if count > 0 {
             setState(.connected(hosts: count))

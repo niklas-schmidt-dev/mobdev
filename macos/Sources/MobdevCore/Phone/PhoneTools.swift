@@ -270,7 +270,7 @@ public final class PhoneTools: Sendable {
             try requireTouch()
             try await phone.press(.home)
             try await pause(0.6)
-            try await phone.press(KeyStroke(0x2C, KeyStroke.command))
+            try await phone.press(.search)
             try await pause(0.8)
             try await phone.type(strokes)
             try await pause(1.0)

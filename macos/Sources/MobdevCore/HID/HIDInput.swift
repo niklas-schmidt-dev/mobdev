@@ -26,11 +26,15 @@ public final class HIDInput: @unchecked Sendable {
     private let sink: ReportSink
     /// Seconds between reports. BLE connection intervals are roughly 15-30 ms.
     private let step: TimeInterval
+    private let wakeAfterIdle: TimeInterval?
     private var buttons: UInt8 = 0
+    private var lastReport = Date.distantPast
 
-    public init(sink: ReportSink, step: TimeInterval = 0.03) {
+    /// `wakeAfterIdle`: seconds without input after which a wake-up report goes first (nil: never).
+    public init(sink: ReportSink, step: TimeInterval = 0.03, wakeAfterIdle: TimeInterval? = 1.5) {
         self.sink = sink
         self.step = step
+        self.wakeAfterIdle = wakeAfterIdle
     }
 
     public func tap(at point: NormalizedPoint, hold: TimeInterval = 0.08) async throws {
@@ -107,6 +111,8 @@ public final class HIDInput: @unchecked Sendable {
 
     public func pointerDown(at point: NormalizedPoint) {
         queue.async {
+            try? self.wakeIfIdle()
+            self.lastReport = Date()
             try? self.pointer(point)
             self.pause(self.step)
             try? self.button(down: true)
@@ -114,7 +120,10 @@ public final class HIDInput: @unchecked Sendable {
     }
 
     public func pointerMove(to point: NormalizedPoint) {
-        queue.async { try? self.pointer(point) }
+        queue.async {
+            try? self.pointer(point)
+            self.lastReport = Date()
+        }
     }
 
     public func pointerUp(at point: NormalizedPoint) {
@@ -122,11 +131,16 @@ public final class HIDInput: @unchecked Sendable {
             try? self.pointer(point)
             self.pause(self.step)
             try? self.button(down: false)
+            self.lastReport = Date()
         }
     }
 
     public func pressLive(_ stroke: KeyStroke) {
-        queue.async { try? self.sendStroke(stroke) }
+        queue.async {
+            try? self.wakeIfIdle()
+            try? self.sendStroke(stroke)
+            self.lastReport = Date()
+        }
     }
 
     // MARK: Queue-only helpers
@@ -135,7 +149,9 @@ public final class HIDInput: @unchecked Sendable {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             queue.async {
                 do {
+                    try self.wakeIfIdle()
                     try body()
+                    self.lastReport = Date()
                     continuation.resume()
                 } catch {
                     // Never leave a button or key held after a failure.
@@ -146,6 +162,14 @@ public final class HIDInput: @unchecked Sendable {
                 }
             }
         }
+    }
+
+    /// iOS lets an idle Bluetooth keyboard doze and drops the first report that wakes it, which
+    /// swallowed the first tap or key after a pause. An empty mouse report wakes it first.
+    private func wakeIfIdle() throws {
+        guard let wakeAfterIdle, Date().timeIntervalSince(lastReport) >= wakeAfterIdle else { return }
+        try sink.send(.relativeMouse, HIDReportMap.relativeMouseReport(buttons: buttons))
+        pause(step > 0 ? 0.2 : 0)
     }
 
     private func sendStroke(_ stroke: KeyStroke) throws {

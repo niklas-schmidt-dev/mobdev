@@ -1,4 +1,5 @@
 import CoreGraphics
+import CoreText
 import Foundation
 import Vision
 
@@ -55,6 +56,31 @@ public enum TextRecognizer {
             if lhs.exact != rhs.exact { return lhs.exact }
             return readingOrder(lhs, rhs)
         }
+    }
+
+    /// Recognizes one rendered word. The first recognition in a new app binary loads and compiles
+    /// Vision's models, which takes around 45 seconds; running it at launch keeps an agent's first
+    /// read_screen or tap_text fast, also right after an update.
+    public static func warmUp() {
+        let width = 480, height = 120
+        guard
+            let context = CGContext(
+                data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+                space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue)
+        else { return }
+        context.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 1))
+        context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        let attributes: [NSAttributedString.Key: Any] = [
+            NSAttributedString.Key(kCTFontAttributeName as String): CTFontCreateWithName("Helvetica" as CFString, 56, nil),
+            NSAttributedString.Key(kCTForegroundColorAttributeName as String): CGColor(red: 0, green: 0, blue: 0, alpha: 1),
+        ]
+        context.textPosition = CGPoint(x: 24, y: 40)
+        CTLineDraw(CTLineCreateWithAttributedString(NSAttributedString(string: "Mobdev", attributes: attributes)), context)
+        guard let image = context.makeImage() else { return }
+        let started = Date()
+        _ = try? recognize(image)
+        Log.info(String(format: "text recognition ready after %.1f s", Date().timeIntervalSince(started)))
     }
 
     private static func recognize(_ image: CGImage) throws -> [VNRecognizedTextObservation] {

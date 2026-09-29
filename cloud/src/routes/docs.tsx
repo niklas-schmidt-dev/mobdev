@@ -94,7 +94,7 @@ function Docs() {
               <ol className="list-decimal space-y-2 pl-5">
                 <li>Plug it in, unlock it and tap <strong>Trust</strong>. If the Mac asks to allow the accessory, click Allow.</li>
                 <li>
-                  On the iPhone open <strong>Settings › Bluetooth</strong> and tap your Mac or “Mobdev”.
+                  On the iPhone open <strong>Settings › Bluetooth</strong> and tap your Mac under Other Devices. iOS lists it by the Mac’s name.
                 </li>
                 <li>
                   Turn on <strong>Settings › Accessibility › Touch › AssistiveTouch</strong>. It turns the pointer into

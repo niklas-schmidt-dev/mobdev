@@ -104,6 +104,8 @@ public enum HIDReportMap {
 /// Consumer-page usages iOS responds to from a Bluetooth keyboard.
 public enum ConsumerUsage: UInt16, Sendable {
     case home = 0x0223
+    /// AC Search, the Spotlight key of Apple keyboards. ⌘Space does not open Spotlight on iPhone.
+    case search = 0x0221
     case volumeUp = 0x00E9
     case volumeDown = 0x00EA
     case mute = 0x00E2

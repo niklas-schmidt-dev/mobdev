@@ -81,7 +81,7 @@ struct OnboardingView: View {
                 if model.bluetoothStarted {
                     Instructions(lines: [
                         "On your iPhone, open Settings › Bluetooth.",
-                        "Under Other Devices, tap “\(MobdevPaths.appName)”.",
+                        "Under Other Devices, tap “\(HIDPeripheral.macName)”. That is this Mac.",
                         "Tap Pair.",
                     ])
                 }

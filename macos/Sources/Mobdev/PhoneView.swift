@@ -278,7 +278,7 @@ struct SetupInspector: View {
     private var bluetoothDetail: String {
         switch model.status.bluetooth {
         case .connected: "Paired. \(MobdevPaths.appName) can tap and type."
-        case .advertising: "On the iPhone: Settings › Bluetooth, then tap this Mac or “\(MobdevPaths.appName)”."
+        case .advertising: "On the iPhone: Settings › Bluetooth, then tap “\(HIDPeripheral.macName)” under Other Devices."
         default: model.status.bluetooth.summary
         }
     }

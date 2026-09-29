@@ -85,7 +85,7 @@ import Testing
 
     @Test func tapMovesThenClicksThroughTheRelativeMouse() async throws {
         let sink = RecordingSink()
-        let input = HIDInput(sink: sink, step: 0)
+        let input = HIDInput(sink: sink, step: 0, wakeAfterIdle: nil)
         try await input.tap(at: NormalizedPoint(x: 0.25, y: 0.75), hold: 0)
         let reports = sink.reports.get()
         #expect(reports.map(\.0) == [.absolutePointer, .relativeMouse, .relativeMouse])
@@ -96,7 +96,7 @@ import Testing
 
     @Test func shiftedKeyPressesAndReleasesTheModifier() async throws {
         let sink = RecordingSink()
-        let input = HIDInput(sink: sink, step: 0)
+        let input = HIDInput(sink: sink, step: 0, wakeAfterIdle: nil)
         try await input.type([KeyStroke(0x04, KeyStroke.shift)])
         let keyboard = sink.reports.get().filter { $0.0 == .keyboard }.map(\.1)
         #expect(keyboard == [
@@ -107,10 +107,22 @@ import Testing
         ])
     }
 
+    @Test func firstInputAfterIdleWakesTheLinkFirst() async throws {
+        let sink = RecordingSink()
+        let input = HIDInput(sink: sink, step: 0, wakeAfterIdle: 60)
+        try await input.tap(at: NormalizedPoint(x: 0.5, y: 0.5), hold: 0)
+        try await input.tap(at: NormalizedPoint(x: 0.5, y: 0.5), hold: 0)
+        let kinds = sink.reports.get().map(\.0)
+        // One empty mouse report before the first tap only; the second follows right after.
+        #expect(kinds == [.relativeMouse, .absolutePointer, .relativeMouse, .relativeMouse,
+            .absolutePointer, .relativeMouse, .relativeMouse])
+        #expect(sink.reports.get()[0].1 == [0, 0, 0, 0])
+    }
+
     @Test func failureReleasesButtons() async {
         let sink = RecordingSink()
         sink.connected = false
-        let input = HIDInput(sink: sink, step: 0)
+        let input = HIDInput(sink: sink, step: 0, wakeAfterIdle: nil)
         await #expect(throws: HIDError.self) { try await input.tap(at: NormalizedPoint(x: 0.5, y: 0.5)) }
     }
 }

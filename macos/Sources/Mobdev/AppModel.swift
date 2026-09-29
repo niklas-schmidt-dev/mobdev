@@ -91,6 +91,7 @@ final class AppModel {
         }
         if settings.relayEnabled { startRelay() }
         refresh()
+        Task.detached(priority: .utility) { TextRecognizer.warmUp() }
         Task { [weak self] in
             while let self {
                 await self.sampleAmbient()
