@@ -22,7 +22,7 @@ export function AppMock() {
   return (
     <div
       aria-hidden="true"
-      className="relative mx-auto w-full max-w-5xl overflow-hidden rounded-[22px] border border-white/10 bg-[#1b1d1b] shadow-[0_40px_120px_-20px_rgba(0,0,0,0.8)]"
+      className="relative mx-auto w-full max-w-5xl overflow-hidden rounded-[22px] text-left border border-white/10 bg-[#1b1d1b] shadow-[0_40px_120px_-20px_rgba(0,0,0,0.8)]"
     >
       <div className="grid grid-cols-[180px_1fr] md:grid-cols-[200px_1fr_230px]">
         {/* Sidebar */}
