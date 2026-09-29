@@ -1,15 +1,16 @@
 import MobdevCore
 import SwiftUI
 
-/// One device's live screen on a Liquid Glass stage, with controls and a floating setup panel.
+/// One device's live screen on a Liquid Glass stage with its controls, and a floating panel that
+/// shows what agents do on it, plus what setup still needs until the device is ready.
 struct DeviceScreenView: View {
     @Environment(AppModel.self) private var model
     let id: String
-    @AppStorage("showSetupPanel") private var showSetup = true
+    @AppStorage("showDevicePanel") private var showPanel = true
 
-    /// The setup panel floats over the stage instead of being an inspector column: resizing the
-    /// column animated the whole stage and its video layer frame by frame, which made the window flicker.
-    static let panelWidth: CGFloat = 320
+    /// The panel floats over the stage instead of being an inspector column: resizing the column
+    /// animated the whole stage and its video layer frame by frame, which made the window flicker.
+    static let panelWidth: CGFloat = 340
 
     private var status: PhoneStatus? { model.state(id)?.status }
 
@@ -24,12 +25,11 @@ struct DeviceScreenView: View {
                 }
             }
             // Only moves, so the phone keeps its size and the video layer is not resized.
-            .offset(x: showSetup ? -(Self.panelWidth + 12) / 2 : 0)
+            .offset(x: showPanel ? -(Self.panelWidth + 12) / 2 : 0)
         }
         .overlay(alignment: .trailing) {
-            if showSetup {
-                SetupInspector(id: id)
-                    .scrollContentBackground(.hidden)
+            if showPanel {
+                DevicePanel(id: id)
                     .frame(width: Self.panelWidth)
                     .frame(maxHeight: .infinity)
                     .glassEffect(.regular, in: .rect(cornerRadius: 26))
@@ -38,22 +38,59 @@ struct DeviceScreenView: View {
                     .transition(.move(edge: .trailing).combined(with: .opacity))
             }
         }
+        .animation(.smooth(duration: 0.4), value: showPanel)
         .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
         .toolbar {
-            ToolbarItemGroup {
-                Button("Home", systemImage: "house") { model.home(id) }
-                    .disabled(status?.bluetooth.isConnected != true)
-                    .help("Go to the home screen")
-                Button("Screenshot", systemImage: "camera") { model.saveScreenshot(id) }
-                    .disabled(status?.frameSize == nil)
-                    .help("Save a screenshot")
-            }
-            ToolbarSpacer(.fixed)
             ToolbarItem {
-                Button("Setup", systemImage: "sidebar.trailing") {
-                    withAnimation(.smooth(duration: 0.35)) { showSetup.toggle() }
+                Button("Activity", systemImage: "sidebar.trailing") { showPanel.toggle() }
+                    .help(showPanel ? "Hide activity" : "Show activity")
+            }
+        }
+    }
+}
+
+/// Beside the phone: setup steps while something is missing, then the device's activity.
+private struct DevicePanel: View {
+    @Environment(AppModel.self) private var model
+    let id: String
+
+    var body: some View {
+        let entries = model.state(id).map { _ in model.device(id)?.activity.all ?? [] } ?? []
+        VStack(spacing: 0) {
+            if let state = model.state(id), !state.isReady {
+                SetupSteps(id: id)
+                    .padding(16)
+                Divider().padding(.horizontal, 16)
+            }
+            HStack(spacing: 6) {
+                Text("Activity").font(.headline)
+                if !entries.isEmpty {
+                    Text("\(entries.count)").foregroundStyle(.secondary).monospacedDigit()
                 }
-                .help(showSetup ? "Hide setup" : "Show setup")
+                Spacer()
+                Button("Clear", systemImage: "trash") { model.clearActivity(device: id) }
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(.borderless)
+                    .disabled(entries.isEmpty)
+                    .help("Clear this device's activity")
+            }
+            .padding(.horizontal, 18)
+            .padding(.top, 16)
+            .padding(.bottom, 6)
+            if entries.isEmpty {
+                Text("Every action an agent takes on this iPhone appears here and stays after you quit.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(28)
+                    .frame(maxHeight: .infinity)
+            } else {
+                List(entries) { entry in
+                    ActivityRow(entry: entry, compact: true)
+                        .listRowBackground(Color.clear)
+                }
+                .listStyle(.plain)
+                .scrollContentBackground(.hidden)
             }
         }
     }
@@ -224,7 +261,8 @@ private struct ConnectPhone: View {
     }
 }
 
-struct SetupInspector: View {
+/// What the device still needs: screen, Bluetooth and AssistiveTouch, with the way to fix each.
+struct SetupSteps: View {
     @Environment(AppModel.self) private var model
     let id: String
 
@@ -234,42 +272,21 @@ struct SetupInspector: View {
     }
 
     var body: some View {
-        Form {
-            Section {
-                StepRow(title: "Screen", detail: screenDetail, state: screenState)
-                StepRow(title: "Bluetooth", detail: bluetoothDetail, state: bluetoothState)
-                if status.bluetooth == .unauthorized {
-                    Button("Open Bluetooth Settings") { model.openPrivacySettings("Privacy_Bluetooth") }
-                }
-                StepRow(
-                    title: "AssistiveTouch",
-                    detail: "Settings › Accessibility › Touch › AssistiveTouch. Turns the pointer into taps.",
-                    state: .info)
-            } header: {
-                Text("Setup")
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Setup").font(.headline)
+            StepRow(title: "Screen", detail: screenDetail, state: screenState)
+            StepRow(title: "Bluetooth", detail: bluetoothDetail, state: bluetoothState)
+            if status.bluetooth == .unauthorized {
+                Button("Open Bluetooth Settings") { model.openPrivacySettings("Privacy_Bluetooth") }
             }
-
-            Section {
-                Picker(
-                    "Layout",
-                    selection: Binding(get: { model.settings.keyboardLayout }, set: { model.setKeyboardLayout($0) })
-                ) {
-                    ForEach(KeyboardLayout.allCases) { Text($0.displayName).tag($0) }
-                }
-            } header: {
-                Text("Keyboard")
-            } footer: {
-                Text("Match Settings › General › Keyboard › Hardware Keyboard on the iPhone.")
-            }
-
-            Section("Tips") {
-                StepRow(title: "Auto-Lock: Never", detail: "The phone must stay unlocked while agents work.", state: .info)
-                StepRow(
-                    title: "Re-pair", detail: "If taps stop working, forget the device on the iPhone and pair again.",
-                    state: .info)
-            }
+            StepRow(
+                title: "AssistiveTouch",
+                detail: "Settings › Accessibility › Touch › AssistiveTouch. Turns the pointer into taps.",
+                state: .info)
+            Button("Open Setup Assistant…") { model.showsOnboarding = true }
+                .buttonStyle(.glass)
         }
-        .formStyle(.grouped)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var screenState: StepRow.State {

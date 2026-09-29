@@ -300,11 +300,11 @@ struct DeviceArtwork: View {
 // MARK: - Device detail
 
 enum DeviceTab: String, CaseIterable, Identifiable {
-    case screen = "Screen", activity = "Activity", info = "Info"
+    case screen = "Screen", info = "Info"
     var id: String { rawValue }
 }
 
-/// One device: its live screen, its own growing activity log, and what it is.
+/// One device: its live screen with its own growing activity log beside it, and what it is.
 struct DeviceDetailView: View {
     @Environment(AppModel.self) private var model
     let id: String
@@ -313,13 +313,19 @@ struct DeviceDetailView: View {
     var body: some View {
         Group {
             if let state = model.state(id) {
-                Group {
-                    switch tab {
-                    case .screen: DeviceScreenView(id: id)
-                    case .activity: DeviceActivityView(id: id)
-                    case .info: DeviceInfoView(id: id)
-                    }
+                // Both pages stay alive and only fade, so switching does not tear down and rebuild the
+                // stage, its video layer and the toolbar every time.
+                ZStack {
+                    DeviceScreenView(id: id)
+                        .opacity(tab == .screen ? 1 : 0)
+                        .allowsHitTesting(tab == .screen)
+                        .accessibilityHidden(tab != .screen)
+                    DeviceInfoView(id: id)
+                        .opacity(tab == .info ? 1 : 0)
+                        .allowsHitTesting(tab == .info)
+                        .accessibilityHidden(tab != .info)
                 }
+                .animation(.easeInOut(duration: 0.15), value: tab)
                 .navigationTitle(state.name)
                 .navigationSubtitle(state.statusLine)
             } else {
@@ -333,7 +339,7 @@ struct DeviceDetailView: View {
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
-                .frame(width: 240)
+                .frame(width: 180)
             }
         }
     }
@@ -359,37 +365,6 @@ private struct DeviceHeader: View {
     }
 }
 
-private struct DeviceActivityView: View {
-    @Environment(AppModel.self) private var model
-    let id: String
-
-    var body: some View {
-        let entries = model.state(id).map { _ in model.device(id)?.activity.all ?? [] } ?? []
-        List {
-            if let state = model.state(id) {
-                DeviceHeader(state: state)
-                    .listRowSeparator(.hidden)
-            }
-            if entries.isEmpty {
-                Text("Every action an agent takes on this device appears here, and stays after you quit.")
-                    .foregroundStyle(.secondary)
-                    .padding(.vertical, 8)
-            } else {
-                Section(entries.count == 1 ? "1 action" : "\(entries.count) actions") {
-                    ForEach(entries) { ActivityRow(entry: $0) }
-                }
-            }
-        }
-        .toolbar {
-            ToolbarItem {
-                Button("Clear", systemImage: "trash") { model.clearActivity(device: id) }
-                    .disabled(entries.isEmpty)
-                    .help("Clear this device's activity")
-            }
-        }
-    }
-}
-
 private struct DeviceInfoView: View {
     @Environment(AppModel.self) private var model
     let id: String
@@ -407,6 +382,18 @@ private struct DeviceInfoView: View {
                         LabeledContent("Finish", value: info.isLightColor ? "Light" : "Dark")
                     }
                 }
+                Section {
+                    Picker(
+                        "Keyboard Layout",
+                        selection: Binding(get: { model.settings.keyboardLayout }, set: { model.setKeyboardLayout($0) })
+                    ) {
+                        ForEach(KeyboardLayout.allCases) { Text($0.displayName).tag($0) }
+                    }
+                } header: {
+                    Text("Keyboard")
+                } footer: {
+                    Text("Match Settings › General › Keyboard › Hardware Keyboard on the iPhone, and turn off Auto-Correction there so typed text is not changed.")
+                }
                 Section("Connection") {
                     LabeledContent("Screen (USB)") { Text(screenText(state)).foregroundStyle(.secondary) }
                     LabeledContent("Input (Bluetooth)") { Text(state.status.bluetooth.summary).foregroundStyle(.secondary) }
@@ -422,6 +409,12 @@ private struct DeviceInfoView: View {
                     Text("For Agents")
                 } footer: {
                     Text("Pass this id or the name as `device` to any tool when several iPhones are connected. `list_devices` returns them all.")
+                }
+                Section("Tips") {
+                    StepRow(title: "Auto-Lock: Never", detail: "The iPhone must stay unlocked while agents work.", state: .info)
+                    StepRow(
+                        title: "Re-pair", detail: "If taps stop working, forget this Mac on the iPhone and pair again.",
+                        state: .info)
                 }
                 if !state.isConnected {
                     Section {
@@ -447,38 +440,57 @@ private struct DeviceInfoView: View {
 struct ActivityRow: View {
     let entry: ActivityLog.Entry
     var deviceName: String?
+    /// For the narrow panel beside the phone: the time moves next to the title.
+    var compact = false
 
     var body: some View {
-        HStack(alignment: .center, spacing: 12) {
+        HStack(alignment: compact ? .top : .center, spacing: compact ? 10 : 12) {
             ToolIcon(tool: entry.tool, failed: entry.failed)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
-                    Text(ToolIcon.title(for: entry.tool)).font(.body.weight(.medium))
+                    Text(ToolIcon.title(for: entry.tool)).font(.body.weight(.medium)).lineLimit(1)
                     if let deviceName {
-                        Text(deviceName).font(.caption).foregroundStyle(.secondary)
-                            .padding(.horizontal, 6).padding(.vertical, 1)
+                        Label(deviceName, systemImage: "iphone.gen3")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 2)
                             .background(.quaternary.opacity(0.6), in: .capsule)
+                    }
+                    if compact {
+                        Spacer(minLength: 4)
+                        Text(entry.date, format: .dateTime.hour().minute().second())
+                            .font(.caption)
+                            .monospacedDigit()
+                            .foregroundStyle(.secondary)
                     }
                 }
                 Text(entry.summary)
                     .font(.callout)
                     .foregroundStyle(entry.failed ? .red : .secondary)
-                    .lineLimit(2)
+                    .lineLimit(compact ? 3 : 2)
                     .help(entry.summary)
             }
-            Spacer(minLength: 8)
-            VStack(alignment: .trailing, spacing: 2) {
+            if !compact {
+                Spacer(minLength: 8)
+                times
+            }
+        }
+        .padding(.vertical, 3)
+        .accessibilityElement(children: .combine)
+    }
+
+    private var times: some View {
+        VStack(alignment: .trailing, spacing: 2) {
                 Text(entry.date, format: .dateTime.hour().minute().second())
                     .monospacedDigit()
                     .foregroundStyle(.secondary)
                 Text(entry.source == "relay" ? "Remote" : "This Mac")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
-            }
-            .font(.callout)
         }
-        .padding(.vertical, 3)
-        .accessibilityElement(children: .combine)
+        .font(.callout)
     }
 }
 
