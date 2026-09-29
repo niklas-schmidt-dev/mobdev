@@ -36,8 +36,9 @@ struct RelayEnvelope: Codable {
 public final class RelayClient: @unchecked Sendable {
     public typealias Handler = @Sendable (HTTPRequest) async -> HTTPResponse
 
-    /// Close code the relay uses when another connection with the same key and name took over.
+    /// Close codes the relay uses: another connection took over, or the access token was revoked.
     static let closeReplaced = 4000
+    static let closeRevoked = 4001
 
     private let handler: Handler
     private let onStateChange: @Sendable (RelayState) -> Void
@@ -134,6 +135,9 @@ public final class RelayClient: @unchecked Sendable {
             } else if task.closeCode.rawValue == Self.closeReplaced {
                 setState(.failed(RelayError.replaced.description))
                 backoff = 30
+            } else if task.closeCode.rawValue == Self.closeRevoked {
+                setState(.failed(RelayError.revoked.description))
+                backoff = 30
             } else {
                 setState(.failed(RelayError.unreachable.description))
                 if connected { backoff = 1 }
@@ -219,6 +223,7 @@ public enum RelayError: Error, CustomStringConvertible {
     case insecureURL
     case rejected(Int)
     case replaced
+    case revoked
     case unreachable
 
     public var description: String {
@@ -228,6 +233,7 @@ public enum RelayError: Error, CustomStringConvertible {
         case .rejected(403): "The relay needs a valid access token for this Mac."
         case .rejected: "The relay rejected this Mac's key."
         case .replaced: "Another Mac connected with the same key and name."
+        case .revoked: "The access token for this relay was revoked. Create a new one in the dashboard."
         case .unreachable: "Cannot reach the relay. Retrying…"
         }
     }

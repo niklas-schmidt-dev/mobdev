@@ -1,19 +1,43 @@
 import { createFileRoute, redirect, useRouter } from "@tanstack/react-router";
 import { useState, type FormEvent, type ReactNode } from "react";
 import { Code, CopyButton, Page, buttonPrimary } from "../components/site";
-import { createToken, deleteAccount, forgetMac, loadDashboard, revokeToken } from "../server/dashboard";
+import {
+  createToken,
+  deleteAccount,
+  forgetMac,
+  loadDashboard,
+  revokeToken,
+  type DashboardData,
+} from "../server/dashboard";
 
 export const Route = createFileRoute("/dashboard")({
   head: () => ({ meta: [{ title: "Account — Mobdev" }] }),
   loader: async ({ location }) => {
     const data = await loadDashboard();
-    if (!data) {
+    if (data.state === "signed-out") {
       throw redirect({ href: `/api/auth/sign-in?returnPathname=${encodeURIComponent(location.pathname)}` });
     }
     return data;
   },
-  component: Dashboard,
+  component: DashboardPage,
 });
+
+function DashboardPage() {
+  const data = Route.useLoaderData();
+  if (data.state !== "ready") {
+    return (
+      <Page tone="mist">
+        <div className="mx-auto max-w-xl px-5 py-32 text-center">
+          <h1 className="headline text-[40px]">Almost there.</h1>
+          <p className="mt-4 text-[19px] leading-[1.45] text-muted">
+            Accounts are being set up. The Mac app and self-hosted relay work without one in the meantime.
+          </p>
+        </div>
+      </Page>
+    );
+  }
+  return <Dashboard data={data} />;
+}
 
 function relative(timestamp: number | null): string {
   if (!timestamp) return "never";
@@ -38,8 +62,7 @@ function Card({ title, subtitle, children }: { title: string; subtitle?: string;
 
 const destructive = "text-[15px] text-[#e30000] transition-opacity hover:opacity-70 disabled:opacity-40";
 
-function Dashboard() {
-  const data = Route.useLoaderData();
+function Dashboard({ data }: { data: DashboardData }) {
   const router = useRouter();
   const [name, setName] = useState("");
   const [created, setCreated] = useState<{ name: string; token: string } | null>(null);

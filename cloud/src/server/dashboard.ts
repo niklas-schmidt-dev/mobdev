@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { getAuth } from "@workos/authkit-tanstack-react-start";
 import { env } from "cloudflare:workers";
+import { authConfigured } from "./auth-config";
 import {
   createAccessToken,
   deleteAccessToken,
@@ -58,12 +59,16 @@ export interface DashboardData {
   relayUrl: string;
 }
 
-export const loadDashboard = createServerFn({ method: "GET" }).handler(async (): Promise<DashboardData | null> => {
+export type DashboardState = { state: "unconfigured" } | { state: "signed-out" } | ({ state: "ready" } & DashboardData);
+
+export const loadDashboard = createServerFn({ method: "GET" }).handler(async (): Promise<DashboardState> => {
+  if (!authConfigured()) return { state: "unconfigured" };
   const { user } = await getAuth();
-  if (!user) return null;
+  if (!user) return { state: "signed-out" };
   await upsertAccount(env.DB, user.id, user.email);
   const [tokens, hosts] = await Promise.all([listAccessTokens(env.DB, user.id), listHosts(env.DB, user.id)]);
   return {
+    state: "ready",
     user: { email: user.email, firstName: user.firstName ?? null },
     tokens,
     hosts: await reconcile(hosts),
