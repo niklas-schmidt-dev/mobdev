@@ -59,12 +59,68 @@ type envelope struct {
 // CloseReplaced tells a Mac that another connection with the same key and name took over.
 const CloseReplaced websocket.StatusCode = 4000
 
+// Device is an iPhone or iPad attached to a Mac. The Mac sends its list as a text frame
+// {"type":"devices","devices":[...]} after connecting and whenever it changes. The hosted
+// relay (cloud/shared/devices.ts) validates it the same way.
+type Device struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Model       string `json:"model"`
+	ModelName   string `json:"model_name"`
+	OSVersion   string `json:"os_version"`
+	DeviceClass string `json:"device_class"`
+	Screen      bool   `json:"screen"`    // the Mac has the device's picture over USB
+	Bluetooth   bool   `json:"bluetooth"` // the Mac's Bluetooth keyboard and mouse are connected
+	Ready       bool   `json:"ready"`
+}
+
+const (
+	maxDevices           = 32
+	maxDeviceString      = 100
+	maxDevicesFrameBytes = 16 << 10
+)
+
+// parseDevices validates a "devices" frame: at most 32 devices are kept, strings are cut to
+// 100 characters and unknown fields are dropped. The whole frame is rejected when it is larger
+// than 16 KB or malformed (not JSON, no devices array, an entry without an id, a field of the
+// wrong type).
+func parseDevices(data []byte) ([]Device, bool) {
+	if len(data) > maxDevicesFrameBytes {
+		return nil, false
+	}
+	var frame struct {
+		Type    string    `json:"type"`
+		Devices *[]Device `json:"devices"`
+	}
+	if json.Unmarshal(data, &frame) != nil || frame.Type != "devices" || frame.Devices == nil {
+		return nil, false
+	}
+	devices := *frame.Devices
+	for i := range devices {
+		d := &devices[i]
+		for _, field := range []*string{&d.ID, &d.Name, &d.Model, &d.ModelName, &d.OSVersion, &d.DeviceClass} {
+			if runes := []rune(*field); len(runes) > maxDeviceString {
+				*field = string(runes[:maxDeviceString])
+			}
+		}
+		if d.ID == "" {
+			return nil, false
+		}
+	}
+	if len(devices) > maxDevices {
+		devices = devices[:maxDevices]
+	}
+	return devices, true
+}
+
 type host struct {
-	conn    *websocket.Conn
-	writeMu sync.Mutex
-	mu      sync.Mutex
-	pending map[string]chan envelope
-	done    chan struct{}
+	conn        *websocket.Conn
+	connectedAt time.Time
+	writeMu     sync.Mutex
+	mu          sync.Mutex
+	pending     map[string]chan envelope
+	devices     []Device // latest list from the Mac; replaced, never modified in place
+	done        chan struct{}
 }
 
 func (h *host) write(ctx context.Context, data []byte) error {
@@ -142,6 +198,8 @@ func (s *Relay) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.connect(w, r)
 	case r.URL.Path == "/v1/relay/hosts" && r.Method == http.MethodGet:
 		s.listHosts(w, r)
+	case r.URL.Path == "/v1/relay/devices" && r.Method == http.MethodGet:
+		s.listDevices(w, r)
 	default:
 		s.forward(w, r)
 	}
@@ -186,7 +244,13 @@ func (s *Relay) connect(w http.ResponseWriter, r *http.Request) {
 		return // Accept already answered.
 	}
 	conn.SetReadLimit(s.cfg.MaxBody * 2)
-	h := &host{conn: conn, pending: map[string]chan envelope{}, done: make(chan struct{})}
+	h := &host{
+		conn:        conn,
+		connectedAt: time.Now(),
+		pending:     map[string]chan envelope{},
+		devices:     []Device{},
+		done:        make(chan struct{}),
+	}
 
 	s.mu.Lock()
 	hosts := s.spaces[space]
@@ -235,6 +299,10 @@ func (s *Relay) connect(w http.ResponseWriter, r *http.Request) {
 		var env envelope
 		if json.Unmarshal(data, &env) == nil && env.Type == "response" {
 			h.deliver(env)
+		} else if devices, ok := parseDevices(data); ok {
+			h.mu.Lock()
+			h.devices = devices
+			h.mu.Unlock()
 		}
 	}
 }
@@ -254,6 +322,47 @@ func (s *Relay) listHosts(w http.ResponseWriter, r *http.Request) {
 	sort.Strings(names)
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{"hosts": names})
+}
+
+// macDevices is one connected Mac in /v1/relay/devices. The hosted relay's
+// /v1/account/devices uses the same shape and also lists offline Macs.
+type macDevices struct {
+	Name           string   `json:"name"`
+	Online         bool     `json:"online"`
+	ConnectedAt    int64    `json:"connected_at"`
+	DisconnectedAt *int64   `json:"disconnected_at"`
+	Devices        []Device `json:"devices"`
+}
+
+// listDevices lists the connected Macs of the client key's space with the devices they last
+// reported, newest connection first.
+func (s *Relay) listDevices(w http.ResponseWriter, r *http.Request) {
+	space, ok := clientSpace(r)
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "missing or malformed client key")
+		return
+	}
+	s.mu.Lock()
+	hosts := make(map[string]*host, len(s.spaces[space]))
+	for name, h := range s.spaces[space] {
+		hosts[name] = h
+	}
+	s.mu.Unlock()
+	macs := make([]macDevices, 0, len(hosts))
+	for name, h := range hosts {
+		h.mu.Lock()
+		devices := h.devices
+		h.mu.Unlock()
+		macs = append(macs, macDevices{Name: name, Online: true, ConnectedAt: h.connectedAt.UnixMilli(), Devices: devices})
+	}
+	sort.Slice(macs, func(i, j int) bool {
+		if macs[i].ConnectedAt != macs[j].ConnectedAt {
+			return macs[i].ConnectedAt > macs[j].ConnectedAt
+		}
+		return macs[i].Name < macs[j].Name
+	})
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{"macs": macs})
 }
 
 var forwardedRequestHeaders = []string{"Content-Type", "Accept", "Mcp-Protocol-Version", "Mcp-Method", "Mcp-Name"}

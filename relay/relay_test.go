@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -300,4 +301,178 @@ func TestDisconnectFailsPendingRequestsQuickly(t *testing.T) {
 		t.Fatalf("status %d after %s", status, time.Since(start))
 	}
 	waitForHosts(t, server.URL, key, 0)
+}
+
+var testPhone = Device{
+	ID: "00008120-000639440C13C01E", Name: "iPhone von Niklas", Model: "iPhone15,2", ModelName: "iPhone 14 Pro",
+	OSVersion: "27.0", DeviceClass: "iPhone", Screen: true, Bluetooth: true, Ready: true,
+}
+
+func TestParseDevices(t *testing.T) {
+	devices, ok := parseDevices([]byte(`{"type":"devices","devices":[{"id":"a","name":"` + strings.Repeat("é", 150) +
+		`","serial":"dropped","screen":true},{"id":"b","model_name":null}]}`))
+	if !ok || len(devices) != 2 {
+		t.Fatalf("valid frame rejected: %v %v", devices, ok)
+	}
+	if devices[0].Name != strings.Repeat("é", 100) || !devices[0].Screen || devices[0].Bluetooth {
+		t.Fatalf("first device: %+v", devices[0])
+	}
+	if devices[1] != (Device{ID: "b"}) {
+		t.Fatalf("second device: %+v", devices[1])
+	}
+	if devices, ok := parseDevices([]byte(`{"type":"devices","devices":[]}`)); !ok || devices == nil || len(devices) != 0 {
+		t.Fatalf("empty list: %v %v", devices, ok)
+	}
+
+	many := make([]map[string]string, 40)
+	for i := range many {
+		many[i] = map[string]string{"id": fmt.Sprintf("device-%d", i)}
+	}
+	frame, _ := json.Marshal(map[string]any{"type": "devices", "devices": many})
+	if devices, ok := parseDevices(frame); !ok || len(devices) != maxDevices || devices[31].ID != "device-31" {
+		t.Fatalf("expected the first 32 of 40 devices, got %d %v", len(devices), ok)
+	}
+
+	oversized, _ := json.Marshal(map[string]any{"type": "devices", "devices": []Device{{ID: "a", Name: strings.Repeat("x", 17_000)}}})
+	for _, bad := range []string{
+		`{"type":"devices"`,
+		`{"type":"devices"}`,
+		`{"type":"devices","devices":null}`,
+		`{"type":"devices","devices":{}}`,
+		`{"type":"devices","devices":[null]}`,
+		`{"type":"devices","devices":[{"name":"no id"}]}`,
+		`{"type":"devices","devices":[{"id":"a","screen":"yes"}]}`,
+		`{"type":"devices","devices":[{"id":42}]}`,
+		`{"type":"response","devices":[]}`,
+		`null`,
+		string(oversized),
+	} {
+		if _, ok := parseDevices([]byte(bad)); ok {
+			t.Fatalf("accepted %.80s", bad)
+		}
+	}
+}
+
+type devicesList struct {
+	Macs []struct {
+		Name           string   `json:"name"`
+		Online         bool     `json:"online"`
+		ConnectedAt    int64    `json:"connected_at"`
+		DisconnectedAt *int64   `json:"disconnected_at"`
+		Devices        []Device `json:"devices"`
+	} `json:"macs"`
+}
+
+func listDevices(t *testing.T, baseURL, key string) (int, devicesList) {
+	t.Helper()
+	req, _ := http.NewRequest(http.MethodGet, baseURL+"/v1/relay/devices", nil)
+	if key != "" {
+		req.Header.Set("Authorization", "Bearer "+key)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+	var list devicesList
+	_ = json.NewDecoder(resp.Body).Decode(&list)
+	return resp.StatusCode, list
+}
+
+func sendDevices(t *testing.T, conn *websocket.Conn, devices any) {
+	t.Helper()
+	frame, _ := json.Marshal(map[string]any{"type": "devices", "devices": devices})
+	if err := conn.Write(context.Background(), websocket.MessageText, frame); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func waitForDevices(t *testing.T, baseURL, key string, done func(devicesList) bool) devicesList {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		_, list := listDevices(t, baseURL, key)
+		if done(list) {
+			return list
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("devices did not arrive: %+v", list)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func TestListsDevicesOfConnectedHosts(t *testing.T) {
+	server := newServer(t, testConfig())
+	key := ClientKey(testSecret)
+	if status, _ := listDevices(t, server.URL, ""); status != 401 {
+		t.Fatalf("missing key: status %d", status)
+	}
+	if status, list := listDevices(t, server.URL, key); status != 200 || list.Macs == nil || len(list.Macs) != 0 {
+		t.Fatalf("no hosts: %d %+v", status, list)
+	}
+
+	studio := fakeHost(t, server.URL, testSecret, "studio")
+	fakeHost(t, server.URL, testSecret, "office")
+	waitForHosts(t, server.URL, key, 2)
+	sendDevices(t, studio, []Device{testPhone})
+	list := waitForDevices(t, server.URL, key, func(list devicesList) bool {
+		for _, mac := range list.Macs {
+			if mac.Name == "studio" && len(mac.Devices) == 1 {
+				return true
+			}
+		}
+		return false
+	})
+	if len(list.Macs) != 2 {
+		t.Fatalf("expected two Macs: %+v", list)
+	}
+	for _, mac := range list.Macs {
+		if !mac.Online || mac.ConnectedAt == 0 || mac.DisconnectedAt != nil || mac.Devices == nil {
+			t.Fatalf("unexpected entry: %+v", mac)
+		}
+		if mac.Name == "studio" && mac.Devices[0] != testPhone {
+			t.Fatalf("studio devices: %+v", mac.Devices)
+		}
+		if mac.Name == "office" && len(mac.Devices) != 0 {
+			t.Fatalf("office should have no devices yet: %+v", mac.Devices)
+		}
+	}
+	if _, other := listDevices(t, server.URL, ClientKey("mdh_another-secret-value")); len(other.Macs) != 0 {
+		t.Fatalf("another key sees Macs: %+v", other)
+	}
+
+	// Malformed frames leave the list alone. The relay reads a Mac's frames in order, so once
+	// the Mac has answered a request sent after them, they have been handled.
+	for _, bad := range []string{`{"type":"devices","devices":[{"name":"no id"}]}`, `{"type":"devices"`, `null`} {
+		if err := studio.Write(context.Background(), websocket.MessageText, []byte(bad)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if status, _ := clientRequest(t, http.MethodGet, server.URL+"/h/studio/v1/status", key, "", nil); status != 200 {
+		t.Fatalf("round trip: status %d", status)
+	}
+	_, list = listDevices(t, server.URL, key)
+	for _, mac := range list.Macs {
+		if mac.Name == "studio" && (len(mac.Devices) != 1 || mac.Devices[0] != testPhone) {
+			t.Fatalf("malformed frame changed the list: %+v", mac.Devices)
+		}
+	}
+
+	sendDevices(t, studio, []Device{})
+	waitForDevices(t, server.URL, key, func(list devicesList) bool {
+		for _, mac := range list.Macs {
+			if mac.Name == "studio" {
+				return len(mac.Devices) == 0
+			}
+		}
+		return false
+	})
+
+	// Only connected Macs are listed.
+	studio.Close(websocket.StatusNormalClosure, "bye")
+	waitForHosts(t, server.URL, key, 1)
+	if _, list := listDevices(t, server.URL, key); len(list.Macs) != 1 || list.Macs[0].Name != "office" {
+		t.Fatalf("after disconnect: %+v", list)
+	}
 }
