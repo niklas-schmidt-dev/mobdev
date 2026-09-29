@@ -2,6 +2,7 @@ import { createFileRoute, redirect, useRouter } from "@tanstack/react-router";
 import { useState, type FormEvent, type ReactNode } from "react";
 import type { Device } from "../../shared/devices";
 import { Code, CopyButton, Page, buttonPrimary } from "../components/site";
+import { pageMeta } from "../lib/meta";
 import {
   createToken,
   deleteAccount,
@@ -12,7 +13,7 @@ import {
 } from "../server/dashboard";
 
 export const Route = createFileRoute("/dashboard")({
-  head: () => ({ meta: [{ title: "Account — Mobdev" }] }),
+  head: () => ({ meta: pageMeta("Account — Mobdev", "/dashboard") }),
   loader: async ({ location }) => {
     const data = await loadDashboard();
     if (data.state === "signed-out") {

@@ -1,6 +1,7 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { AppMock } from "../components/app-mock";
 import { Code, Icon, Page, buttonPrimary, moreLink } from "../components/site";
+import { GITHUB_URL } from "../lib/releases";
 
 export const Route = createFileRoute("/")({
   component: Home,
@@ -24,6 +25,46 @@ const steps = [
   },
 ] as const;
 
+/** The roadmap in "Coming next". Keep the statuses honest; move shipped items into the page above. */
+const roadmap = [
+  {
+    icon: "phones",
+    status: "Just shipped",
+    title: "Many iPhones, one device hub.",
+    body: "Drive several iPhones from one Mac, and see the iPhones on all your Macs in one list.",
+  },
+  {
+    icon: "devices",
+    status: "Next",
+    title: "Simulators and Android.",
+    body: "The same tools for the iOS Simulator, Android emulators and Android phones.",
+  },
+  {
+    icon: "terminal",
+    status: "Next",
+    title: "Install, launch, logs.",
+    body: "Install builds, launch apps by bundle ID, open deep links, stream logs and crash reports.",
+  },
+  {
+    icon: "tree",
+    status: "Planned",
+    title: "UI element tree.",
+    body: "Tap elements by identifier instead of pixels, on simulators, Android and developer-mode iPhones.",
+  },
+  {
+    icon: "replay",
+    status: "Planned",
+    title: "Flows and CI.",
+    body: "Turn an agent session into a replayable test, run it in CI, keep a video of every run.",
+  },
+  {
+    icon: "browser",
+    status: "Planned",
+    title: "Live view in the browser.",
+    body: "Watch and take over a phone from the dashboard, and share devices with your team.",
+  },
+] as const;
+
 const faqs = [
   [
     "Does the iPhone need developer mode or an app?",
@@ -43,7 +84,7 @@ const faqs = [
   ],
   [
     "How many phones can I use?",
-    "As many as you own, for free. Today each Mac drives one iPhone, and one account can connect several Macs.",
+    "As many as you own, for free. One Mac drives several iPhones at once, and one account connects several Macs.",
   ],
 ] as const;
 
@@ -134,7 +175,7 @@ function Home() {
               </div>
             </div>
             <div className="flex flex-col rounded-3xl bg-mist p-8">
-              <p className="headline text-[64px] text-ink">14</p>
+              <p className="headline text-[64px] text-ink">15</p>
               <p className="mt-auto text-[17px] leading-[1.47] text-muted">
                 tools, from <span className="text-ink">tap</span> and <span className="text-ink">swipe</span> to{" "}
                 <span className="text-ink">open_app</span> and <span className="text-ink">tap_text</span>.
@@ -155,7 +196,7 @@ function Home() {
               </p>
             </div>
             <div className="flex flex-col rounded-3xl bg-mist p-8">
-              <p className="headline text-[64px] text-ink">2 MB</p>
+              <p className="headline text-[64px] text-ink">3 MB</p>
               <p className="mt-auto text-[17px] leading-[1.47] text-muted">
                 A native SwiftUI app with Liquid Glass. No Electron, no account, no telemetry.
               </p>
@@ -179,8 +220,39 @@ function Home() {
         </div>
       </section>
 
+      {/* Coming next */}
+      <section id="next" className="scroll-mt-12 bg-mist px-5 py-24 sm:py-32">
+        <div className="mx-auto max-w-5xl">
+          <h2 className="headline text-balance mx-auto max-w-3xl text-center text-[40px] sm:text-[56px]">Coming next.</h2>
+          <p className="text-balance mx-auto mt-6 max-w-2xl text-center text-[19px] leading-[1.45] text-muted">
+            Mobdev is becoming a full mobile development platform. Free, like everything else.
+          </p>
+          <ul className="mt-14 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+            {roadmap.map((item) => (
+              <li key={item.title} className="rounded-3xl bg-white p-8">
+                <div className="flex items-start justify-between gap-4">
+                  <Icon name={item.icon} className="size-8 text-blue" />
+                  <span
+                    className={`rounded-full px-2.5 py-1 text-[12px] font-medium ${item.status === "Just shipped" ? "bg-blue/10 text-link" : "bg-mist text-muted"}`}
+                  >
+                    {item.status}
+                  </span>
+                </div>
+                <h3 className="mt-6 text-[21px] font-semibold tracking-tight">{item.title}</h3>
+                <p className="mt-2 text-[17px] leading-[1.47] text-muted">{item.body}</p>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-10 text-center">
+            <a href={GITHUB_URL} className={moreLink}>
+              Follow along on GitHub ›
+            </a>
+          </p>
+        </div>
+      </section>
+
       {/* Privacy */}
-      <section className="bg-mist px-5 py-24 text-center sm:py-32">
+      <section className="px-5 py-24 text-center sm:py-32">
         <Icon name="lock" className="mx-auto size-10 text-ink" />
         <h2 className="headline text-balance mx-auto mt-6 max-w-3xl text-[40px] sm:text-[56px]">
           Your screen stays on your Mac.

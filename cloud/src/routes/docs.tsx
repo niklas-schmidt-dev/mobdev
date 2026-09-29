@@ -1,10 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { Code, Page, buttonPrimary } from "../components/site";
+import { pageMeta } from "../lib/meta";
 import { GITHUB_URL } from "../lib/releases";
 
 export const Route = createFileRoute("/docs")({
-  head: () => ({ meta: [{ title: "Docs — Mobdev" }] }),
+  head: () => ({ meta: pageMeta("Docs — Mobdev", "/docs") }),
   component: Docs,
 });
 
@@ -19,6 +20,7 @@ const sections = [
 ] as const;
 
 const tools = [
+  ["list_devices", "", "The iPhones on this Mac: id, name, model, iOS version, ready"],
   ["status", "", "Screen and Bluetooth readiness, screenshot size"],
   ["screenshot", "", "JPEG of the screen"],
   ["tap", "x, y", "Tap a point of the screenshot"],
@@ -128,7 +130,10 @@ function Docs() {
               <p>
                 Coordinates are pixels of the image <code className="rounded bg-mist px-1.5 py-0.5 text-[15px]">screenshot</code> returns (long
                 edge 1280 px). Actions return a fresh screenshot unless you pass{" "}
-                <code className="rounded bg-mist px-1.5 py-0.5 text-[15px]">"screenshot": false</code>.
+                <code className="rounded bg-mist px-1.5 py-0.5 text-[15px]">"screenshot": false</code>. With more
+                than one iPhone on the Mac, pass{" "}
+                <code className="rounded bg-mist px-1.5 py-0.5 text-[15px]">device</code> (an id or name from{" "}
+                <code className="rounded bg-mist px-1.5 py-0.5 text-[15px]">list_devices</code>) to pick one.
               </p>
               <div className="overflow-x-auto rounded-2xl bg-mist">
                 <table className="w-full text-left text-[15px]">
@@ -150,6 +155,10 @@ function Docs() {
                   </tbody>
                 </table>
               </div>
+              <p>
+                Installing builds, launching apps by bundle ID and reading logs are on the way. See{" "}
+                <a href="/#next">what is coming next</a>.
+              </p>
             </Section>
 
             <Section id="remote" title="Remote access">

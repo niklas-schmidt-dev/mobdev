@@ -70,6 +70,9 @@ export function SiteFooter() {
             <a href="/#pricing" className={item}>
               Pricing
             </a>
+            <a href="/#next" className={item}>
+              Coming next
+            </a>
             <a href={GITHUB_URL} className={item}>
               GitHub
             </a>
@@ -144,7 +147,22 @@ export function Code({ children, copy, surface = "mist" }: { children: string; c
   );
 }
 
-type IconName = "plug" | "bluetooth" | "sparkle" | "text" | "list" | "globe" | "lock" | "bolt" | "phone";
+type IconName =
+  | "plug"
+  | "bluetooth"
+  | "sparkle"
+  | "text"
+  | "list"
+  | "globe"
+  | "lock"
+  | "bolt"
+  | "phone"
+  | "phones"
+  | "devices"
+  | "terminal"
+  | "tree"
+  | "replay"
+  | "browser";
 
 const iconPaths: Record<IconName, ReactNode> = {
   plug: <path d="M9 3v4M15 3v4M7 7h10v4a5 5 0 0 1-10 0V7zM12 16v5" />,
@@ -169,6 +187,45 @@ const iconPaths: Record<IconName, ReactNode> = {
     <>
       <rect x="7" y="2.5" width="10" height="19" rx="2.5" />
       <path d="M11 18.5h2" />
+    </>
+  ),
+  phones: (
+    <>
+      <rect x="4" y="6" width="10" height="16" rx="2.5" />
+      <path d="M8 19h2M8 6V4.5A2.5 2.5 0 0 1 10.5 2h7A2.5 2.5 0 0 1 20 4.5v11a2.5 2.5 0 0 1-2.5 2.5H14" />
+    </>
+  ),
+  devices: (
+    <>
+      <rect x="2.5" y="4.5" width="13" height="10" rx="2" />
+      <rect x="17.5" y="8.5" width="4.5" height="10.5" rx="1.5" />
+      <path d="M9 14.5V19M6.5 19h5" />
+    </>
+  ),
+  terminal: (
+    <>
+      <rect x="3" y="4.5" width="18" height="15" rx="2.5" />
+      <path d="M7.5 10l2.5 2.5L7.5 15M12.5 15h4" />
+    </>
+  ),
+  tree: (
+    <>
+      <rect x="9" y="3" width="6" height="5" rx="1.5" />
+      <rect x="3" y="16" width="6" height="5" rx="1.5" />
+      <rect x="15" y="16" width="6" height="5" rx="1.5" />
+      <path d="M12 8v4M6 16v-1.5A2.5 2.5 0 0 1 8.5 12h7a2.5 2.5 0 0 1 2.5 2.5V16" />
+    </>
+  ),
+  replay: (
+    <>
+      <path d="M4.5 12A7.5 7.5 0 1 0 12 4.5a7.9 7.9 0 0 0-5.5 2.3L4.5 9M4.5 4.5V9H9" />
+      <path d="M10.5 9.5v5l4-2.5-4-2.5z" />
+    </>
+  ),
+  browser: (
+    <>
+      <rect x="3" y="4" width="18" height="16" rx="2.5" />
+      <path d="M3 8.5h18M6.25 6.25h.01M8.75 6.25h.01" />
     </>
   ),
 };
