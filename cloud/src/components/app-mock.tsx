@@ -25,16 +25,19 @@ const activity = [
   ["type_text", "Typed 14 characters"],
 ];
 
-/** A drawing of the Mobdev window in light appearance, so the page never shows anyone's real phone. */
+/**
+ * A drawing of the Mobdev window in light appearance, so the page never shows anyone's real phone.
+ * Phones get only the stage with the iPhone; the sidebar joins from `sm` and the activity column from `md`.
+ */
 export function AppMock() {
   return (
     <div
       aria-hidden="true"
       className="relative mx-auto w-full max-w-4xl overflow-hidden rounded-[18px] bg-white text-left shadow-[0_30px_80px_-20px_rgba(0,0,0,0.28),0_0_0_1px_rgba(0,0,0,0.06)]"
     >
-      <div className="grid grid-cols-[150px_1fr] md:grid-cols-[180px_1fr_210px]">
+      <div className="grid grid-cols-1 sm:grid-cols-[150px_minmax(0,1fr)] md:grid-cols-[180px_minmax(0,1fr)_210px]">
         {/* Sidebar */}
-        <div className="bg-[#f3f3f5] p-3 text-[11px] text-muted">
+        <div className="hidden bg-[#f3f3f5] p-3 text-[11px] text-muted sm:block">
           <div className="mb-5 flex gap-1.5 px-1 pt-1">
             <span className="size-3 rounded-full bg-[#ff5f57]" />
             <span className="size-3 rounded-full bg-[#febc2e]" />

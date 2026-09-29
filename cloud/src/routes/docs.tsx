@@ -49,7 +49,7 @@ function Section({ id, title, children }: { id: string; title: string; children:
 function Docs() {
   return (
     <Page>
-      <div className="mx-auto grid max-w-5xl gap-12 px-5 py-16 lg:grid-cols-[190px_1fr]">
+      <div className="mx-auto grid max-w-5xl grid-cols-1 gap-12 px-5 py-16 lg:grid-cols-[190px_minmax(0,1fr)]">
         <nav aria-label="On this page" className="hidden lg:block">
           <div className="sticky top-20">
           <p className="mb-3 px-3 text-[12px] font-semibold uppercase tracking-wide text-faint">On this page</p>

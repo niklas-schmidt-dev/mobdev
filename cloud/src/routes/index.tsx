@@ -85,7 +85,7 @@ function Home() {
             <br />
             Nothing on the phone.
           </h2>
-          <div className="mt-16 grid gap-5 md:grid-cols-3">
+          <div className="mt-16 grid grid-cols-1 gap-5 md:grid-cols-3">
             {steps.map((step) => (
               <div key={step.title} className="rounded-3xl bg-white p-8">
                 <Icon name={step.icon} className="size-8 text-blue" />
@@ -121,7 +121,7 @@ function Home() {
             <br />
             Easy for you.
           </h2>
-          <div className="mt-14 grid gap-5 md:grid-cols-3">
+          <div className="mt-14 grid grid-cols-1 gap-5 md:grid-cols-3">
             <div className="rounded-3xl bg-mist p-8 md:col-span-2">
               <Icon name="bolt" className="size-8 text-blue" />
               <h3 className="mt-6 text-[24px] font-semibold tracking-tight">Connect Claude Code in one line.</h3>
@@ -206,7 +206,7 @@ function Home() {
             You already have the Mac and the iPhone. Mobdev does not charge per device, and the hosted relay is free
             while it is in beta.
           </p>
-          <div className="mt-14 grid gap-5 lg:grid-cols-3">
+          <div className="mt-14 grid grid-cols-1 gap-5 lg:grid-cols-3">
             <div className="rounded-3xl p-8 ring-2 ring-blue">
               <p className="text-[21px] font-semibold">Mobdev</p>
               <p className="headline mt-5 text-[56px]">$0</p>

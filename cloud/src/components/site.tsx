@@ -16,10 +16,10 @@ export function Logo({ className = "size-7" }: { className?: string }) {
 }
 
 export function SiteHeader() {
-  const link = "rounded-md px-3 py-1 text-[13px] text-ink/80 transition-colors hover:text-ink";
+  const link = "rounded-md px-2 py-1 text-[13px] text-ink/80 transition-colors hover:text-ink sm:px-3";
   return (
     <header className="nav-glass sticky top-0 z-40 border-b border-black/[0.06]">
-      <nav className="mx-auto flex h-12 max-w-5xl items-center px-5" aria-label="Main">
+      <nav className="mx-auto flex h-12 max-w-5xl items-center px-4 sm:px-5" aria-label="Main">
         <Link to="/" className="flex items-center gap-2 text-[15px] font-semibold tracking-tight">
           <Logo className="size-6" />
           Mobdev
@@ -36,7 +36,7 @@ export function SiteHeader() {
           </Link>
           <a
             href="/download"
-            className="ml-2 rounded-full bg-blue px-3.5 py-1 text-[13px] font-medium text-white transition-colors hover:bg-blue-hover"
+            className="ml-1.5 rounded-full bg-blue px-3 py-1 text-[13px] font-medium text-white transition-colors hover:bg-blue-hover sm:ml-2 sm:px-3.5"
           >
             Download
           </a>
@@ -128,9 +128,10 @@ export function CopyButton({ text, label = "Copy" }: { text: string; label?: str
 export function Code({ children, copy, surface = "mist" }: { children: string; copy?: boolean; surface?: "mist" | "white" }) {
   return (
     <div className="relative">
-      {/* Inter for code too. Without contextual alternates "--" stays two hyphens. */}
+      {/* Inter for code too. Without contextual alternates "--" stays two hyphens. On phones the code starts
+          below the copy button instead of running underneath it. */}
       <pre
-        className={`overflow-x-auto rounded-2xl p-5 pr-24 text-[14px] leading-relaxed text-ink [font-feature-settings:'calt'_0,'zero'_1] ${surface === "white" ? "bg-white" : "bg-mist"}`}
+        className={`overflow-x-auto rounded-2xl p-5 text-[14px] leading-relaxed text-ink [font-feature-settings:'calt'_0,'zero'_1] ${copy !== false ? "pt-14 sm:pr-24 sm:pt-5" : ""} ${surface === "white" ? "bg-white" : "bg-mist"}`}
       >
         <code>{children}</code>
       </pre>
