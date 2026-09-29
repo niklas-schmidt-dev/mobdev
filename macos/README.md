@@ -96,10 +96,12 @@ earlier `initialize`-based versions from 2024-11-05 to 2025-11-25.
 ### Tools
 
 Coordinates are pixels of the image `screenshot` returns (long edge 1280 px, origin top-left).
-Actions return a fresh screenshot over MCP unless `screenshot` is `false`.
+Actions return a fresh screenshot over MCP unless `screenshot` is `false`. With more than one iPhone
+on the Mac, pass `device` (an id or name from `list_devices`) to pick one.
 
 | Tool | Arguments | |
 |---|---|---|
+| `list_devices` | | The iPhones on this Mac: id, name, model, iOS version, ready |
 | `status` | | Screen and Bluetooth readiness, screenshot size |
 | `screenshot` | | JPEG of the screen |
 | `tap` | `x`, `y` | |

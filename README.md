@@ -55,7 +55,7 @@ Every push to `main` ships what changed, through GitHub Actions:
 | Change in | Workflow | Result |
 |---|---|---|
 | `cloud/` | `cloud.yml` | Tests, D1 migrations, deploy of mobdev.sh; relay.mobdev.sh only when the relay changed |
-| `macos/` | `macos.yml` | Tests, universal build, Developer ID signature, notarization, DMG, GitHub release `mac-v<version>`. `mobdev.sh/appcast.xml` then offers it and installed apps update through Sparkle |
+| `macos/` | `macos.yml` | Tests, universal build, Developer ID signature, notarization, DMG with a designed install window (`macos/scripts/dmg-settings.py`), GitHub release `mac-v<version>`. `mobdev.sh/appcast.xml` then offers it and installed apps update through Sparkle |
 | `relay/` | `relay.yml` | Tests, `ghcr.io/niklas-schmidt-dev/mobdev-relay` for amd64 and arm64 |
 
 The app version is `macos/VERSION` plus the workflow run number. The update window and the GitHub

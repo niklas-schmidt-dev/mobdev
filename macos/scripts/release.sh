@@ -51,12 +51,21 @@ rm -f build/notarize.zip
 ZIP="$DIST/Mobdev-$MOBDEV_VERSION.zip"
 ditto -c -k --keepParent build/Mobdev.app "$ZIP"
 
-# 3. The disk image people download, with a shortcut to drag the app into Applications.
-STAGE="$(mktemp -d)"
-ditto build/Mobdev.app "$STAGE/Mobdev.app"
-ln -s /Applications "$STAGE/Applications"
-hdiutil create -quiet -volname Mobdev -srcfolder "$STAGE" -ov -format ULFO "$DIST/Mobdev.dmg"
-rm -rf "$STAGE"
+# 3. The disk image people download: the app and a shortcut to Applications, laid out on the designed
+#    background (scripts/dmg-settings.py; the art comes from scripts/make-dmg-background.swift).
+DMGBUILD=build/dmgbuild
+if [[ ! -x "$DMGBUILD/bin/dmgbuild" ]]; then
+  python3 -m venv "$DMGBUILD"
+  "$DMGBUILD/bin/pip" install --quiet dmgbuild==1.6.7
+fi
+"$DMGBUILD/bin/dmgbuild" -s scripts/dmg-settings.py -D app=build/Mobdev.app \
+  -D background=Resources/DMGBackground.png Mobdev "$DIST/Mobdev.dmg"
+# dmgbuild does not stop when copying the app fails, so check the copy in the image.
+MOUNT="$(mktemp -d)"
+hdiutil attach -quiet -nobrowse -readonly -mountpoint "$MOUNT" "$DIST/Mobdev.dmg"
+codesign --verify --deep --strict "$MOUNT/Mobdev.app"
+if [[ "${SKIP_NOTARIZE:-0}" != "1" ]]; then xcrun stapler validate -q "$MOUNT/Mobdev.app"; fi
+hdiutil detach -quiet "$MOUNT"
 codesign --force --timestamp --sign "$CODESIGN_IDENTITY" "$DIST/Mobdev.dmg"
 notarize "$DIST/Mobdev.dmg" "$DIST/Mobdev.dmg"
 
