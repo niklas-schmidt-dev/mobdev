@@ -222,10 +222,14 @@ function Dashboard() {
               disabled={busy}
               onClick={() => {
                 if (confirm("Delete your Mobdev account? This cannot be undone.")) {
-                  void run(async () => {
-                    await deleteAccount();
-                    window.location.href = "/sign-out";
-                  });
+                  setBusy(true);
+                  // No reload in between: loading the dashboard would create the account again.
+                  deleteAccount()
+                    .then(() => window.location.assign("/sign-out"))
+                    .catch((reason: unknown) => {
+                      setError(reason instanceof Error ? reason.message : String(reason));
+                      setBusy(false);
+                    });
                 }
               }}
               className="rounded-full border border-red-400/30 px-4 py-2 text-sm text-red-200 hover:bg-red-500/10"

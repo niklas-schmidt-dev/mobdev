@@ -7,14 +7,18 @@ import {
   forgetHost,
   listAccessTokens,
   listHosts,
+  recordHostOffline,
   upsertAccount,
   type AccessTokenRow,
   type HostRow,
 } from "../../shared/db";
 
 interface RelayAdmin {
+  connected(spaceIds: string[]): Promise<Record<string, string[]>>;
   disconnectToken(tokenId: string, spaceIds: string[]): Promise<number>;
 }
+
+const relay = () => env.RELAY as unknown as RelayAdmin;
 
 async function requireUser() {
   const { user } = await getAuth();
@@ -26,10 +30,25 @@ async function requireUser() {
 async function disconnect(tokenId: string, spaceIds: string[]): Promise<void> {
   if (spaceIds.length === 0) return;
   try {
-    await (env.RELAY as unknown as RelayAdmin).disconnectToken(tokenId, spaceIds);
+    await relay().disconnectToken(tokenId, spaceIds);
   } catch (error) {
     console.warn("could not reach the relay to disconnect Macs", error);
   }
+}
+
+/** Marks Macs offline that D1 still lists as online but the relay no longer holds. */
+async function reconcile(hosts: HostRow[]): Promise<HostRow[]> {
+  const online = hosts.filter((host) => host.online === 1);
+  if (online.length === 0) return hosts;
+  let connected: Record<string, string[]>;
+  try {
+    connected = await relay().connected([...new Set(online.map((host) => host.space_id))]);
+  } catch {
+    return hosts; // Relay unreachable: show what D1 knows.
+  }
+  const stale = online.filter((host) => !connected[host.space_id]?.includes(host.name));
+  for (const host of stale) await recordHostOffline(env.DB, host.space_id, host.name);
+  return hosts.map((host) => (stale.includes(host) ? { ...host, online: 0, disconnected_at: Date.now() } : host));
 }
 
 export interface DashboardData {
@@ -44,7 +63,12 @@ export const loadDashboard = createServerFn({ method: "GET" }).handler(async ():
   if (!user) return null;
   await upsertAccount(env.DB, user.id, user.email);
   const [tokens, hosts] = await Promise.all([listAccessTokens(env.DB, user.id), listHosts(env.DB, user.id)]);
-  return { user: { email: user.email, firstName: user.firstName ?? null }, tokens, hosts, relayUrl: env.RELAY_URL };
+  return {
+    user: { email: user.email, firstName: user.firstName ?? null },
+    tokens,
+    hosts: await reconcile(hosts),
+    relayUrl: env.RELAY_URL,
+  };
 });
 
 export const createToken = createServerFn({ method: "POST" })

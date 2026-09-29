@@ -177,3 +177,21 @@ describe("hosted relay", () => {
     expect(await listAccessTokens(env.DB, id)).toHaveLength(MAX_TOKENS_PER_ACCOUNT);
   });
 });
+
+describe("relay admin", () => {
+  it("reports which Macs are really connected", async () => {
+    const { token } = await account();
+    const hostSecret = secret();
+    const mac = await fakeMac(hostSecret, token, "desk");
+    const { spaceForSecret } = await import("../shared/keys");
+    const space = await spaceForSecret(hostSecret);
+    expect(await exports.RelayAdmin.connected([space, "0".repeat(64)])).toEqual({ [space]: ["desk"], ["0".repeat(64)]: [] });
+    mac.socket.close(1000, "bye");
+    let names = ["desk"];
+    for (let attempt = 0; attempt < 100 && names.length > 0; attempt++) {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      names = (await exports.RelayAdmin.connected([space]))[space] ?? [];
+    }
+    expect(names).toEqual([]);
+  });
+});

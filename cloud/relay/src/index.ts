@@ -108,6 +108,14 @@ async function forwardToHost(request: Request, url: URL, env: RelayEnv): Promise
 
 /** Called by the website over a service binding, never over HTTP. */
 export class RelayAdmin extends WorkerEntrypoint<RelayEnv> {
+  /** Which Macs are really connected, per space. The D1 flags can be stale after a restart. */
+  async connected(spaceIds: string[]): Promise<Record<string, string[]>> {
+    const entries = await Promise.all(
+      spaceIds.map(async (spaceId) => [spaceId, await this.env.RELAY_SPACE.getByName(spaceId).hosts()] as const),
+    );
+    return Object.fromEntries(entries);
+  }
+
   /** Disconnects the Macs that use a revoked access token. */
   async disconnectToken(tokenId: string, spaceIds: string[]): Promise<number> {
     const closed = await Promise.all(

@@ -158,3 +158,21 @@ struct RelayProcess {
         #expect(allowed.state == .connected)
     }
 }
+
+@Suite struct RelayInviteTests {
+    let token = "mda_" + String(repeating: "ab", count: 32)
+
+    @Test func acceptsDashboardLinks() {
+        let url = URL(string: "mobdev://connect?relay=https%3A%2F%2Frelay.mobdev.sh&token=\(token)")!
+        #expect(RelayInvite(url: url) == RelayInvite(url: url))
+        #expect(RelayInvite(url: url)?.relay.absoluteString == "https://relay.mobdev.sh")
+        #expect(RelayInvite(url: url)?.token == token)
+    }
+
+    @Test func rejectsInsecureRelaysAndBadTokens() {
+        #expect(RelayInvite(url: URL(string: "mobdev://connect?relay=http%3A%2F%2Fevil.example&token=\(token)")!) == nil)
+        #expect(RelayInvite(url: URL(string: "mobdev://connect?relay=https%3A%2F%2Frelay.mobdev.sh&token=mda_short")!) == nil)
+        #expect(RelayInvite(url: URL(string: "mobdev://other?relay=https%3A%2F%2Frelay.mobdev.sh&token=\(token)")!) == nil)
+        #expect(RelayInvite(url: URL(string: "https://connect?relay=https%3A%2F%2Frelay.mobdev.sh&token=\(token)")!) == nil)
+    }
+}
