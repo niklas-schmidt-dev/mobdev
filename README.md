@@ -7,6 +7,9 @@ through Bluetooth, posing as a keyboard and pointer. Nothing is installed on the
 developer mode, no jailbreak, no simulator. Claude Code, Codex, Cursor or any MCP client can then
 take screenshots, tap, type, open apps and tap visible text.
 
+For apps you build, turn on Developer Mode and the agent also installs builds, launches them and
+reads their logs and crash reports: the whole build, run and debug loop on a real iPhone.
+
 ```
    iPhone ──USB screen──▶ Mobdev.app ◀── MCP / HTTP ── agents on this Mac
           ◀─Bluetooth HID─     │
@@ -20,6 +23,7 @@ take screenshots, tap, type, open apps and tap visible text.
 | [`macos/`](macos/README.md) | The Mac app, MCP server, HTTP API and stdio bridge | SwiftUI, macOS 26+, Sparkle for updates |
 | [`relay/`](relay/README.md) | Self-hosted relay for remote access | Go, one binary or Docker image |
 | [`cloud/`](cloud/README.md) | mobdev.sh: website, dashboard and hosted relay | TanStack Start, Cloudflare Workers, Durable Objects, D1, WorkOS |
+| [`skills/`](skills/README.md) | Agent skills: dev loop, smoke tests, onboarding audits, competitor research | Markdown (`SKILL.md`) |
 
 ## Get started
 
@@ -36,6 +40,9 @@ it; details are in [`macos/README.md`](macos/README.md).
 
 Remote access is optional. Create an access token at [mobdev.sh](https://mobdev.sh/dashboard) and
 click “Open in Mobdev”, or run [your own relay](relay/README.md).
+
+Give your agent the workflows too: `npx skills add niklas-schmidt-dev/mobdev` installs the
+[skills](skills/README.md).
 
 ## Development
 
