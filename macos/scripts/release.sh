@@ -3,6 +3,7 @@
 #   Mobdev.dmg                the download at mobdev.sh/download
 #   Mobdev-<version>.zip      the Sparkle update archive
 #   appcast.xml               the Sparkle feed served at mobdev.sh/appcast.xml
+# and the release notes into build/notes (see scripts/release-notes.py).
 #
 # Required environment:
 #   MOBDEV_VERSION, MOBDEV_BUILD     e.g. 0.2.14 and 14 (the build number must only grow)
@@ -19,14 +20,17 @@ if [[ "${SKIP_NOTARIZE:-0}" != "1" ]]; then
 fi
 
 SPARKLE_VERSION=2.10.0
-REPOSITORY="${GITHUB_REPOSITORY:-niklas-schmidt-dev/mobdev}"
 export MOBDEV_VERSION MOBDEV_BUILD CODESIGN_IDENTITY
 export MOBDEV_UPDATE_FEED="${MOBDEV_UPDATE_FEED:-https://mobdev.sh/appcast.xml}"
 MOBDEV_VARIANT=release UNIVERSAL=1 scripts/build-app.sh
 
 DIST=build/dist
-rm -rf "$DIST"
-mkdir -p "$DIST"
+NOTES=build/notes
+rm -rf "$DIST" "$NOTES"
+mkdir -p "$DIST" "$NOTES"
+# What's new, from the Release-Note lines of the commits since the last release. The update window
+# shows the HTML; the GitHub release gets the Markdown.
+scripts/release-notes.py "$MOBDEV_VERSION" "$NOTES/release-notes.html" "$NOTES/release-notes.md"
 
 notarize() {
   if [[ "${SKIP_NOTARIZE:-0}" == "1" ]]; then
@@ -82,7 +86,7 @@ cat > "$DIST/appcast.xml" <<XML
       <sparkle:version>$MOBDEV_BUILD</sparkle:version>
       <sparkle:shortVersionString>$MOBDEV_VERSION</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://github.com/$REPOSITORY/releases/tag/mac-v$MOBDEV_VERSION</sparkle:releaseNotesLink>
+      <description><![CDATA[$(cat "$NOTES/release-notes.html")]]></description>
       <enclosure url="$RELEASE_URL/Mobdev-$MOBDEV_VERSION.zip" type="application/octet-stream" $SIGNATURE />
     </item>
   </channel>

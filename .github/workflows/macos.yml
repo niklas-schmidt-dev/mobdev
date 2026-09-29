@@ -45,6 +45,9 @@ jobs:
       SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The release notes are collected from the commits since the previous release tag.
+          fetch-depth: 0
       - name: Check signing credentials
         id: credentials
         run: |
@@ -88,8 +91,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.build.outputs.version }}
         run: |
-          gh release create "mac-v$VERSION" macos/build/dist/* \
-            --title "Mobdev $VERSION" --generate-notes --latest
+          gh release create "mac-v$VERSION" macos/build/dist/* --target "$GITHUB_SHA" \
+            --title "Mobdev $VERSION" --notes-file macos/build/notes/release-notes.md --latest
       - name: Check the live feed
         if: steps.credentials.outputs.ready == 'true'
         env:

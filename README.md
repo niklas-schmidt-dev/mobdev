@@ -58,7 +58,15 @@ Every push to `main` ships what changed, through GitHub Actions:
 | `macos/` | `macos.yml` | Tests, universal build, Developer ID signature, notarization, DMG, GitHub release `mac-v<version>`. `mobdev.sh/appcast.xml` then offers it and installed apps update through Sparkle |
 | `relay/` | `relay.yml` | Tests, `ghcr.io/niklas-schmidt-dev/mobdev-relay` for amd64 and arm64 |
 
-The app version is `macos/VERSION` plus the workflow run number. Repository secrets:
+The app version is `macos/VERSION` plus the workflow run number. The update window and the GitHub
+release show what's new, collected from `Release-Note:` lines in the commit messages since the
+previous release:
+
+```
+Release-Note: New: All Devices shows every iPhone connected to your Macs.
+```
+
+Start a note with `New:`, `Improved:` or `Fixed:`; commits without one are not listed. Repository secrets:
 `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `DEVELOPER_ID_P12`, `DEVELOPER_ID_P12_PASSWORD`,
 `APPLE_API_KEY` (base64 `.p8`), `APPLE_API_KEY_ID`, `APPLE_API_ISSUER_ID`, `SPARKLE_PRIVATE_KEY`.
 The Sparkle key's backup is the "mobdev" item in the maintainer's keychain; losing it means
