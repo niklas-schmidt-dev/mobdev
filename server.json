@@ -1,0 +1,13 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.niklas-schmidt-dev/mobdev",
+  "title": "Mobdev",
+  "description": "Mac app that lets AI agents drive iPhones, iOS simulators and Android: tap, type, install, logs.",
+  "version": "0.2.17",
+  "websiteUrl": "https://mobdev.sh/docs",
+  "repository": {
+    "url": "https://github.com/niklas-schmidt-dev/mobdev",
+    "source": "github",
+    "subfolder": "macos"
+  }
+}
