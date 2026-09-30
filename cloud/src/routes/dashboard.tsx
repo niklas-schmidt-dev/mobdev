@@ -111,12 +111,10 @@ function DeviceGlyph({ tablet }: { tablet: boolean }) {
 
 function DeviceRow({ device, macOnline }: { device: Device; macOnline: boolean }) {
   const tablet = device.device_class === "iPad";
+  const system = tablet ? "iPadOS" : device.device_class === "Android" ? "Android" : "iOS";
   const name = device.name || device.model_name || device.device_class || "iPhone";
   const status = deviceStatus(device, macOnline);
-  const details = [
-    device.model_name || device.model,
-    device.os_version ? `${tablet ? "iPadOS" : "iOS"} ${device.os_version}` : "",
-  ]
+  const details = [device.model_name || device.model, device.os_version ? `${system} ${device.os_version}` : ""]
     .filter(Boolean)
     .join(" · ");
   // Below `sm` the status moves under the details so names keep their room.

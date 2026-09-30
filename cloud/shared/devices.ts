@@ -1,4 +1,5 @@
-// The iPhones and iPads a Mac reports to its relay. The Mac sends a text frame
+// The devices a Mac reports to its relay: iPhones and iPads, booted iOS simulators (model_name
+// ends in "Simulator") and Android devices (device_class "Android"). The Mac sends a text frame
 //   {"type":"devices","devices":[{"id","name","model","model_name","os_version","device_class",
 //                                 "screen","bluetooth","ready"}]}
 // right after connecting and whenever its devices change (RelayClient.swift). Both relays
@@ -16,7 +17,7 @@ export interface Device {
   device_class: string;
   /** The Mac has the device's picture over USB. */
   screen: boolean;
-  /** The Mac's Bluetooth keyboard and mouse are connected to it. */
+  /** Input reaches it: the Mac's Bluetooth keyboard and mouse for iPhones, always for simulators and Android. */
   bluetooth: boolean;
   ready: boolean;
 }

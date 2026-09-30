@@ -74,7 +74,8 @@ type envelope struct {
 // CloseReplaced tells a Mac that another connection with the same key and name took over.
 const CloseReplaced websocket.StatusCode = 4000
 
-// Device is an iPhone or iPad attached to a Mac. The Mac sends its list as a text frame
+// Device is an iPhone or iPad attached to a Mac, a simulator booted on it or an Android device
+// (device_class "Android"). The Mac sends its list as a text frame
 // {"type":"devices","devices":[...]} after connecting and whenever it changes. The hosted
 // relay (cloud/shared/devices.ts) validates it the same way.
 type Device struct {
@@ -84,8 +85,8 @@ type Device struct {
 	ModelName   string `json:"model_name"`
 	OSVersion   string `json:"os_version"`
 	DeviceClass string `json:"device_class"`
-	Screen      bool   `json:"screen"`    // the Mac has the device's picture over USB
-	Bluetooth   bool   `json:"bluetooth"` // the Mac's Bluetooth keyboard and mouse are connected
+	Screen      bool   `json:"screen"`    // the Mac has the device's picture
+	Bluetooth   bool   `json:"bluetooth"` // input reaches it: Bluetooth for iPhones, always for simulators and Android
 	Ready       bool   `json:"ready"`
 }
 
