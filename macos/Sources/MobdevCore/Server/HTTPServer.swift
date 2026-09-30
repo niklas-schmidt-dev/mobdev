@@ -42,22 +42,78 @@ public struct HTTPResponse: Sendable {
 
 enum HTTPParseResult {
     case incomplete
-    case complete(HTTPRequest, consumed: Int)
+    case complete(HTTPRequest)
     case invalid(Int, String)
 }
 
 enum HTTPParser {
+    /// Parses one complete request at once. The server reads with `HTTPRequestReader` as bytes arrive.
+    static func parse(_ buffer: Data) -> HTTPParseResult {
+        var reader = HTTPRequestReader()
+        return reader.append(buffer)
+    }
+}
+
+/// Reads one request as its bytes arrive. Every byte is examined once, the header, body and chunk
+/// framing each have a limit, and consumed bytes leave the buffer, so a slow or malformed request
+/// can neither grow memory nor make each new segment rescan what came before.
+struct HTTPRequestReader {
     static let maxHeaderBytes = 64 * 1024
     static let maxBodyBytes = 16 * 1024 * 1024
+    /// A chunk-size line with its extensions, or a trailer line.
+    static let maxLineBytes = 4 * 1024
+    /// Everything a request may send: headers, body and chunk framing.
+    static let maxRequestBytes = maxHeaderBytes + maxBodyBytes + 4 * 1024 * 1024
 
-    static func parse(_ buffer: Data) -> HTTPParseResult {
-        guard let headerEnd = buffer.firstRange(of: Data("\r\n\r\n".utf8)) else {
-            return buffer.count > maxHeaderBytes ? .invalid(431, "headers too large") : .incomplete
+    private enum Framing {
+        case length(Int)
+        case chunkSize
+        case chunkData(Int)
+        case trailer
+    }
+
+    private struct Head {
+        var method: String
+        var path: String
+        var query: [String: String]
+        var headers: [String: String]
+        var framing: Framing
+    }
+
+    private var buffer = Data()
+    /// Bytes at the start of `buffer` that are already consumed.
+    private var position = 0
+    private var received = 0
+    private var head: Head?
+    private var body = Data()
+
+    mutating func append(_ data: Data) -> HTTPParseResult {
+        received += data.count
+        guard received <= Self.maxRequestBytes else { return .invalid(413, "request too large") }
+        let searchFrom = max(position, buffer.count - 3)
+        buffer.append(data)
+        if head == nil, let result = readHead(searchFrom: searchFrom) { return result }
+        let result = readBody()
+        if case .incomplete = result, position > 0 {
+            buffer = Data(buffer.dropFirst(position))
+            position = 0
         }
-        guard let head = String(data: buffer[buffer.startIndex..<headerEnd.lowerBound], encoding: .utf8) else {
+        return result
+    }
+
+    /// Nil once the head is read; otherwise what to answer.
+    private mutating func readHead(searchFrom: Int) -> HTTPParseResult? {
+        let bytes = buffer
+        guard let headerEnd = bytes[(bytes.startIndex + searchFrom)...].firstRange(of: Data("\r\n\r\n".utf8)) else {
+            return bytes.count > Self.maxHeaderBytes ? .invalid(431, "headers too large") : .incomplete
+        }
+        guard headerEnd.lowerBound - bytes.startIndex <= Self.maxHeaderBytes else {
+            return .invalid(431, "headers too large")
+        }
+        guard let text = String(data: bytes[bytes.startIndex..<headerEnd.lowerBound], encoding: .utf8) else {
             return .invalid(400, "headers are not UTF-8")
         }
-        var lines = head.components(separatedBy: "\r\n")
+        var lines = text.components(separatedBy: "\r\n")
         let requestLine = lines.removeFirst().split(separator: " ", omittingEmptySubsequences: true)
         guard requestLine.count == 3, requestLine[2].hasPrefix("HTTP/1.") else {
             return .invalid(400, "bad request line")
@@ -75,53 +131,76 @@ enum HTTPParser {
         var query: [String: String] = [:]
         for item in components.queryItems ?? [] { query[item.name] = item.value ?? "" }
 
-        let bodyStart = headerEnd.upperBound
-        var body = Data()
-        var consumed = bodyStart - buffer.startIndex
+        let framing: Framing
         if headers["transfer-encoding"]?.lowercased().contains("chunked") == true {
-            switch decodeChunked(buffer[bodyStart...]) {
-            case .incomplete: return .incomplete
-            case .invalid: return .invalid(400, "bad chunked body")
-            case .complete(let decoded, let length):
-                body = decoded
-                consumed += length
-            }
+            framing = .chunkSize
         } else if let lengthHeader = headers["content-length"] {
             guard let length = Int(lengthHeader), length >= 0 else { return .invalid(400, "bad content-length") }
-            guard length <= maxBodyBytes else { return .invalid(413, "body too large") }
-            guard buffer.count - consumed >= length else { return .incomplete }
-            body = Data(buffer[bodyStart..<(bodyStart + length)])
-            consumed += length
+            guard length <= Self.maxBodyBytes else { return .invalid(413, "body too large") }
+            framing = .length(length)
+        } else {
+            framing = .length(0)
         }
-        let request = HTTPRequest(
+        head = Head(
             method: String(requestLine[0]).uppercased(), path: components.path, query: query, headers: headers,
-            body: body)
-        return .complete(request, consumed: consumed)
+            framing: framing)
+        position = headerEnd.upperBound - bytes.startIndex
+        return nil
     }
 
-    private enum ChunkResult {
-        case incomplete, invalid
-        case complete(Data, Int)
-    }
-
-    private static func decodeChunked(_ data: Data) -> ChunkResult {
-        var body = Data()
-        var index = data.startIndex
+    private mutating func readBody() -> HTTPParseResult {
+        guard var head else { return .incomplete }
+        defer { self.head = head }
         while true {
-            guard let lineEnd = data[index...].firstRange(of: Data("\r\n".utf8)) else { return .incomplete }
-            let sizeText = String(decoding: data[index..<lineEnd.lowerBound], as: UTF8.self)
-                .split(separator: ";").first.map(String.init) ?? ""
-            guard let size = Int(sizeText.trimmingCharacters(in: .whitespaces), radix: 16) else { return .invalid }
-            index = lineEnd.upperBound
-            if size == 0 {
-                guard let end = data[index...].firstRange(of: Data("\r\n".utf8)) else { return .incomplete }
-                return .complete(body, end.upperBound - data.startIndex)
+            let available = buffer.count - position
+            switch head.framing {
+            case .length(let length):
+                guard available >= length else { return .incomplete }
+                return finish(head, body: bytes(position, length))
+            case .chunkSize:
+                guard let line = takeLine() else { return lineIncomplete() }
+                // The size in hex, optionally followed by ";extensions". Signs, inner spaces and
+                // sizes beyond the body limit are malformed, checked before any arithmetic.
+                let digits = line.split(separator: ";", maxSplits: 1, omittingEmptySubsequences: false).first
+                    .map { $0.trimmingCharacters(in: .whitespaces) } ?? ""
+                guard (1...8).contains(digits.count), digits.allSatisfy(\.isHexDigit), let size = Int(digits, radix: 16)
+                else { return .invalid(400, "bad chunked body") }
+                guard size <= Self.maxBodyBytes - body.count else { return .invalid(413, "body too large") }
+                head.framing = size == 0 ? .trailer : .chunkData(size)
+            case .chunkData(let size):
+                guard available >= size + 2 else { return .incomplete }
+                guard bytes(position + size, 2) == Data("\r\n".utf8) else { return .invalid(400, "bad chunked body") }
+                body.append(bytes(position, size))
+                position += size + 2
+                head.framing = .chunkSize
+            case .trailer:
+                // Trailer fields are allowed and ignored; an empty line ends the body.
+                guard let line = takeLine() else { return lineIncomplete() }
+                if line.isEmpty { return finish(head, body: body) }
             }
-            guard body.count + size <= maxBodyBytes else { return .invalid }
-            guard data.endIndex - index >= size + 2 else { return .incomplete }
-            body.append(data[index..<(index + size)])
-            index += size + 2
         }
+    }
+
+    private func bytes(_ offset: Int, _ count: Int) -> Data {
+        let start = buffer.startIndex + offset
+        return buffer[start..<(start + count)]
+    }
+
+    /// The next CRLF-terminated line, consumed.
+    private mutating func takeLine() -> String? {
+        let window = bytes(position, min(buffer.count - position, Self.maxLineBytes + 2))
+        guard let end = window.firstRange(of: Data("\r\n".utf8)) else { return nil }
+        position += end.upperBound - window.startIndex
+        return String(decoding: window[window.startIndex..<end.lowerBound], as: UTF8.self)
+    }
+
+    private func lineIncomplete() -> HTTPParseResult {
+        buffer.count - position > Self.maxLineBytes + 1 ? .invalid(400, "bad chunked body") : .incomplete
+    }
+
+    private func finish(_ head: Head, body: Data) -> HTTPParseResult {
+        .complete(
+            HTTPRequest(method: head.method, path: head.path, query: head.query, headers: head.headers, body: Data(body)))
     }
 }
 
@@ -129,34 +208,58 @@ enum HTTPParser {
 public final class HTTPServer: @unchecked Sendable {
     public typealias Handler = @Sendable (HTTPRequest) async -> HTTPResponse
 
+    /// Connections served at once; more are closed right away.
+    static let maxConnections = 64
+
+    private enum Endpoint {
+        case loopback(UInt16)
+        case socket(URL)
+    }
+
     private let queue = DispatchQueue(label: "dev.mobdev.http")
-    private let requestedPort: UInt16
+    private let endpoint: Endpoint
     private let handler: Handler
     private var listener: NWListener?
     private let boundPort = Locked<UInt16>(0)
+    private let connections = Locked(0)
 
+    /// Serves on 127.0.0.1. Port 0 picks a free one.
     public init(port: UInt16, handler: @escaping Handler) {
-        self.requestedPort = port
+        self.endpoint = .loopback(port)
+        self.handler = handler
+    }
+
+    /// Serves on a Unix-domain socket that only this user can connect to: the file is 0600 in a
+    /// directory only this user may write to. Unlike a loopback port, no other user can take it over.
+    public init(socket: URL, handler: @escaping Handler) {
+        self.endpoint = .socket(socket)
         self.handler = handler
     }
 
     public var port: UInt16 { boundPort.get() }
 
-    /// Starts listening on 127.0.0.1 only.
     public func start() async throws {
         let parameters = NWParameters.tcp
-        parameters.allowLocalEndpointReuse = true
-        parameters.requiredLocalEndpoint = NWEndpoint.hostPort(
-            host: .ipv4(.loopback), port: NWEndpoint.Port(rawValue: requestedPort) ?? .any)
+        switch endpoint {
+        case .loopback(let port):
+            parameters.allowLocalEndpointReuse = true
+            parameters.requiredLocalEndpoint = NWEndpoint.hostPort(
+                host: .ipv4(.loopback), port: NWEndpoint.Port(rawValue: port) ?? .any)
+        case .socket(let url):
+            try LocalSocket.prepareToListen(at: url)
+            parameters.requiredLocalEndpoint = .unix(path: url.path)
+        }
         let listener = try NWListener(using: parameters)
         self.listener = listener
         listener.newConnectionHandler = { [weak self] connection in self?.accept(connection) }
         let started = Locked(false)
+        let endpoint = self.endpoint
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             listener.stateUpdateHandler = { [weak self] state in
                 switch state {
                 case .ready:
                     self?.boundPort.set(listener.port?.rawValue ?? 0)
+                    if case .socket(let url) = endpoint { chmod(url.path, 0o600) }
                     if !started.withLock({ let was = $0; $0 = true; return was }) { continuation.resume() }
                 case .failed(let error):
                     if !started.withLock({ let was = $0; $0 = true; return was }) {
@@ -174,30 +277,52 @@ public final class HTTPServer: @unchecked Sendable {
     public func stop() {
         listener?.cancel()
         listener = nil
+        if case .socket(let url) = endpoint { unlink(url.path) }
     }
 
     private func accept(_ connection: NWConnection) {
+        let admitted = connections.withLock { count -> Bool in
+            guard count < Self.maxConnections else { return false }
+            count += 1
+            return true
+        }
+        guard admitted else {
+            connection.cancel()
+            return
+        }
+        let connections = self.connections
+        connection.stateUpdateHandler = { state in
+            switch state {
+            case .failed, .waiting: connection.cancel()
+            case .cancelled: connections.withLock { $0 -= 1 }
+            default: break
+            }
+        }
         connection.start(queue: queue)
         let received = Locked(false)
         queue.asyncAfter(deadline: .now() + 30) {
             if !received.get() { connection.cancel() }
         }
-        receive(connection, buffer: Data(), received: received)
+        receive(connection, reader: HTTPRequestReader(), received: received)
     }
 
-    private func receive(_ connection: NWConnection, buffer: Data, received: Locked<Bool>) {
+    private func receive(_ connection: NWConnection, reader: HTTPRequestReader, received: Locked<Bool>) {
         connection.receive(minimumIncompleteLength: 1, maximumLength: 256 * 1024) {
             [weak self] data, _, isComplete, error in
             guard let self else { return }
-            var buffer = buffer
-            if let data { buffer.append(data) }
-            switch HTTPParser.parse(buffer) {
-            case .complete(let request, _):
+            var reader = reader
+            switch data.map({ reader.append($0) }) ?? .incomplete {
+            case .complete(let request):
                 received.set(true)
                 let handler = self.handler
-                Task {
+                let task = Task {
                     let response = await handler(request)
                     self.send(response, on: connection)
+                }
+                // A client that hangs up no longer waits for the answer: stop the work it asked for,
+                // such as typing that is still going.
+                connection.receive(minimumIncompleteLength: 1, maximumLength: 1) { _, _, isComplete, error in
+                    if isComplete || error != nil { task.cancel() }
                 }
             case .invalid(let status, let message):
                 received.set(true)
@@ -207,7 +332,7 @@ public final class HTTPServer: @unchecked Sendable {
                     received.set(true)
                     connection.cancel()
                 } else {
-                    self.receive(connection, buffer: buffer, received: received)
+                    self.receive(connection, reader: reader, received: received)
                 }
             }
         }

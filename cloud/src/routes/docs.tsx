@@ -31,7 +31,7 @@ const tools = [
   ["long_press", "x, y, seconds", "Touch and hold"],
   ["swipe", "from_x, from_y, to_x, to_y, duration", "Drag, e.g. to scroll"],
   ["scroll", "direction, amount, x, y", "Mouse wheel"],
-  ["type_text", "text, submit", "Type into the focused field"],
+  ["type_text", "text, submit", "Type into the focused field (up to 1000 characters per call)"],
   ["press_key", "key, modifiers", "e.g. space + cmd for Spotlight"],
   ["home", "", "Go to the home screen"],
   ["open_app", "name", "Open an app through Spotlight"],

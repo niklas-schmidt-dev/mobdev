@@ -340,6 +340,16 @@ struct SetupSteps: View {
                 // Hidden while another iPhone is paired: republishing would interrupt it.
                 Button("Show on iPhone Again", systemImage: "arrow.clockwise") { model.offerBluetoothAgain() }
             }
+            if let host = model.state(id)?.replacementHost {
+                // Input never moves to another Bluetooth host on its own: a host's name is only what it says.
+                Text(
+                    "“\(host.name ?? "An iPhone")” is connected over Bluetooth, but this iPhone was paired as another device before. Use the connection only if it is this iPhone."
+                )
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                Button("Use This Connection") { model.useBluetoothHost(host.id, for: id) }
+            }
             StepRow(
                 title: "AssistiveTouch",
                 detail: "Settings › Accessibility › Touch › AssistiveTouch. Turns the pointer into taps.",

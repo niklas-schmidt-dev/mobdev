@@ -198,8 +198,10 @@ public final class HIDPeripheral: NSObject, CBPeripheralManagerDelegate, CBCentr
         var characteristics: [CBMutableCharacteristic] = [info, reportMap, controlPoint, protocolMode]
         inputs = [:]
         for id in ReportID.allCases {
+            // Encrypted reads alone would still let an unpaired central subscribe and receive the
+            // keystrokes; notifications need a paired, encrypted link too.
             let report = CBMutableCharacteristic(
-                type: CBUUID(string: "2A4D"), properties: [.read, .notify],
+                type: CBUUID(string: "2A4D"), properties: [.read, .notify, .notifyEncryptionRequired],
                 value: nil, permissions: [.readEncryptionRequired])
             report.descriptors = [CBMutableDescriptor(type: CBUUID(string: "2908"), value: Data([id.rawValue, 1]))]
             inputs[id] = report

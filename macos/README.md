@@ -71,7 +71,9 @@ Activity lists every agent action, and Settings (⌘,) holds the keyboard layout
 ## Connect an agent
 
 The app shows ready-to-copy configurations with the right paths. The stdio variants need no
-token: `Mobdev mcp` reads it locally and starts the app in the background if needed.
+token: `Mobdev mcp` reads it locally and starts the app in the background if needed. It reaches
+the app over a Unix socket in the app's data directory rather than the TCP port, so another user
+on the Mac cannot pose as the app and collect the token.
 
 Claude Code:
 
@@ -112,7 +114,7 @@ on the Mac, pass `device` (an id or name from `list_devices`) to pick one.
 | `long_press` | `x`, `y`, `seconds` | |
 | `swipe` | `from_x`, `from_y`, `to_x`, `to_y`, `duration` | |
 | `scroll` | `direction` (`up`/`down`), `amount`, `x`, `y` | Mouse wheel |
-| `type_text` | `text`, `submit` | Into the focused field |
+| `type_text` | `text`, `submit` | Into the focused field, at most 1000 characters per call |
 | `press_key` | `key`, `modifiers` | e.g. `space` + `cmd` for Spotlight |
 | `home` | | |
 | `open_app` | `name` | Through Spotlight |

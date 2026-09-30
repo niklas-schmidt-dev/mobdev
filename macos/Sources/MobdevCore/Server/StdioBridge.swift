@@ -1,13 +1,12 @@
 import Foundation
 
 /// `Mobdev mcp`: an MCP stdio server for clients that launch servers as subprocesses. Each
-/// line is forwarded to the running app's HTTP endpoint with the local token, so the MCP
-/// config needs no secret.
+/// line is forwarded with the local token to the running app over its Unix socket, which only
+/// this user can serve, so the MCP config needs no secret and no other user can collect it.
 public enum MCPStdioBridge {
     public static func run(launchApp: @escaping @Sendable () -> Void) -> Never {
-        let port = MobdevPaths.port(settings: AppSettings.load())
         Task {
-            let bridge = Bridge(port: port, tokenFile: MobdevPaths.tokenFile, launchApp: launchApp)
+            let bridge = Bridge(socket: MobdevPaths.socketFile, tokenFile: MobdevPaths.tokenFile, launchApp: launchApp)
             do {
                 for try await line in FileHandle.standardInput.bytes.lines {
                     if let reply = await bridge.forward(line) {
@@ -23,23 +22,22 @@ public enum MCPStdioBridge {
     }
 
     public actor Bridge {
-        private let port: UInt16
+        private let socket: URL
         private let tokenFile: URL
         private let launchApp: @Sendable () -> Void
         private let launchWait: TimeInterval
+        private let timeout: TimeInterval
         private var launched = false
-        private let session: URLSession
 
         public init(
-            port: UInt16, tokenFile: URL, launchWait: TimeInterval = 10, launchApp: @escaping @Sendable () -> Void
+            socket: URL, tokenFile: URL, launchWait: TimeInterval = 10, timeout: TimeInterval = 300,
+            launchApp: @escaping @Sendable () -> Void
         ) {
-            self.port = port
+            self.socket = socket
             self.tokenFile = tokenFile
             self.launchWait = launchWait
+            self.timeout = timeout
             self.launchApp = launchApp
-            let configuration = URLSessionConfiguration.ephemeral
-            configuration.timeoutIntervalForRequest = 120
-            session = URLSession(configuration: configuration)
         }
 
         /// Forwards one JSON-RPC line. Returns the reply line, or nil for notifications.
@@ -55,46 +53,88 @@ public enum MCPStdioBridge {
                 return String(decoding: data, as: UTF8.self)
             } catch {
                 guard isRequest else { return nil }
-                return self.error(id, "Mobdev is not running or not reachable on port \(port). Open Mobdev.app.")
+                switch error as? LocalSocket.Failure {
+                case .notRunning?:
+                    return self.error(id, "Mobdev is not running. Open \(MobdevPaths.appName).app.")
+                case .interrupted(let reason)?:
+                    // It may have run, so it is not sent again: a second tap or text could do harm.
+                    return self.error(
+                        id, "\(reason) The request may or may not have been carried out; check before retrying.")
+                default:
+                    return self.error(id, "Cannot reach Mobdev: \(error)")
+                }
             }
         }
 
+        /// Sends the request once. When the app is not running, nothing was sent: it starts the app,
+        /// waits until the app answers a health check, then sends it.
         private func post(_ body: String, message: JSONValue?) async throws -> (Data, Int) {
             do {
                 return try await send(body, message: message)
-            } catch let error as URLError where error.code == .cannotConnectToHost || error.code == .networkConnectionLost {
-                guard !launched else { throw error }
+            } catch LocalSocket.Failure.notRunning where !launched {
                 launched = true
                 launchApp()
+                let health = Self.request("GET", "/healthz", headers: [:], body: Data())
                 for _ in 0..<max(1, Int(launchWait / 0.25)) {
                     try await Task.sleep(nanoseconds: 250_000_000)
-                    if let result = try? await send(body, message: message) { return result }
+                    if (try? await exchange(health)) != nil { return try await send(body, message: message) }
                 }
-                throw error
+                throw LocalSocket.Failure.notRunning
             }
         }
 
         private func send(_ body: String, message: JSONValue?) async throws -> (Data, Int) {
-            var request = URLRequest(url: URL(string: "http://127.0.0.1:\(port)/mcp")!)
-            request.httpMethod = "POST"
-            request.httpBody = Data(body.utf8)
-            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            request.setValue("application/json, text/event-stream", forHTTPHeaderField: "Accept")
-            if let token = SecretStore.read(tokenFile) {
-                request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-            }
+            var headers = ["Content-Type": "application/json", "Accept": "application/json, text/event-stream"]
+            if let token = SecretStore.read(tokenFile) { headers["Authorization"] = "Bearer \(token)" }
             // Mirror the metadata a modern Streamable HTTP client would send.
             if let method = message?["method"]?.stringValue,
                 let version = message?["params"]?["_meta"]?["io.modelcontextprotocol/protocolVersion"]?.stringValue
             {
-                request.setValue(version, forHTTPHeaderField: "MCP-Protocol-Version")
-                request.setValue(method, forHTTPHeaderField: "Mcp-Method")
-                if let name = message?["params"]?["name"]?.stringValue {
-                    request.setValue(Self.headerValue(name), forHTTPHeaderField: "Mcp-Name")
+                headers["MCP-Protocol-Version"] = Self.headerValue(version)
+                headers["Mcp-Method"] = Self.headerValue(method)
+                if let name = message?["params"]?["name"]?.stringValue { headers["Mcp-Name"] = Self.headerValue(name) }
+            }
+            return try Self.parse(try await exchange(Self.request("POST", "/mcp", headers: headers, body: Data(body.utf8))))
+        }
+
+        /// Blocking socket work runs off the actor.
+        private func exchange(_ request: Data) async throws -> Data {
+            let socket = self.socket
+            let timeout = self.timeout
+            return try await withCheckedThrowingContinuation { continuation in
+                DispatchQueue.global().async {
+                    continuation.resume(with: Result { try LocalSocket.exchange(request, at: socket, timeout: timeout) })
                 }
             }
-            let (data, response) = try await session.data(for: request)
-            return (data, (response as? HTTPURLResponse)?.statusCode ?? 0)
+        }
+
+        static func request(_ method: String, _ path: String, headers: [String: String], body: Data) -> Data {
+            var head = "\(method) \(path) HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\nContent-Length: \(body.count)\r\n"
+            for (name, value) in headers.sorted(by: { $0.key < $1.key })
+            where !value.contains(where: { $0 == "\r" || $0 == "\n" }) {
+                head += "\(name): \(value)\r\n"
+            }
+            return Data((head + "\r\n").utf8) + body
+        }
+
+        /// Status and body of a response that ends where the server closed the connection.
+        static func parse(_ response: Data) throws -> (Data, Int) {
+            guard let end = response.firstRange(of: Data("\r\n\r\n".utf8)),
+                let head = String(data: response[response.startIndex..<end.lowerBound], encoding: .utf8),
+                let status = head.split(separator: " ", maxSplits: 2).dropFirst().first.flatMap({ Int($0) })
+            else { throw LocalSocket.Failure.interrupted("Mobdev sent an incomplete response.") }
+            var body = Data(response[end.upperBound...])
+            for line in head.components(separatedBy: "\r\n").dropFirst() {
+                let parts = line.split(separator: ":", maxSplits: 1)
+                guard parts.count == 2, parts[0].lowercased() == "content-length",
+                    let length = Int(parts[1].trimmingCharacters(in: .whitespaces))
+                else { continue }
+                guard length <= body.count else {
+                    throw LocalSocket.Failure.interrupted("Mobdev sent an incomplete response.")
+                }
+                body = body.prefix(length)
+            }
+            return (body, status)
         }
 
         private func error(_ id: JSONValue?, _ message: String) -> String {

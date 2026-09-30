@@ -22,6 +22,45 @@ import Testing
         #expect(try RelayClient.validatedURL("http://127.0.0.1:8080").port == 8080)
         #expect(throws: RelayError.self) { try RelayClient.validatedURL("http://relay.example.com") }
         #expect(throws: RelayError.self) { try RelayClient.validatedURL("relay.example.com") }
+        #expect(try RelayClient.validatedURL("https://example.com/mobdev/relay/").path == "/mobdev/relay")
+    }
+
+    /// Relay URLs arrive in connect links and end up in shell commands.
+    @Test func relayURLHasNoShellSyntaxCredentialsOrQuery() {
+        for text in [
+            "https://relay.mobdev.sh/$(id)", "https://relay.mobdev.sh/`id`", "https://relay.mobdev.sh/a;id",
+            "https://relay.mobdev.sh/?x=$(id)", "https://relay.mobdev.sh/#$(id)", "https://user:pw@relay.mobdev.sh",
+            "https://relay.mobdev.sh/%24(id)", "https://relay.mobdev.sh/a'b",
+        ] {
+            #expect(throws: RelayError.self, "\(text)") { try RelayClient.validatedURL(text) }
+        }
+    }
+}
+
+@Suite struct ShellQuotingTests {
+    @Test func plainWordsStayAsTheyAre() {
+        #expect(Shell.quoted("https://relay.mobdev.sh/h/studio/mcp") == "https://relay.mobdev.sh/h/studio/mcp")
+        #expect(Shell.quoted("/Applications/Mobdev.app/Contents/MacOS/Mobdev") == "/Applications/Mobdev.app/Contents/MacOS/Mobdev")
+    }
+
+    /// The shell must hand back exactly the value, running nothing in it.
+    @Test func everythingElseReachesTheCommandLiterally() throws {
+        let marker = FileManager.default.temporaryDirectory.appendingPathComponent("mobdev-shell-\(UUID().uuidString)")
+        let values = [
+            "https://relay.mobdev.sh/$(touch \(marker.path))/mcp", "`touch \(marker.path)`", "a'b\"c", "it's; touch \(marker.path)",
+            "Authorization: Bearer mdc_abc", "", "/Applications/My Apps/Mobdev.app", "$HOME \\ * ? ~",
+        ]
+        for value in values {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/bin/sh")
+            process.arguments = ["-c", "printf %s \(Shell.quoted(value))"]
+            let pipe = Pipe()
+            process.standardOutput = pipe
+            try process.run()
+            process.waitUntilExit()
+            #expect(String(decoding: pipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self) == value)
+        }
+        #expect(!FileManager.default.fileExists(atPath: marker.path))
     }
 }
 
@@ -83,6 +122,39 @@ import Testing
         let (_, wrongResponse) = try await URLSession.shared.data(for: wrong)
         #expect((wrongResponse as? HTTPURLResponse)?.statusCode == 503)
         #expect(phone.events.get().count == 1)
+    }
+
+    /// When the agent gives up, the relay sends "cancel" and the Mac stops the work: typing that
+    /// nobody waits for must not keep going on the phone.
+    @Test(.enabled(if: RelayEndToEndTests.goPath != nil, "Go is not installed"))
+    func abandonedRequestsAreCancelledOnTheMac() async throws {
+        let relay = try await RelayProcess.start()
+        defer { relay.stop() }
+        let started = Locked(false)
+        let cancelled = Locked(false)
+        let client = RelayClient(handler: { _ in
+            started.set(true)
+            try? await Task.sleep(for: .seconds(20))
+            cancelled.set(Task.isCancelled)
+            return HTTPResponse(status: 200)
+        })
+        let secret = "mdh_" + SecretStore.randomHex(bytes: 32)
+        client.start(url: relay.base, secret: secret, hostName: "studio", accessToken: nil)
+        defer { client.stop() }
+        for _ in 0..<100 where client.state != .connected { try await Task.sleep(for: .milliseconds(50)) }
+        #expect(client.state == .connected)
+
+        var request = URLRequest(url: relay.base.appendingPathComponent("mcp"))
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(RelayClient.clientKey(forSecret: secret))", forHTTPHeaderField: "Authorization")
+        request.httpBody = Data("{}".utf8)
+        let agent = Task { try await URLSession.shared.data(for: request) }
+        for _ in 0..<100 where !started.get() { try await Task.sleep(for: .milliseconds(50)) }
+        #expect(started.get())
+        agent.cancel()
+        for _ in 0..<100 where !cancelled.get() { try await Task.sleep(for: .milliseconds(50)) }
+        #expect(cancelled.get())
+        #expect(client.state == .connected)
     }
 
     /// The Mac reports its devices over the relay, and the relay lists them for the key.

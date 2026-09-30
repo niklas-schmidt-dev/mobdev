@@ -87,7 +87,8 @@ public struct DeviceSummary: Sendable, Equatable, Codable {
 public final class DeviceTools: ToolCalling {
     private let hub: DeviceHub
     private let settleDelay: TimeInterval
-    private let tools = Locked<[String: PhoneTools]>([:])
+    /// Per device, with the object it was made for: a rescan can replace a device under the same id.
+    private let tools = Locked<[String: (device: HardwareDevice, tools: PhoneTools)]>([:])
 
     public init(hub: DeviceHub, settleDelay: TimeInterval = 0.6) {
         self.hub = hub
@@ -124,9 +125,16 @@ public final class DeviceTools: ToolCalling {
     {
         guard Self.definitions.contains(where: { $0.name == name }) else { throw UnknownToolError(name: name) }
         if name == "list_devices" { return listDevices() }
-        let query = arguments?["device"]?.stringValue
-        if name == "status", query == nil, hub.devices.count != 1 { return overview() }
         do {
+            // Only a missing (or null) `device` means "pick for me". A number, an empty string or
+            // anything else is a mistake, and guessing could act on the wrong phone.
+            let query: String?
+            switch arguments?["device"] {
+            case nil, .null?: query = nil
+            case .string(let text)?: query = text
+            default: throw ToolFailure("device must be a device id or name from list_devices.")
+            }
+            if name == "status", query == nil, hub.devices.count != 1 { return overview() }
             let device = try resolve(query)
             var remaining = arguments ?? [:]
             if case .object(var object) = remaining {
@@ -143,23 +151,36 @@ public final class DeviceTools: ToolCalling {
     public func phone(for device: String?) throws -> PhoneBackend { try resolve(device) }
 
     private func tools(for device: HardwareDevice) -> PhoneTools {
-        tools.withLock { cache in
-            if let existing = cache[device.id] { return existing }
+        let current = Set(hub.devices.map(\.id))
+        return tools.withLock { cache in
+            cache = cache.filter { current.contains($0.key) }  // Forgotten devices.
+            if let existing = cache[device.id], existing.device === device { return existing.tools }
             let created = PhoneTools(phone: device, activity: device.activity, settleDelay: settleDelay)
-            cache[device.id] = created
+            cache[device.id] = (device, created)
             return created
         }
     }
 
     private func resolve(_ query: String?) throws -> HardwareDevice {
-        if let device = hub.device(matching: query) { return device }
+        if let query, query.trimmingCharacters(in: .whitespaces).isEmpty {
+            throw ToolFailure("device must be a device id or name from list_devices.")
+        }
+        let matches = hub.devices(matching: query)
+        if matches.count == 1 { return matches[0] }
         let devices = hub.devices
-        let names = devices.map { "\($0.name) (\($0.id))" }.joined(separator: ", ")
+        func list(_ devices: [HardwareDevice]) -> String {
+            devices.map { "\($0.name) (\($0.id))" }.joined(separator: ", ")
+        }
         if devices.isEmpty {
             throw ToolFailure("No iPhone is connected. Connect an unlocked iPhone with a USB data cable.")
         }
-        if let query, !query.isEmpty { throw ToolFailure("No device \"\(query)\". Devices: \(names).") }
-        throw ToolFailure("Several devices are connected. Pass `device` with one of: \(names).")
+        if let query {
+            if matches.count > 1 {
+                throw ToolFailure("\"\(query)\" matches several devices: \(list(matches)). Pass the full id.")
+            }
+            throw ToolFailure("No device \"\(query)\". Devices: \(list(devices)).")
+        }
+        throw ToolFailure("Several devices are connected. Pass `device` with one of: \(list(devices)).")
     }
 
     private func listDevices() -> ToolOutput {

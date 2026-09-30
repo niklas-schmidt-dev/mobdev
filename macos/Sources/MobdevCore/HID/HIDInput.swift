@@ -88,9 +88,19 @@ public final class HIDInput: @unchecked Sendable {
         }
     }
 
+    /// Stops between keystrokes when the calling task is cancelled, e.g. when the agent's request
+    /// timed out at the relay or its connection closed, so the text does not keep coming later.
     public func type(_ strokes: [KeyStroke]) async throws {
-        try await run {
-            for stroke in strokes { try self.sendStroke(stroke) }
+        let cancelled = Locked(false)
+        try await withTaskCancellationHandler {
+            try await run {
+                for stroke in strokes {
+                    if cancelled.get() { throw CancellationError() }
+                    try self.sendStroke(stroke)
+                }
+            }
+        } onCancel: {
+            cancelled.set(true)
         }
     }
 

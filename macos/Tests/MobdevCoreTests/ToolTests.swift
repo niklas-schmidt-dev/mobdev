@@ -65,6 +65,34 @@ extension Trait where Self == ConditionTrait {
         #expect(log.all.first?.failed == true)
     }
 
+    /// A finite but huge coordinate used to trap while formatting the error.
+    @Test func hugeCoordinatesAreAToolErrorNotACrash() async throws {
+        let (tools, _) = tools()
+        for value in [1e20, -1e20, 1e300, 9.3e18] {
+            let output = try await tools.call(
+                "tap", arguments: ["x": .number(value), "y": 10], source: "test", screenshotByDefault: false)
+            #expect(output.isError)
+            #expect(output.text.contains("outside the screenshot"))
+        }
+        #expect(phone.events.get().isEmpty)
+    }
+
+    @Test func typingIsLimitedPerCall() async throws {
+        let (tools, _) = tools()
+        let long = String(repeating: "a", count: PhoneTools.maxTypedCharacters + 1)
+        let output = try await tools.call("type_text", arguments: ["text": .string(long)], source: "test", screenshotByDefault: false)
+        #expect(output.isError)
+        #expect(output.text.contains("at most 1000"))
+        let app = try await tools.call(
+            "open_app", arguments: ["name": .string(String(repeating: "a", count: 101))], source: "test",
+            screenshotByDefault: false)
+        #expect(app.isError)
+        #expect(phone.events.get().isEmpty)
+        _ = try await tools.call(
+            "type_text", arguments: ["text": .string(String(long.dropLast()))], source: "test", screenshotByDefault: false)
+        #expect(phone.events.get().count == 1)
+    }
+
     @Test func touchNeedsBluetooth() async throws {
         let offline = FakePhone(lines: [], bluetoothConnected: false)
         let (tools, _) = tools(offline)

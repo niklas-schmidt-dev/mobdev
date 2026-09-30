@@ -179,18 +179,39 @@ public final class DeviceHub: @unchecked Sendable {
         }
     }
 
-    /// The device a request means: by id, name (case-insensitive) or an id prefix of at least six
-    /// characters. Without a query, the only device, or the only one with a screen.
+    /// The device a request means, or nil when none or several match (see `devices(matching:)`).
     public func device(matching query: String?) -> HardwareDevice? {
+        let matches = devices(matching: query)
+        return matches.count == 1 ? matches[0] : nil
+    }
+
+    /// The devices a request could mean: an exact id, else every device with that name
+    /// (case-insensitive), else every id starting with a prefix of at least six characters. Without
+    /// a query, the only device, else the ones with a screen.
+    public func devices(matching query: String?) -> [HardwareDevice] {
         let list = devices
+        let keys = list.map { DeviceKey(id: $0.id, captureID: $0.captureID, name: $0.name, connected: $0.capture.state.isConnected) }
+        return Self.matches(query, in: keys).map { list[$0] }
+    }
+
+    struct DeviceKey {
+        var id: String
+        var captureID: String
+        var name: String
+        var connected: Bool
+    }
+
+    static func matches(_ query: String?, in keys: [DeviceKey]) -> [Int] {
+        let all = Array(keys.indices)
         guard let query = query?.trimmingCharacters(in: .whitespaces), !query.isEmpty else {
-            if list.count == 1 { return list[0] }
-            let connected = list.filter { $0.capture.state.isConnected }
-            return connected.count == 1 ? connected[0] : nil
+            return keys.count == 1 ? all : all.filter { keys[$0].connected }
         }
-        return list.first { $0.id == query || $0.captureID == query }
-            ?? list.first { $0.name.caseInsensitiveCompare(query) == .orderedSame }
-            ?? (query.count >= 6 ? list.first { $0.id.lowercased().hasPrefix(query.lowercased()) } : nil)
+        let exact = all.filter { keys[$0].id == query || keys[$0].captureID == query }
+        if !exact.isEmpty { return exact }
+        let named = all.filter { keys[$0].name.caseInsensitiveCompare(query) == .orderedSame }
+        if !named.isEmpty { return named }
+        guard query.count >= 6 else { return [] }
+        return all.filter { keys[$0].id.lowercased().hasPrefix(query.lowercased()) }
     }
 
     public var keyboardLayout: KeyboardLayout {
@@ -310,14 +331,16 @@ public final class DeviceHub: @unchecked Sendable {
 
     // MARK: Bluetooth hosts
 
-    /// Gives each connected Bluetooth host to a device: its remembered one, then the device with
-    /// the same name, then the only device of the same model, then the only device left.
+    /// Gives each connected Bluetooth host that belongs to no device to a device without one: the
+    /// device with the same name, then the only device of the same model, then the only device left.
+    /// A device keeps its host once it has one. While that host is away, the device's input waits for
+    /// it rather than going to another host that connects: names and models are only what a host
+    /// says about itself, so switching needs the user's word (`useHost(_:for:)`).
     private func assignHosts() {
         let hosts = peripheral.connectedHosts
         let devices = deviceList.get()
         var free = hosts.filter { host in !devices.contains { $0.host == host.id } }
-        var waiting = devices.filter { device in device.host == nil || !hosts.contains { $0.id == device.host } }
-            .filter { $0.capture.state.isConnected || $0.host == nil }
+        var waiting = devices.filter { $0.host == nil }
         guard !free.isEmpty, !waiting.isEmpty else { return }
 
         func take(_ host: BluetoothHost, _ device: HardwareDevice) {
@@ -338,6 +361,34 @@ public final class DeviceHub: @unchecked Sendable {
         }
         if free.count == 1, waiting.count == 1 { take(free[0], waiting[0]) }
         saveKnownDevices()
+    }
+
+    /// For a device whose own Bluetooth host is away: the one connected host that belongs to no
+    /// device, which may be the same iPhone paired again. Nil when there is none or several.
+    public func replacementHost(for id: String) -> BluetoothHost? {
+        let hosts = peripheral.connectedHosts
+        let devices = deviceList.get()
+        guard let device = devices.first(where: { $0.id == id }), let current = device.host,
+            !hosts.contains(where: { $0.id == current })
+        else { return nil }
+        let free = hosts.filter { host in !devices.contains { $0.host == host.id } }
+        return free.count == 1 ? free[0] : nil
+    }
+
+    /// Sends a device's input to another connected Bluetooth host from now on, once the user has
+    /// confirmed that it is this iPhone (see `replacementHost(for:)`).
+    public func useHost(_ host: UUID, for id: String) {
+        queue.async {
+            let devices = self.deviceList.get()
+            guard let device = devices.first(where: { $0.id == id }),
+                self.peripheral.connectedHosts.contains(where: { $0.id == host }),
+                !devices.contains(where: { $0.host == host })
+            else { return }
+            device.assign(host: host)
+            Log.info("bluetooth host \(host) now drives \(device.name), as confirmed")
+            self.saveKnownDevices()
+            self.onChange()
+        }
     }
 
     // MARK: Remembering devices

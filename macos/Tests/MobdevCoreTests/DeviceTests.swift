@@ -76,7 +76,50 @@ import Testing
     }
 }
 
+@Suite struct DeviceMatchingTests {
+    typealias Key = DeviceHub.DeviceKey
+    let keys = [
+        Key(id: "00008120-000639440C13C01E", captureID: "cap-a", name: "iPhone", connected: true),
+        Key(id: "00008120-000639440C13C01F", captureID: "cap-b", name: "iPhone", connected: true),
+        Key(id: "00008030-001A2B3C4D5E6F70", captureID: "cap-c", name: "Test iPad", connected: false),
+    ]
+
+    @Test func exactIDsWin() {
+        #expect(DeviceHub.matches("00008120-000639440C13C01F", in: keys) == [1])
+        #expect(DeviceHub.matches("cap-c", in: keys) == [2])
+    }
+
+    /// Two phones with one name, or one prefix: both are candidates, so neither is picked.
+    @Test func ambiguousNamesAndPrefixesMatchSeveral() {
+        #expect(DeviceHub.matches("iphone", in: keys) == [0, 1])
+        #expect(DeviceHub.matches("00008120", in: keys) == [0, 1])
+        #expect(DeviceHub.matches("test ipad", in: keys) == [2])
+        #expect(DeviceHub.matches("00008030", in: keys) == [2])
+        #expect(DeviceHub.matches("00008", in: keys) == [])  // Prefixes need six characters.
+    }
+
+    @Test func withoutAQueryOnlyAConnectedDeviceIsPicked() {
+        #expect(DeviceHub.matches(nil, in: keys) == [0, 1])
+        #expect(DeviceHub.matches(nil, in: [keys[2]]) == [0])
+        #expect(DeviceHub.matches(" ", in: [keys[0], keys[2]]) == [0])
+    }
+}
+
 @Suite struct DeviceToolsTests {
+    /// A `device` that is not a string must not fall back to picking a phone automatically.
+    @Test func malformedDeviceSelectorsAreRefused() async throws {
+        let tools = DeviceTools(hub: DeviceHub(keyboardLayout: .us) {}, settleDelay: 0)
+        for device: JSONValue in [5, true, ["a"], ["id": "x"], "", "  "] {
+            let output = try await tools.call(
+                "home", arguments: ["device": device, "screenshot": false], source: "test", screenshotByDefault: false)
+            #expect(output.isError)
+            #expect(output.text.contains("device must be a device id or name"), "\(device): \(output.text)")
+        }
+        #expect(throws: (any Error).self) { try tools.phone(for: "") }
+        let missing = try await tools.call("home", arguments: ["device": .null], source: "test", screenshotByDefault: false)
+        #expect(missing.text.contains("No iPhone is connected"))
+    }
+
     @Test func everyToolTakesADeviceAndListDevicesExists() {
         let names = DeviceTools.definitions.map(\.name)
         #expect(names.first == "list_devices")

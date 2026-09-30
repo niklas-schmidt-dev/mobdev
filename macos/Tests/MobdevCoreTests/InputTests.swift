@@ -125,6 +125,23 @@ import Testing
         let input = HIDInput(sink: sink, step: 0, wakeAfterIdle: nil)
         await #expect(throws: HIDError.self) { try await input.tap(at: NormalizedPoint(x: 0.5, y: 0.5)) }
     }
+
+    /// Typing that nobody waits for any more (the relay timed out, the agent hung up) stops, and
+    /// leaves no key held.
+    @Test func cancelledTypingStopsBetweenKeys() async throws {
+        let sink = RecordingSink()
+        let input = HIDInput(sink: sink, step: 0.005, wakeAfterIdle: nil)
+        let strokes = Array(repeating: KeyStroke(0x04), count: 400)  // About 4 seconds.
+        let typing = Task { try await input.type(strokes) }
+        try await Task.sleep(for: .milliseconds(150))
+        typing.cancel()
+        await #expect(throws: CancellationError.self) { try await typing.value }
+        let keyboard = sink.reports.get().filter { $0.0 == .keyboard }.map(\.1)
+        #expect(keyboard.count < strokes.count)
+        #expect(keyboard.last == [0, 0, 0, 0, 0, 0, 0, 0])
+        // The queue is free for the next input right away.
+        try await input.press(KeyStroke(0x05))
+    }
 }
 
 @Suite struct RefreshBackoffTests {

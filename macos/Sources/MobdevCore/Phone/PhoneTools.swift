@@ -57,6 +57,10 @@ public final class PhoneTools: Sendable {
         self.settleDelay = settleDelay
     }
 
+    /// Typing takes about 60 ms per character and holds the phone's input until done, so one call
+    /// stays well within the relays' 90-second limit.
+    static let maxTypedCharacters = 1000
+
     public static let instructions = """
         Mobdev controls a real iPhone connected to this Mac: it reads the screen over USB and taps and \
         types as a Bluetooth keyboard and pointer. Coordinates are pixels of the image returned by \
@@ -134,7 +138,7 @@ public final class PhoneTools: Sendable {
             ToolDefinition(
                 name: "type_text", title: "Type text",
                 description:
-                    "Type text into the focused field with the hardware keyboard. Tap the field first. Set submit to press Return afterwards.",
+                    "Type text into the focused field with the hardware keyboard. Tap the field first. Set submit to press Return afterwards. At most 1000 characters per call; send longer text in several calls.",
                 inputSchema: schema(
                     ["text": ["type": "string"], "submit": ["type": "boolean", "description": "Press Return after typing"]],
                     required: ["text"]), readOnly: false),
@@ -256,7 +260,7 @@ public final class PhoneTools: Sendable {
             try await phone.scroll(at: point, ticks: direction == "up" ? amount : -amount)
             return ToolOutput(text: "Scrolled \(direction) by \(amount).")
         case "type_text":
-            let text = try args.string("text")
+            let text = try args.string("text", maxLength: Self.maxTypedCharacters)
             let layout = phone.status().keyboardLayout
             var strokes = try layout.strokes(typing: text)
             if args.bool("submit") == true { strokes.append(KeyStroke(0x28)) }
@@ -275,7 +279,7 @@ public final class PhoneTools: Sendable {
             try await phone.press(.home)
             return ToolOutput(text: "Went to the home screen.")
         case "open_app":
-            let name = try args.string("name")
+            let name = try args.string("name", maxLength: 100)
             let layout = phone.status().keyboardLayout
             let strokes = try layout.strokes(typing: name)
             try requireTouch()
@@ -443,8 +447,10 @@ public final class PhoneTools: Sendable {
         try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
     }
 
+    /// Also used for coordinates that failed validation, so it must not trap on huge values.
     private func format(_ value: Double) -> String {
-        value.rounded() == value ? String(Int(value)) : String(format: "%.1f", value)
+        if value.rounded() == value, let integer = Int(exactly: value) { return String(integer) }
+        return String(format: "%.1f", value)
     }
 }
 
@@ -474,6 +480,14 @@ struct Arguments {
     func string(_ key: String) throws -> String {
         guard let string = value[key]?.stringValue, !string.isEmpty else {
             throw ToolFailure("\(key) must be a non-empty string.")
+        }
+        return string
+    }
+
+    func string(_ key: String, maxLength: Int) throws -> String {
+        let string = try string(key)
+        guard string.count <= maxLength else {
+            throw ToolFailure("\(key) has \(string.count) characters; at most \(maxLength) per call.")
         }
         return string
     }

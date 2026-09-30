@@ -5,6 +5,9 @@ public final class APIRouter: Sendable {
     public enum Origin: Sendable {
         /// From a process on this Mac: needs the bearer token and a loopback Host header.
         case local
+        /// From one of this user's processes over the app's Unix socket (`Mobdev mcp`): needs the
+        /// bearer token. Browsers cannot reach it, so there is no Host to check.
+        case socket
         /// Forwarded by the relay, which already checked the client key.
         case relay
     }
@@ -24,10 +27,10 @@ public final class APIRouter: Sendable {
     }
 
     public func handle(_ request: HTTPRequest, from origin: Origin) async -> HTTPResponse {
-        if origin == .local {
-            if let rejection = checkLocal(request) { return rejection }
+        if origin != .relay {
+            if let rejection = checkLocal(request, checkHost: origin == .local) { return rejection }
         }
-        let source = origin == .local ? "local" : "relay"
+        let source = origin == .relay ? "relay" : "local"
         switch (request.method, request.path) {
         case ("GET", "/healthz"):
             return .json(["ok": true, "name": .string(MCPHandler.serverName), "version": .string(MCPHandler.serverVersion)])
@@ -60,15 +63,17 @@ public final class APIRouter: Sendable {
         }
     }
 
-    private func checkLocal(_ request: HTTPRequest) -> HTTPResponse? {
+    private func checkLocal(_ request: HTTPRequest, checkHost: Bool) -> HTTPResponse? {
         // Browsers send Origin; nothing legitimate here does. Blocks DNS rebinding and CSRF.
         if request.header("origin") != nil {
             return .error("Browser requests are not allowed.", status: 403)
         }
         let port = self.port()
         let allowedHosts = ["127.0.0.1:\(port)", "localhost:\(port)", "[::1]:\(port)"]
-        guard let host = request.header("host"), allowedHosts.contains(host.lowercased()) else {
-            return .error("Invalid Host header.", status: 403)
+        if checkHost {
+            guard let host = request.header("host"), allowedHosts.contains(host.lowercased()) else {
+                return .error("Invalid Host header.", status: 403)
+            }
         }
         if request.method == "GET", request.path == "/healthz" { return nil }
         let expected = "Bearer \(token())"

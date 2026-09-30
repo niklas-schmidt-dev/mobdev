@@ -23,6 +23,8 @@ public enum MobdevPaths {
     }
 
     public static var tokenFile: URL { home.appendingPathComponent("token") }
+    /// Where the app listens for `Mobdev mcp`. Unlike the loopback port, no other user can take it.
+    public static var socketFile: URL { home.appendingPathComponent("mobdev.sock") }
     public static var relaySecretFile: URL { home.appendingPathComponent("relay-secret") }
     public static var settingsFile: URL { home.appendingPathComponent("settings.json") }
     /// Devices seen before, so they are listed (with their activity) while unplugged.

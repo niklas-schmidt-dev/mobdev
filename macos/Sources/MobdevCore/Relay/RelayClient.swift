@@ -17,6 +17,13 @@ public enum RelayState: Sendable, Equatable {
     }
 }
 
+/// A frame from the relay: a "request", or "cancel" when the relay stopped waiting for the
+/// request with that id (it timed out, or the agent went away).
+struct RelayFrame: Decodable {
+    var type: String
+    var id: String?
+}
+
 /// One request tunnelled through the relay ("request") or its answer ("response").
 /// Bodies are base64.
 struct RelayEnvelope: Codable {
@@ -41,6 +48,9 @@ public final class RelayClient: @unchecked Sendable {
     static let closeRevoked = 4001
     /// Wait after the relay refuses the connection with 429.
     static let limitedRetry: TimeInterval = 300
+    /// Requests answered at once; more get 429. The relays send at most 4 per Mac, and cancelled
+    /// ones can take a moment to stop.
+    static let maxRequests = 8
 
     private let handler: Handler
     private let onStateChange: @Sendable (RelayState) -> Void
@@ -73,10 +83,16 @@ public final class RelayClient: @unchecked Sendable {
         return "mdc_" + code.map { String(format: "%02x", $0) }.joined()
     }
 
-    /// Accepts https URLs, and plain http only for this Mac (for testing a local relay).
+    /// Accepts https URLs, and plain http only for this Mac (for testing a local relay). A relay URL
+    /// is a host with an optional plain path: no credentials, query or fragment, and no characters
+    /// that mean something to a shell, since it can arrive in a connect link and ends up in commands.
     public static func validatedURL(_ text: String) throws -> URL {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let url = URL(string: trimmed), let scheme = url.scheme?.lowercased(), let host = url.host?.lowercased()
+        guard let url = URL(string: trimmed), let scheme = url.scheme?.lowercased(), let host = url.host?.lowercased(),
+            let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+            components.user == nil, components.password == nil, components.query == nil, components.fragment == nil,
+            host.range(of: "^([a-z0-9.-]+|[0-9a-f:]+)$", options: .regularExpression) != nil,
+            components.percentEncodedPath.range(of: "^[A-Za-z0-9._~/-]*$", options: .regularExpression) != nil
         else { throw RelayError.invalidURL }
         let loopback = ["localhost", "127.0.0.1", "::1"].contains(host) || host.hasSuffix(".localhost")
         guard scheme == "https" || (scheme == "http" && loopback) else { throw RelayError.insecureURL }
@@ -159,6 +175,10 @@ public final class RelayClient: @unchecked Sendable {
         let lastPong = Locked(Date())
         let established = Locked(false)
         let pingInterval = self.pingInterval
+        // Requests being answered, by id: the relay can cancel one, and the connection ending cancels
+        // them all, so work that nobody waits for any more (such as long typing) stops.
+        let requests = Locked<[String: Task<Void, Never>]>([:])
+        defer { for request in requests.get().values { request.cancel() } }
         await withTaskGroup(of: Void.self) { group in
             group.addTask {
                 // Keepalive: a ping now confirms the connection, then one per interval.
@@ -183,14 +203,31 @@ public final class RelayClient: @unchecked Sendable {
                         }
                         continue
                     }
-                    guard let envelope = try? JSONDecoder().decode(RelayEnvelope.self, from: Data(text.utf8)),
-                        envelope.type == "request"
+                    guard let frame = try? JSONDecoder().decode(RelayFrame.self, from: Data(text.utf8)) else { continue }
+                    if frame.type == "cancel", let id = frame.id {
+                        requests.withLock { $0[id] }?.cancel()
+                        continue
+                    }
+                    guard frame.type == "request",
+                        let envelope = try? JSONDecoder().decode(RelayEnvelope.self, from: Data(text.utf8))
                     else { continue }
-                    Task {
-                        let answer = await self.answer(envelope)
-                        if let data = try? JSONEncoder().encode(answer) {
-                            try? await task.send(.string(String(decoding: data, as: UTF8.self)))
+                    let accepted = requests.withLock { running -> Bool in
+                        guard running.count < Self.maxRequests, running[envelope.id] == nil else { return false }
+                        running[envelope.id] = Task {
+                            let answer = await self.answer(envelope)
+                            requests.withLock { $0[envelope.id] = nil }
+                            guard !Task.isCancelled else { return }  // Nobody waits for it any more.
+                            await Self.send(answer, on: task)
                         }
+                        return true
+                    }
+                    if !accepted {
+                        let busy = HTTPResponse.error("This Mac is busy with other requests.", status: 429)
+                        await Self.send(
+                            RelayEnvelope(
+                                type: "response", id: envelope.id, status: busy.status,
+                                headers: busy.headers.merging(["Retry-After": "1"]) { $1 },
+                                body: busy.body.base64EncodedString()), on: task)
                     }
                 }
             }
@@ -211,6 +248,11 @@ public final class RelayClient: @unchecked Sendable {
         }
         guard changed, stateBox.get() == .connected, let task = socket.get() else { return }
         Task { await Self.send(devices: devices, on: task) }
+    }
+
+    private static func send(_ answer: RelayEnvelope, on task: URLSessionWebSocketTask) async {
+        guard let data = try? JSONEncoder().encode(answer) else { return }
+        try? await task.send(.string(String(decoding: data, as: UTF8.self)))
     }
 
     private static func send(devices: [DeviceSummary], on task: URLSessionWebSocketTask) async {

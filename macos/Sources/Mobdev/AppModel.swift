@@ -19,6 +19,8 @@ struct DeviceState: Identifiable, Equatable {
     var status: PhoneStatus
     var onUSB: Bool
     var activityCount: Int
+    /// A connected Bluetooth host that may be this iPhone paired again, while its own is away.
+    var replacementHost: BluetoothHost? = nil
 
     var modelName: String { info?.modelName ?? "iPhone" }
     var isConnected: Bool { status.screen.isConnected }
@@ -75,6 +77,8 @@ final class AppModel {
     let hub: DeviceHub
     @ObservationIgnored private let router: APIRouter
     @ObservationIgnored private let server: HTTPServer
+    /// Where `Mobdev mcp` connects: a Unix socket in the private data directory.
+    @ObservationIgnored private let socketServer: HTTPServer
     @ObservationIgnored private let relay: RelayClient
     @ObservationIgnored private let tokenBox: Locked<String>
     @ObservationIgnored private let portBox = Locked<UInt16>(0)
@@ -99,6 +103,9 @@ final class AppModel {
         self.router = router
         server = HTTPServer(port: MobdevPaths.port(settings: settings)) { request in
             await router.handle(request, from: .local)
+        }
+        socketServer = HTTPServer(socket: MobdevPaths.socketFile) { request in
+            await router.handle(request, from: .socket)
         }
         let relaySignal = ChangeSignal()
         relay = RelayClient(handler: { request in await router.handle(request, from: .relay) }) { _ in
@@ -129,6 +136,13 @@ final class AppModel {
             serverFailed = false
         } catch {
             serverSummary = "Could not listen on port \(MobdevPaths.port(settings: settings)): \(error.localizedDescription)"
+            serverFailed = true
+        }
+        do {
+            try await socketServer.start()
+        } catch {
+            Log.error("stdio bridge socket: \(error)")
+            serverSummary += ". Agents started with “mcp” cannot connect: \(error)"
             serverFailed = true
         }
         if settings.relayEnabled { startRelay() }
@@ -177,7 +191,7 @@ final class AppModel {
         let states = hardware.map { device in
             DeviceState(
                 id: device.id, name: device.name, info: device.info, status: device.status(), onUSB: device.isOnUSB,
-                activityCount: device.activity.all.count)
+                activityCount: device.activity.all.count, replacementHost: hub.replacementHost(for: device.id))
         }
         if states != devices { devices = states }
         for device in hardware where !observedLogs.contains(ObjectIdentifier(device.activity)) {
@@ -270,6 +284,9 @@ final class AppModel {
         refresh()
     }
 
+    /// Sends a device's input to another Bluetooth host after the user confirmed it is this iPhone.
+    func useBluetoothHost(_ host: UUID, for id: String) { hub.useHost(host, for: id) }
+
     /// Offers the Mac to iPhones again, for one that does not list it under Other Devices.
     func offerBluetoothAgain() { hub.peripheral.republish() }
 
@@ -323,7 +340,7 @@ final class AppModel {
         let alert = NSAlert()
         alert.messageText = "Connect this Mac to \(invite.relay.host ?? "the relay")?"
         alert.informativeText =
-            "Agents that have this Mac's client key can then control your iPhone through the relay. You can turn this off under Remote Access at any time."
+            "Relay: \(invite.relay.absoluteString)\n\nAgents that have this Mac's client key can then control your iPhone through the relay. You can turn this off under Remote Access at any time."
         alert.addButton(withTitle: "Connect")
         alert.addButton(withTitle: "Cancel")
         guard alert.runModal() == .alertFirstButtonReturn else { return }
@@ -382,7 +399,7 @@ final class AppModel {
     /// replaces the installed app's entry.
     var mcpName: String { MobdevPaths.isDevelopmentBuild ? "mobdev-dev" : "mobdev" }
 
-    var claudeCodeCommand: String { "claude mcp add --scope user \(mcpName) -- \(shellQuoted(executablePath)) mcp" }
+    var claudeCodeCommand: String { "claude mcp add --scope user \(mcpName) -- \(Shell.quoted(executablePath)) mcp" }
 
     var codexConfig: String {
         """
@@ -405,20 +422,18 @@ final class AppModel {
         """
     }
 
+    // Every value goes through Shell.quoted: the relay URL comes from a connect link, and the user
+    // pastes these into a terminal.
     var httpCommand: String {
-        "claude mcp add --transport http \(mcpName) \(localMCPURL) --header \"Authorization: Bearer \(token)\""
+        "claude mcp add --transport http \(mcpName) \(Shell.quoted(localMCPURL)) --header \(Shell.quoted("Authorization: Bearer \(token)"))"
     }
 
     var curlCommand: String {
-        "curl -H \"Authorization: Bearer \(token)\" http://127.0.0.1:\(port)/v1/status"
+        "curl -H \(Shell.quoted("Authorization: Bearer \(token)")) \(Shell.quoted("http://127.0.0.1:\(port)/v1/status"))"
     }
 
     var remoteCommand: String {
-        "claude mcp add --transport http \(mcpName)-remote \(remoteMCPURL) --header \"Authorization: Bearer \(relayClientKey)\""
-    }
-
-    private func shellQuoted(_ path: String) -> String {
-        path.contains(" ") ? "\"\(path)\"" : path
+        "claude mcp add --transport http \(Shell.quoted("\(mcpName)-remote")) \(Shell.quoted(remoteMCPURL)) --header \(Shell.quoted("Authorization: Bearer \(relayClientKey)"))"
     }
 
     // MARK: Manual control
