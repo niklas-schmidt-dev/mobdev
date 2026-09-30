@@ -108,7 +108,7 @@ function Docs() {
           </div>
         </nav>
         <article className="min-w-0 max-w-3xl">
-          <p className="text-[17px] font-semibold text-blue">Documentation</p>
+          <p className="text-[17px] font-semibold text-tint">Documentation</p>
           <h1 className="headline mt-1 text-[48px]">Mobdev</h1>
           <p className="mt-4 text-[21px] leading-[1.45] text-muted">
             Mobdev reads the iPhone screen over USB and taps and types as a Bluetooth keyboard and pointer. Agents use it

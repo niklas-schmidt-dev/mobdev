@@ -17,7 +17,6 @@ export const Route = createRootRoute({
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { title },
       { name: "description", content: description },
-      { name: "theme-color", content: "#ffffff" },
       { property: "og:site_name", content: "Mobdev" },
       { property: "og:type", content: "website" },
       { property: "og:title", content: title },
@@ -44,8 +43,11 @@ function RootDocument({ children }: { children: ReactNode }) {
     <html lang="en">
       <head>
         <HeadContent />
+        {/* Here rather than in `head`, which keeps only one meta tag per name. */}
+        <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff" />
+        <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#000000" />
       </head>
-      <body className="min-h-dvh bg-white font-sans text-ink">
+      <body className="min-h-dvh bg-page font-sans text-ink">
         {children}
         <Scripts />
       </body>

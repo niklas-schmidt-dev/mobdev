@@ -24,7 +24,7 @@ function SignOut() {
           Your Macs stay connected. Sign in again any time to manage them.
         </p>
         {error && (
-          <p role="alert" className="mt-8 rounded-2xl bg-[#fff2f2] px-5 py-4 text-[15px] text-[#b00000]">
+          <p role="alert" className="mt-8 rounded-2xl bg-alert px-5 py-4 text-[15px] text-alert-ink">
             {error}
           </p>
         )}

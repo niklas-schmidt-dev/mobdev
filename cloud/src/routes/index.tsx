@@ -128,7 +128,7 @@ function Home() {
       </section>
 
       {/* How it works */}
-      <section id="how" className="scroll-mt-12 bg-mist px-5 py-24 sm:py-32">
+      <section id="how" className="scroll-mt-12 bg-mist px-5 py-24 sm:py-32 dark:border-y dark:border-line dark:bg-page">
         <div className="mx-auto max-w-5xl">
           <h2 className="headline text-balance mx-auto max-w-3xl text-center text-[40px] sm:text-[56px]">
             Three connections.
@@ -137,8 +137,8 @@ function Home() {
           </h2>
           <div className="mt-16 grid grid-cols-1 gap-5 md:grid-cols-3">
             {steps.map((step) => (
-              <div key={step.title} className="rounded-3xl bg-white p-8">
-                <Icon name={step.icon} className="size-8 text-blue" />
+              <div key={step.title} className="rounded-3xl bg-card p-8 dark:inset-ring dark:inset-ring-white/5">
+                <Icon name={step.icon} className="size-8 text-tint" />
                 <h3 className="mt-6 text-[21px] font-semibold tracking-tight">{step.title}</h3>
                 <p className="mt-2 text-[17px] leading-[1.47] text-muted">{step.body}</p>
               </div>
@@ -148,7 +148,7 @@ function Home() {
       </section>
 
       {/* Statement */}
-      <section className="bg-black px-5 py-28 text-center text-white sm:py-40">
+      <section className="bg-black px-5 py-28 text-center text-white sm:py-40 dark:border-b dark:border-line">
         <p className="headline text-balance mx-auto max-w-4xl text-[40px] sm:text-[64px]">
           No developer mode.
           <br />
@@ -172,8 +172,8 @@ function Home() {
             Easy for you.
           </h2>
           <div className="mt-14 grid grid-cols-1 gap-5 md:grid-cols-3">
-            <div className="rounded-3xl bg-mist p-8 md:col-span-2">
-              <Icon name="bolt" className="size-8 text-blue" />
+            <div className="rounded-3xl bg-mist p-8 dark:inset-ring dark:inset-ring-white/5 md:col-span-2">
+              <Icon name="bolt" className="size-8 text-tint" />
               <h3 className="mt-6 text-[24px] font-semibold tracking-tight">Connect Claude Code in one line.</h3>
               <p className="mt-2 max-w-lg text-[17px] leading-[1.47] text-muted">
                 The app shows the exact command for your agent. No token in the config: Mobdev reads it locally and
@@ -183,43 +183,43 @@ function Home() {
                 <Code surface="white">{"claude mcp add --scope user mobdev -- \\\n  /Applications/Mobdev.app/Contents/MacOS/Mobdev mcp"}</Code>
               </div>
             </div>
-            <div className="flex flex-col rounded-3xl bg-mist p-8">
+            <div className="flex flex-col rounded-3xl bg-mist p-8 dark:inset-ring dark:inset-ring-white/5">
               <p className="headline text-[64px] text-ink">23</p>
               <p className="mt-auto text-[17px] leading-[1.47] text-muted">
                 tools, from <span className="text-ink">tap</span> and <span className="text-ink">tap_text</span> to{" "}
                 <span className="text-ink">install_app</span> and <span className="text-ink">logs</span>.
               </p>
             </div>
-            <div className="rounded-3xl bg-mist p-8">
-              <Icon name="text" className="size-8 text-blue" />
+            <div className="rounded-3xl bg-mist p-8 dark:inset-ring dark:inset-ring-white/5">
+              <Icon name="text" className="size-8 text-tint" />
               <h3 className="mt-6 text-[21px] font-semibold tracking-tight">Reads the screen.</h3>
               <p className="mt-2 text-[17px] leading-[1.47] text-muted">
                 On-device text recognition finds buttons by their label. Fewer screenshots, fewer tokens.
               </p>
             </div>
-            <div className="rounded-3xl bg-mist p-8">
-              <Icon name="phone" className="size-8 text-blue" />
+            <div className="rounded-3xl bg-mist p-8 dark:inset-ring dark:inset-ring-white/5">
+              <Icon name="phone" className="size-8 text-tint" />
               <h3 className="mt-6 text-[21px] font-semibold tracking-tight">Take over anytime.</h3>
               <p className="mt-2 text-[17px] leading-[1.47] text-muted">
                 The live mirror lets you click, swipe and type on the phone while the agent works.
               </p>
             </div>
-            <div className="flex flex-col rounded-3xl bg-mist p-8">
+            <div className="flex flex-col rounded-3xl bg-mist p-8 dark:inset-ring dark:inset-ring-white/5">
               <p className="headline text-[64px] text-ink">3 MB</p>
               <p className="mt-auto text-[17px] leading-[1.47] text-muted">
                 A native SwiftUI app with Liquid Glass. No Electron, no account, no telemetry.
               </p>
             </div>
-            <div className="rounded-3xl bg-mist p-8 md:col-span-2">
-              <Icon name="globe" className="size-8 text-blue" />
+            <div className="rounded-3xl bg-mist p-8 dark:inset-ring dark:inset-ring-white/5 md:col-span-2">
+              <Icon name="globe" className="size-8 text-tint" />
               <h3 className="mt-6 text-[24px] font-semibold tracking-tight">Reach it from anywhere.</h3>
               <p className="mt-2 max-w-lg text-[17px] leading-[1.47] text-muted">
                 Turn on remote access and agents on other machines connect through a relay. Your Mac keeps one outgoing
                 connection, so no port is ever opened.
               </p>
             </div>
-            <div className="rounded-3xl bg-mist p-8">
-              <Icon name="list" className="size-8 text-blue" />
+            <div className="rounded-3xl bg-mist p-8 dark:inset-ring dark:inset-ring-white/5">
+              <Icon name="list" className="size-8 text-tint" />
               <h3 className="mt-6 text-[21px] font-semibold tracking-tight">Every action logged.</h3>
               <p className="mt-2 text-[17px] leading-[1.47] text-muted">
                 See each tool call in the app, from this Mac or from afar.
@@ -230,7 +230,7 @@ function Home() {
       </section>
 
       {/* Coming next */}
-      <section id="next" className="scroll-mt-12 bg-mist px-5 py-24 sm:py-32">
+      <section id="next" className="scroll-mt-12 bg-mist px-5 py-24 sm:py-32 dark:border-y dark:border-line dark:bg-page">
         <div className="mx-auto max-w-5xl">
           <h2 className="headline text-balance mx-auto max-w-3xl text-center text-[40px] sm:text-[56px]">Coming next.</h2>
           <p className="text-balance mx-auto mt-6 max-w-2xl text-center text-[19px] leading-[1.45] text-muted">
@@ -238,11 +238,11 @@ function Home() {
           </p>
           <ul className="mt-14 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {roadmap.map((item) => (
-              <li key={item.title} className="rounded-3xl bg-white p-8">
+              <li key={item.title} className="rounded-3xl bg-card p-8 dark:inset-ring dark:inset-ring-white/5">
                 <div className="flex items-start justify-between gap-4">
-                  <Icon name={item.icon} className="size-8 text-blue" />
+                  <Icon name={item.icon} className="size-8 text-tint" />
                   <span
-                    className={`rounded-full px-2.5 py-1 text-[12px] font-medium ${item.status === "Just shipped" ? "bg-blue/10 text-link" : "bg-mist text-muted"}`}
+                    className={`rounded-full px-2.5 py-1 text-[12px] font-medium ${item.status === "Just shipped" ? "bg-blue/10 text-link dark:bg-blue/20" : "bg-mist text-muted"}`}
                   >
                     {item.status}
                   </span>
@@ -319,7 +319,7 @@ function Home() {
                 Get {PRO_PLAN.name}
               </Link>
             </div>
-            <div className="rounded-3xl bg-mist p-8">
+            <div className="rounded-3xl bg-mist p-8 dark:inset-ring dark:inset-ring-white/5">
               <p className="text-[21px] font-semibold text-muted">TapKit</p>
               <p className="headline mt-5 text-[56px] text-muted">$49</p>
               <p className="text-[15px] text-muted">per phone, per month</p>
@@ -327,7 +327,7 @@ function Home() {
                 The same idea on your own Mac and iPhone. Commands and screenshots go through their cloud.
               </p>
             </div>
-            <div className="rounded-3xl bg-mist p-8">
+            <div className="rounded-3xl bg-mist p-8 dark:inset-ring dark:inset-ring-white/5">
               <p className="text-[21px] font-semibold text-muted">MobAI</p>
               <p className="headline mt-5 text-[56px] text-muted">$9.99</p>
               <p className="text-[15px] text-muted">per month beyond one device</p>
@@ -343,7 +343,7 @@ function Home() {
       </section>
 
       {/* FAQ */}
-      <section className="bg-mist px-5 py-24 sm:py-32">
+      <section className="bg-mist px-5 py-24 sm:py-32 dark:border-y dark:border-line dark:bg-page">
         <div className="mx-auto max-w-3xl">
           <h2 className="headline text-center text-[40px] sm:text-[56px]">Questions? Answers.</h2>
           <div className="mt-12 divide-y divide-line border-y border-line">

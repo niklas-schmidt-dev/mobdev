@@ -33,7 +33,8 @@ export const Route = createFileRoute("/dashboard")({
         reloadDocument: true,
       });
     }
-    return data;
+    // One clock reading for the server render and the hydration, so "5 min ago" matches in both.
+    return { ...data, loadedAt: Date.now() };
   },
   component: DashboardPage,
 });
@@ -55,20 +56,25 @@ function DashboardPage() {
   return <Dashboard data={data} />;
 }
 
-function relative(timestamp: number | null): string {
+// The worker renders in UTC with its own locale and the browser hydrates in the visitor's, so dates
+// use a fixed locale and time zone; otherwise React rejects the server's HTML.
+const shortDate = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
+const longDay = new Intl.DateTimeFormat("en-US", { month: "long", day: "numeric", timeZone: "UTC" });
+
+function relative(timestamp: number | null, now: number): string {
   if (!timestamp) return "never";
-  const seconds = Math.round((Date.now() - timestamp) / 1000);
+  const seconds = Math.round((now - timestamp) / 1000);
   if (seconds < 60) return "just now";
   const minutes = Math.round(seconds / 60);
   if (minutes < 60) return `${minutes} min ago`;
   const hours = Math.round(minutes / 60);
   if (hours < 48) return `${hours} h ago`;
-  return new Date(timestamp).toLocaleDateString();
+  return shortDate.format(timestamp);
 }
 
 function Card({ title, subtitle, children }: { title: string; subtitle?: string; children: ReactNode }) {
   return (
-    <section className="rounded-3xl bg-white p-7 sm:p-8">
+    <section className="rounded-3xl bg-card p-7 dark:inset-ring dark:inset-ring-white/5 sm:p-8">
       <h2 className="text-[24px] font-semibold tracking-tight">{title}</h2>
       {subtitle && <p className="mt-1.5 text-[15px] leading-[1.47] text-muted">{subtitle}</p>}
       <div className="mt-6">{children}</div>
@@ -76,7 +82,7 @@ function Card({ title, subtitle, children }: { title: string; subtitle?: string;
   );
 }
 
-const destructive = "text-[15px] text-[#e30000] transition-opacity hover:opacity-70 disabled:opacity-40";
+const destructive = "text-[15px] text-danger transition-opacity hover:opacity-70 disabled:opacity-40";
 
 function deviceStatus(device: Device, macOnline: boolean): { label: string; dot: string } {
   if (!macOnline) return { label: "Offline", dot: "bg-line" };
@@ -138,12 +144,12 @@ function DeviceRow({ device, macOnline }: { device: Device; macOnline: boolean }
 const numbers = new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 });
 
 function day(timestamp: number): string {
-  return new Date(timestamp).toLocaleDateString("en-US", { month: "long", day: "numeric" });
+  return longDay.format(timestamp);
 }
 
 function Usage({ label, used, limit, unit }: { label: string; used: number; limit: number | null; unit?: string }) {
   const share = limit === null || limit <= 0 ? 0 : Math.min(1, used / limit);
-  const tone = share >= 1 ? "bg-[#e30000]" : share >= 0.8 ? "bg-[#ff9500]" : "bg-blue";
+  const tone = share >= 1 ? "bg-danger" : share >= 0.8 ? "bg-[#ff9500]" : "bg-blue";
   const amount = `${numbers.format(used)} of ${limit === null ? "unlimited" : numbers.format(limit)}${unit ? ` ${unit}` : ""}`;
   return (
     <div>
@@ -187,7 +193,7 @@ function PlanCard({
       subtitle={`${plan.name}${plan.priceUsd ? ` · $${plan.priceUsd} USD a month, plus applicable tax` : ""}. Limits apply to the hosted relay; Mobdev on your Mac has none.`}
     >
       {billing.pastDue && (
-        <p role="alert" className="mb-5 rounded-2xl bg-[#fff2f2] px-5 py-4 text-[15px] text-[#b00000]">
+        <p role="alert" className="mb-5 rounded-2xl bg-alert px-5 py-4 text-[15px] text-alert-ink">
           The last payment failed. Update your payment method under “Manage billing”.
         </p>
       )}
@@ -240,7 +246,7 @@ function PlanCard({
   );
 }
 
-function Dashboard({ data }: { data: DashboardData }) {
+function Dashboard({ data }: { data: DashboardData & { loadedAt: number } }) {
   const router = useRouter();
   const { upgraded = false } = Route.useSearch();
   const [name, setName] = useState("");
@@ -320,7 +326,7 @@ function Dashboard({ data }: { data: DashboardData }) {
         </div>
 
         {error && (
-          <p role="alert" className="mt-8 rounded-2xl bg-[#fff2f2] px-5 py-4 text-[15px] text-[#b00000]">
+          <p role="alert" className="mt-8 rounded-2xl bg-alert px-5 py-4 text-[15px] text-alert-ink">
             {error}
           </p>
         )}
@@ -365,7 +371,7 @@ function Dashboard({ data }: { data: DashboardData }) {
                   onChange={(event) => setName(event.target.value)}
                   placeholder="Name, e.g. Studio Mac"
                   maxLength={60}
-                  className="h-12 flex-1 rounded-xl border border-line bg-white px-4 text-[17px] outline-none transition-shadow placeholder:text-faint focus:border-blue focus:ring-4 focus:ring-blue/15"
+                  className="h-12 flex-1 rounded-xl border border-line bg-card px-4 text-[17px] outline-none transition-shadow placeholder:text-faint focus:border-blue focus:ring-4 focus:ring-blue/15"
                 />
                 <button type="submit" disabled={busy} className={`${buttonPrimary} h-12 py-0`}>
                   Create token
@@ -389,7 +395,9 @@ function Dashboard({ data }: { data: DashboardData }) {
                       <div className="min-w-0">
                         <p className="text-[17px] font-medium">{host.name}</p>
                         <p className="text-[14px] text-muted">
-                          {host.online ? `Connected ${relative(host.connected_at)}` : `Last seen ${relative(host.disconnected_at)}`}
+                          {host.online
+                            ? `Connected ${relative(host.connected_at, data.loadedAt)}`
+                            : `Last seen ${relative(host.disconnected_at, data.loadedAt)}`}
                           {host.token_id && tokenNames.get(host.token_id) ? ` · ${tokenNames.get(host.token_id)}` : ""}
                           <span className="sr-only">{host.online ? ", online" : ", offline"}</span>
                         </p>
@@ -443,7 +451,8 @@ function Dashboard({ data }: { data: DashboardData }) {
                     <div className="min-w-0">
                       <p className="text-[17px] font-medium">{token.name}</p>
                       <p className="text-[14px] text-muted">
-                        {token.prefix}… · created {relative(token.created_at)} · used {relative(token.last_used_at)}
+                        {token.prefix}… · created {relative(token.created_at, data.loadedAt)} · used{" "}
+                        {relative(token.last_used_at, data.loadedAt)}
                       </p>
                     </div>
                     <button

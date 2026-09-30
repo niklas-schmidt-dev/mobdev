@@ -6,24 +6,53 @@
   --font-sans: "Inter Variable", "Inter", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
   --font-mono: "Inter Variable", "Inter", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
 
+  /* Light values; the dark ones follow below. `page` is the page itself, `mist` a section, card or
+     well on it, `card` a white card on a mist section. */
+  --color-page: #fff;
+  --color-card: #fff;
   --color-ink: #1d1d1f;
   --color-muted: #6e6e73;
   --color-faint: #86868b;
   --color-line: #d2d2d7;
   --color-mist: #f5f5f7;
+  /* `blue` fills buttons and stays the same in dark mode; `tint` colors icons and text. */
   --color-blue: #0071e3;
   --color-blue-hover: #0077ed;
+  --color-tint: #0071e3;
   --color-link: #0066cc;
+  --color-danger: #e30000;
+  --color-alert: #fff2f2;
+  --color-alert-ink: #b00000;
   --color-forest: #142017;
   --color-lime: #d1eda5;
 }
 
+/* Dark mode follows the system, like apple.com. The page turns black and mist sections turn into
+   the page too (markup adds `dark:bg-page` and a divider). Cards and wells are translucent white,
+   so a well inside a card comes out a step lighter than the card without extra classes. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-page: #000;
+    --color-card: rgb(255 255 255 / 0.09);
+    --color-mist: rgb(255 255 255 / 0.09);
+    --color-ink: #f5f5f7;
+    --color-muted: #a1a1a6;
+    --color-faint: #7c7c80;
+    --color-line: #38383a;
+    --color-tint: #2997ff;
+    --color-link: #2997ff;
+    --color-danger: #ff453a;
+    --color-alert: rgb(255 69 58 / 0.15);
+    --color-alert-ink: #ff6961;
+  }
+}
+
 :root {
-  color-scheme: light;
+  color-scheme: light dark;
 }
 
 html {
-  background: #fff;
+  background: var(--color-page);
   color: var(--color-ink);
   font-family: var(--font-sans);
   font-optical-sizing: auto;
@@ -47,6 +76,10 @@ html {
   background: rgb(255 255 255 / 0.72);
   backdrop-filter: saturate(180%) blur(20px);
   -webkit-backdrop-filter: saturate(180%) blur(20px);
+
+  @media (prefers-color-scheme: dark) {
+    background: rgb(22 22 23 / 0.8);
+  }
 }
 
 @utility text-balance {

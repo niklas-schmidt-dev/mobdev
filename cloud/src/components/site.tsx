@@ -6,6 +6,17 @@ export function Logo({ className = "size-7" }: { className?: string }) {
   return (
     <svg viewBox="0 0 64 64" className={className} aria-hidden="true">
       <rect width="64" height="64" rx="15" fill="#142017" />
+      {/* On a black page the dark green tile needs an edge, as macOS draws on dark icons. */}
+      <rect
+        x="1.25"
+        y="1.25"
+        width="61.5"
+        height="61.5"
+        rx="13.75"
+        fill="none"
+        strokeWidth="2.5"
+        className="stroke-transparent dark:stroke-white/20"
+      />
       <g fill="#d1eda5" transform="translate(0 4) skewY(-12)">
         <rect x="16" y="28" width="8" height="22" rx="1.5" />
         <rect x="28" y="20" width="8" height="34" rx="1.5" />
@@ -18,7 +29,7 @@ export function Logo({ className = "size-7" }: { className?: string }) {
 export function SiteHeader() {
   const link = "rounded-md px-2 py-1 text-[13px] text-ink/80 transition-colors hover:text-ink sm:px-3";
   return (
-    <header className="nav-glass sticky top-0 z-40 border-b border-black/[0.06]">
+    <header className="nav-glass sticky top-0 z-40 border-b border-black/[0.06] dark:border-white/10">
       <nav className="mx-auto flex h-12 max-w-5xl items-center px-4 sm:px-5" aria-label="Main">
         <Link to="/" className="flex items-center gap-2 text-[15px] font-semibold tracking-tight">
           <Logo className="size-6" />
@@ -50,7 +61,7 @@ export function SiteFooter() {
   const heading = "mb-2.5 text-[12px] font-semibold text-ink";
   const item = "block py-1 text-[12px] text-muted transition-colors hover:text-ink";
   return (
-    <footer className="bg-mist">
+    <footer className="bg-mist dark:border-t dark:border-line dark:bg-page">
       <div className="mx-auto max-w-5xl px-5 py-12">
         <div className="grid grid-cols-2 gap-8 border-b border-line pb-8 sm:grid-cols-4">
           <div className="col-span-2 flex items-start gap-2.5">
@@ -97,7 +108,7 @@ export function SiteFooter() {
 
 export function Page({ children, tone = "white" }: { children: ReactNode; tone?: "white" | "mist" }) {
   return (
-    <div className={`flex min-h-dvh flex-col ${tone === "mist" ? "bg-mist" : "bg-white"}`}>
+    <div className={`flex min-h-dvh flex-col ${tone === "mist" ? "bg-mist dark:bg-page" : "bg-page"}`}>
       <SiteHeader />
       <main className="flex-1">{children}</main>
       <SiteFooter />
@@ -108,7 +119,7 @@ export function Page({ children, tone = "white" }: { children: ReactNode; tone?:
 export const buttonPrimary =
   "inline-flex items-center justify-center rounded-full bg-blue px-6 py-3 text-[17px] font-medium text-white transition-colors hover:bg-blue-hover disabled:opacity-50";
 export const buttonSecondary =
-  "inline-flex items-center justify-center rounded-full border border-blue px-6 py-3 text-[17px] font-medium text-blue transition-colors hover:bg-blue hover:text-white";
+  "inline-flex items-center justify-center rounded-full border border-tint px-6 py-3 text-[17px] font-medium text-tint transition-colors hover:border-blue hover:bg-blue hover:text-white";
 export const moreLink = "text-[17px] text-link hover:underline underline-offset-4";
 
 export function CopyButton({ text, label = "Copy" }: { text: string; label?: string }) {
@@ -121,7 +132,7 @@ export function CopyButton({ text, label = "Copy" }: { text: string; label?: str
         setCopied(true);
         setTimeout(() => setCopied(false), 1600);
       }}
-      className="shrink-0 rounded-full bg-white/80 px-3 py-1 text-[13px] font-medium text-link shadow-sm ring-1 ring-black/5 transition-colors hover:bg-white"
+      className="shrink-0 rounded-full bg-white/80 px-3 py-1 text-[13px] font-medium text-link shadow-sm ring-1 ring-black/5 transition-colors hover:bg-white dark:bg-white/10 dark:shadow-none dark:ring-white/10 dark:hover:bg-white/15"
     >
       <span aria-live="polite">{copied ? "Copied" : label}</span>
     </button>
@@ -134,7 +145,7 @@ export function Code({ children, copy, surface = "mist" }: { children: string; c
       {/* Inter for code too. Without contextual alternates "--" stays two hyphens. On phones the code starts
           below the copy button instead of running underneath it. */}
       <pre
-        className={`overflow-x-auto rounded-2xl p-5 text-[14px] leading-relaxed text-ink [font-feature-settings:'calt'_0,'zero'_1] ${copy !== false ? "pt-14 sm:pr-24 sm:pt-5" : ""} ${surface === "white" ? "bg-white" : "bg-mist"}`}
+        className={`overflow-x-auto rounded-2xl p-5 text-[14px] leading-relaxed text-ink [font-feature-settings:'calt'_0,'zero'_1] ${copy !== false ? "pt-14 sm:pr-24 sm:pt-5" : ""} ${surface === "white" ? "bg-card" : "bg-mist"}`}
       >
         <code>{children}</code>
       </pre>

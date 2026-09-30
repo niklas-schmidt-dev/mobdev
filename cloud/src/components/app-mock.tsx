@@ -25,19 +25,24 @@ const activity = [
   ["type_text", "Typed 14 characters"],
 ];
 
+/** The glass buttons and text field under the phone. */
+const control =
+  "h-8 rounded-full bg-white/70 shadow-sm ring-1 ring-black/5 backdrop-blur dark:bg-white/10 dark:shadow-none dark:ring-white/10";
+
 /**
- * A drawing of the Mobdev window in light appearance, so the page never shows anyone's real phone.
- * Phones get only the stage with the iPhone; the sidebar joins from `sm` and the activity column from `md`.
+ * A drawing of the Mobdev window in the visitor's appearance, light or dark, so the page never shows
+ * anyone's real phone. Phones get only the stage with the iPhone; the sidebar joins from `sm` and the
+ * activity column from `md`.
  */
 export function AppMock() {
   return (
     <div
       aria-hidden="true"
-      className="relative mx-auto w-full max-w-4xl overflow-hidden rounded-[18px] bg-white text-left shadow-[0_30px_80px_-20px_rgba(0,0,0,0.28),0_0_0_1px_rgba(0,0,0,0.06)]"
+      className="relative mx-auto w-full max-w-4xl overflow-hidden rounded-[18px] bg-white text-left shadow-[0_30px_80px_-20px_rgba(0,0,0,0.28),0_0_0_1px_rgba(0,0,0,0.06)] dark:bg-[#1e1e1e] dark:shadow-none dark:ring-1 dark:ring-white/15"
     >
       <div className="grid grid-cols-1 sm:grid-cols-[150px_minmax(0,1fr)] md:grid-cols-[180px_minmax(0,1fr)_210px]">
         {/* Sidebar */}
-        <div className="hidden bg-[#f3f3f5] p-3 text-[11px] text-muted sm:block">
+        <div className="hidden bg-[#f3f3f5] p-3 text-[11px] text-muted sm:block dark:bg-[#29292b]">
           <div className="mb-5 flex gap-1.5 px-1 pt-1">
             <span className="size-3 rounded-full bg-[#ff5f57]" />
             <span className="size-3 rounded-full bg-[#febc2e]" />
@@ -60,12 +65,12 @@ export function AppMock() {
         </div>
 
         {/* Stage */}
-        <div className="relative flex flex-col items-center bg-gradient-to-b from-[#efe9f7] via-[#f7f3f6] to-white px-6 pb-7 pt-12">
+        <div className="relative flex flex-col items-center bg-gradient-to-b from-[#efe9f7] via-[#f7f3f6] to-white px-6 pb-7 pt-12 dark:from-[#2a2433] dark:via-[#221f25] dark:to-[#1e1e1e]">
           <div className="absolute left-5 top-4">
             <p className="text-[12px] font-semibold text-ink">iPhone</p>
             <p className="text-[10px] text-muted">Ready for agents</p>
           </div>
-          <div className="relative w-[160px] rounded-[32px] bg-[#1d1d1f] p-[6px] shadow-[0_20px_40px_-12px_rgba(0,0,0,0.35)] sm:w-[180px]">
+          <div className="relative w-[160px] rounded-[32px] bg-[#1d1d1f] p-[6px] shadow-[0_20px_40px_-12px_rgba(0,0,0,0.35)] sm:w-[180px] dark:shadow-none dark:ring-1 dark:ring-white/20">
             <div className="relative aspect-[9/19.5] overflow-hidden rounded-[26px] bg-gradient-to-br from-[#7b61ff] via-[#e2638f] to-[#ffb36b]">
               <div className="flex justify-between px-4 pt-2.5 text-[8px] font-semibold text-white">
                 <span>9:41</span>
@@ -89,19 +94,20 @@ export function AppMock() {
             </div>
           </div>
           <div className="mt-5 flex items-center gap-2">
-            <span className="size-8 rounded-full bg-white/70 shadow-sm ring-1 ring-black/5 backdrop-blur" />
-            <span className="flex h-8 w-36 items-center rounded-full bg-white/70 px-3 text-[10px] text-faint shadow-sm ring-1 ring-black/5 backdrop-blur">
-              Type on iPhone
-            </span>
-            <span className="size-8 rounded-full bg-white/70 shadow-sm ring-1 ring-black/5 backdrop-blur" />
+            <span className={`${control} w-8`} />
+            <span className={`${control} flex w-36 items-center px-3 text-[10px] text-faint`}>Type on iPhone</span>
+            <span className={`${control} w-8`} />
           </div>
         </div>
 
         {/* Activity */}
-        <div className="hidden bg-[#fafafa] p-4 text-[11px] md:block">
+        <div className="hidden bg-[#fafafa] p-4 text-[11px] md:block dark:bg-[#232325]">
           <p className="pb-2 font-semibold text-faint">Activity</p>
           {activity.map(([tool, summary]) => (
-            <div key={tool} className="mb-1.5 rounded-lg bg-white px-2.5 py-2 ring-1 ring-black/[0.04]">
+            <div
+              key={tool}
+              className="mb-1.5 rounded-lg bg-white px-2.5 py-2 ring-1 ring-black/[0.04] dark:bg-white/[0.06] dark:ring-white/[0.06]"
+            >
               <p className="flex items-center gap-1.5 font-medium text-ink">
                 <span className="size-1.5 rounded-full bg-[#34c759]" />
                 {tool}
