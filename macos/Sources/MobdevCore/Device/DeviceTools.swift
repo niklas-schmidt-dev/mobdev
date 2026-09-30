@@ -211,6 +211,8 @@ public final class DeviceTools: ToolCalling {
 
     private static func state(_ device: any Device, _ summary: DeviceSummary) -> String {
         if summary.ready { return "ready" }
+        let status = device.status()
+        if status.screen.isConnected, status.frameSize == nil { return "connected, no picture yet (wake and unlock it)" }
         if device.kind == .iPhone { return summary.screen ? "screen only, Bluetooth not paired" : "not connected" }
         return "screen not available yet"
     }
