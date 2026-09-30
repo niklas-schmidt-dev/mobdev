@@ -259,6 +259,11 @@ public final class DeviceHub: @unchecked Sendable {
         peripheral.start()
     }
 
+    /// Starts every iPhone's capture again, after macOS's screen capture helper was restarted.
+    public func restartScreens() {
+        for device in devices { device.capture.restart() }
+    }
+
     /// Looks for new devices and rereads what the connected ones are.
     public func rescan() {
         queue.async { self.scan() }

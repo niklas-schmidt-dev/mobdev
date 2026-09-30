@@ -281,6 +281,17 @@ private struct ConnectPhone: View {
         case .failed(let message):
             ContentUnavailableView(
                 "Screen Capture Failed", systemImage: "exclamationmark.triangle", description: Text(message))
+        case .noPicture(let name):
+            ContentUnavailableView {
+                Label("No Picture from macOS", systemImage: "exclamationmark.triangle")
+            } description: {
+                Text(
+                    "\(name) is connected, but macOS's screen capture helper delivers no picture. This can happen after a macOS or Xcode update. Restarting the helper fixes it; macOS asks for an administrator password."
+                )
+            } actions: {
+                Button("Restart Screen Capture…") { model.restartScreenCapture() }
+                    .buttonStyle(.glassProminent)
+            }
         case .connected:
             // Connected over USB, but no picture yet. Mobdev starts the capture again by itself.
             ContentUnavailableView {
@@ -391,6 +402,9 @@ struct SetupSteps: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Setup").font(.headline)
             StepRow(title: "Screen", detail: screenDetail, state: screenState)
+            if case .noPicture = status.screen {
+                Button("Restart Screen Capture…") { model.restartScreenCapture() }
+            }
             StepRow(title: "Bluetooth", detail: bluetoothDetail, state: bluetoothState)
             if status.bluetooth == .unauthorized {
                 Button("Open Bluetooth Settings") { model.openPrivacySettings("Privacy_Bluetooth") }
@@ -418,7 +432,7 @@ struct SetupSteps: View {
     private var screenState: StepRow.State {
         switch status.screen {
         case .connected: .done
-        case .cameraDenied, .failed: .attention
+        case .cameraDenied, .failed, .noPicture: .attention
         default: .waiting
         }
     }
@@ -427,6 +441,7 @@ struct SetupSteps: View {
         switch status.screen {
         case .connected(let name, let width, let height): width > 0 ? "\(name) · \(width) × \(height)" : name
         case .searching, .starting: "Connect with a USB data cable and tap Trust."
+        case .noPicture: "Connected, but macOS's screen capture helper delivers no picture. Restart it below."
         default: status.screen.summary
         }
     }

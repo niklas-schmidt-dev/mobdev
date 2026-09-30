@@ -8,11 +8,17 @@ public enum ScreenState: Sendable, Equatable {
     case cameraDenied
     case searching
     case connected(name: String, width: Int, height: Int)
+    /// Connected, but no picture arrives however often the capture starts again. macOS's screen
+    /// capture helper (iOSScreenCaptureAssistant) can keep a stale device after Apple's USB
+    /// service restarts, for example after a macOS or Xcode update; restarting the helper fixes it.
+    case noPicture(name: String)
     case failed(String)
 
     public var isConnected: Bool {
-        if case .connected = self { return true }
-        return false
+        switch self {
+        case .connected, .noPicture: true
+        default: false
+        }
     }
 
     public var summary: String {
@@ -21,6 +27,8 @@ public enum ScreenState: Sendable, Equatable {
         case .cameraDenied: "Camera access is needed to read the iPhone screen"
         case .searching: "Connect an unlocked iPhone with a USB data cable"
         case .connected(let name, let width, let height): "\(name), \(width)×\(height)"
+        case .noPicture(let name):
+            "\(name) is connected, but macOS delivers no picture. Its screen capture helper is stuck: click Restart Screen Capture in Mobdev, or run `sudo killall iOSScreenCaptureAssistant`"
         case .failed(let message): "Screen capture failed: \(message)"
         }
     }
@@ -109,6 +117,16 @@ public final class ScreenCapture: NSObject, AVCaptureVideoDataOutputSampleBuffer
         }
     }
 
+    /// Starts the capture again now, e.g. after macOS's screen capture helper was restarted.
+    public func restart() {
+        queue.async {
+            guard !self.stopped else { return }
+            self.frameWait = 5
+            self.stopSession()
+            self.connect()
+        }
+    }
+
     /// Stops capturing and watching; used when a device's entry is replaced.
     public func stop() {
         for observer in observers { NotificationCenter.default.removeObserver(observer) }
@@ -185,20 +203,31 @@ public final class ScreenCapture: NSObject, AVCaptureVideoDataOutputSampleBuffer
         session.startRunning()
         sessionBox.set(session)
         Log.info("capturing \(device.localizedName) (\(device.modelID))")
-        setState(.connected(name: device.localizedName, width: 0, height: 0))
+        // Once restarts have not helped, keep saying so while trying again.
+        if case .noPicture = state {
+            setState(.noPicture(name: device.localizedName))
+        } else {
+            setState(.connected(name: device.localizedName, width: 0, height: 0))
+        }
         expectFrame(from: session)
     }
 
-    /// A session can run without ever delivering a frame, for example after another app held the
-    /// screen and quit without releasing it. Without a first frame in time, the session is started
-    /// again, after 5, 10, 20 and then every 30 seconds until a frame arrives.
+    /// A session can run without ever delivering a frame. Without a first frame in time, the
+    /// session is started again, after 5, 10, 20 and then every 30 seconds until a frame arrives.
+    /// After the second try the state becomes `noPicture`: then macOS's screen capture helper is
+    /// usually stuck, which only restarting the helper fixes.
     private func expectFrame(from session: AVCaptureSession) {
         let delay = frameWait
         queue.asyncAfter(deadline: .now() + delay) {
-            guard !self.stopped, self.sessionBox.get() === session,
-                case .connected(_, 0, 0) = self.state
-            else { return }
+            guard !self.stopped, self.sessionBox.get() === session else { return }
+            let name: String
+            switch self.state {
+            case .connected(let connected, 0, 0): name = connected
+            case .noPicture(let stalled): name = stalled
+            default: return
+            }
             Log.info("no frame after \(Int(delay)) s, starting the screen capture again")
+            if delay >= 10 { self.setState(.noPicture(name: name)) }
             self.frameWait = min(delay * 2, 30)
             self.stopSession()
             self.connect()
@@ -240,9 +269,16 @@ public final class ScreenCapture: NSObject, AVCaptureVideoDataOutputSampleBuffer
         latest.set(buffer)
         let width = CVPixelBufferGetWidth(buffer)
         let height = CVPixelBufferGetHeight(buffer)
-        if case .connected(let name, let oldWidth, let oldHeight) = state, oldWidth != width || oldHeight != height {
+        switch state {
+        case .connected(let name, let oldWidth, let oldHeight) where oldWidth != width || oldHeight != height:
             frameWait = 5
             setState(.connected(name: name, width: width, height: height))
+        case .noPicture(let name):
+            Log.info("pictures arrive again")
+            frameWait = 5
+            setState(.connected(name: name, width: width, height: height))
+        default:
+            break
         }
     }
 

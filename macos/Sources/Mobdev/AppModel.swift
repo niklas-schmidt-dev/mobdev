@@ -32,6 +32,7 @@ struct DeviceState: Identifiable, Equatable {
     /// One line for the window subtitle, sidebar and menu bar.
     var statusLine: String {
         if isEmulated { return isReady ? "Ready for agents" : "Starting" }
+        if case .noPicture = status.screen { return "No picture from macOS" }
         // Found over USB, but no picture has arrived yet.
         if isConnected, status.frameSize == nil { return "Waiting for the screen" }
         return switch (status.screen, status.bluetooth) {
@@ -342,6 +343,25 @@ final class AppModel {
 
     /// Offers the Mac to iPhones again, for one that does not list it under Other Devices.
     func offerBluetoothAgain() { hub.peripheral.republish() }
+
+    /// Restarts macOS's screen capture helper, which can keep a stale iPhone after Apple's USB
+    /// service restarted (seen after a macOS and Xcode update) and then delivers no picture at all.
+    /// It runs as root, so macOS asks for an administrator password; launchd starts it again on
+    /// the next capture, which follows right after.
+    func restartScreenCapture() {
+        var error: NSDictionary?
+        let script = NSAppleScript(
+            source: "do shell script \"/usr/bin/killall iOSScreenCaptureAssistant\" with administrator privileges")
+        script?.executeAndReturnError(&error)
+        // -128: the password prompt was cancelled. Exit status 1 from killall: it was not running,
+        // which is fine too.
+        if let code = error?[NSAppleScript.errorNumber] as? Int, code == -128 { return }
+        if let error { Log.error("restarting screen capture: \(error)") }
+        Task {
+            try? await Task.sleep(for: .seconds(1))
+            hub.restartScreens()
+        }
+    }
 
     private var checkingPointer: Set<String> = []
 

@@ -237,6 +237,7 @@ struct OnboardingView: View {
     private var connectStatus: StatusPill.Status? {
         switch model.setupScreen {
         case .connected(let name, _, _): .done("\(name) connected")
+        case .noPicture: .problem("No picture from macOS: use Restart Screen Capture on the device page")
         case .failed(let message): .problem(message)
         case .cameraDenied: .problem("Allow screen access first")
         case .starting where !model.screenStarted: .problem("Allow screen access first")

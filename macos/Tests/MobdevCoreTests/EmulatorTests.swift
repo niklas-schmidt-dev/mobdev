@@ -206,6 +206,19 @@ final class FakeDevice: Device, @unchecked Sendable {
     }
 }
 
+@Suite struct StuckCaptureTests {
+    /// macOS's screen capture helper can keep a stale iPhone: connected, but never a picture.
+    @Test func noPictureIsConnectedButNotReadyAndSaysHowToFixIt() {
+        let status = PhoneStatus(
+            screen: .noPicture(name: "iPhone"), bluetooth: .connected(hosts: 1), keyboardLayout: .us)
+        #expect(status.screen.isConnected)
+        #expect(status.frameSize == nil)
+        #expect(!status.isReady)
+        #expect(status.screen.summary.contains("Restart Screen Capture"))
+        #expect(status.screen.summary.contains("sudo killall iOSScreenCaptureAssistant"))
+    }
+}
+
 @Suite struct SimulatorHelperTests {
     @Test func keyboardLayoutFollowsTheSimulatorsKeyboard() {
         #expect(SimulatorDevice.layout(forKeyboard: "de_DE@sw=QWERTZ-German;hw=Automatic") == .german)
