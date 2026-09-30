@@ -6,9 +6,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -23,10 +25,20 @@ func testConfig() Config {
 	return cfg
 }
 
+// newRelayServer runs the relay with the same http.Server settings as main.
+func newRelayServer(t *testing.T, cfg Config) (*httptest.Server, *Relay) {
+	t.Helper()
+	relay := NewRelay(cfg)
+	server := httptest.NewUnstartedServer(nil)
+	server.Config = httpServer("", relay)
+	server.Start()
+	t.Cleanup(server.Close)
+	return server, relay
+}
+
 func newServer(t *testing.T, cfg Config) *httptest.Server {
 	t.Helper()
-	server := httptest.NewServer(logRequests(NewRelay(cfg)))
-	t.Cleanup(server.Close)
+	server, _ := newRelayServer(t, cfg)
 	return server
 }
 
@@ -299,6 +311,324 @@ func TestDisconnectFailsPendingRequestsQuickly(t *testing.T) {
 	status, _ := clientRequest(t, http.MethodGet, server.URL+"/v1/silent", key, "", nil)
 	if status != 502 || time.Since(start) > 2*time.Second {
 		t.Fatalf("status %d after %s", status, time.Since(start))
+	}
+	waitForHosts(t, server.URL, key, 0)
+}
+
+// readFrame reads the next JSON frame the relay sends to a Mac.
+func readFrame(t *testing.T, conn *websocket.Conn) envelope {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	_, data, err := conn.Read(ctx)
+	if err != nil {
+		t.Fatalf("read frame: %v", err)
+	}
+	var env envelope
+	if err := json.Unmarshal(data, &env); err != nil {
+		t.Fatalf("frame %q: %v", data, err)
+	}
+	return env
+}
+
+func answer(t *testing.T, conn *websocket.Conn, id string) {
+	t.Helper()
+	reply, _ := json.Marshal(envelope{Type: "response", ID: id, Status: 200})
+	if err := conn.Write(context.Background(), websocket.MessageText, reply); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// startRequest sends an agent request in the background and reports its status, 0 if it failed.
+func startRequest(ctx context.Context, method, url, key string, body io.Reader) <-chan int {
+	status := make(chan int, 1)
+	go func() {
+		req, _ := http.NewRequestWithContext(ctx, method, url, body)
+		req.Header.Set("Authorization", "Bearer "+key)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			status <- 0
+			return
+		}
+		_, _ = io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
+		status <- resp.StatusCode
+	}()
+	return status
+}
+
+func receive(t *testing.T, status <-chan int) int {
+	t.Helper()
+	select {
+	case code := <-status:
+		return code
+	case <-time.After(5 * time.Second):
+		t.Fatal("request did not finish")
+		return 0
+	}
+}
+
+func TestStalledRequestBodiesAreCutOff(t *testing.T) {
+	cfg := testConfig()
+	cfg.BodyTimeout = 300 * time.Millisecond
+	server := newServer(t, cfg)
+	fakeHost(t, server.URL, testSecret, "studio")
+	key := ClientKey(testSecret)
+	waitForHosts(t, server.URL, key, 1)
+
+	// The headers promise 10 bytes of body and 4 arrive. Without a key the relay answers without
+	// reading the body, and the server then tries to discard the rest; with one the relay reads it.
+	for _, attempt := range []struct{ auth, want string }{
+		{"", "HTTP/1.1 401"},
+		{"Authorization: Bearer " + key + "\r\n", "HTTP/1.1 400"},
+	} {
+		conn, err := net.Dial("tcp", server.Listener.Addr().String())
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer conn.Close()
+		fmt.Fprintf(conn, "POST /mcp HTTP/1.1\r\nHost: relay\r\n%sContent-Length: 10\r\n\r\n{\"a\"", attempt.auth)
+		_ = conn.SetReadDeadline(time.Now().Add(3 * time.Second))
+		response, err := io.ReadAll(conn)
+		if err != nil || !strings.HasPrefix(string(response), attempt.want) {
+			t.Fatalf("want %q and a closed connection, got %v %q", attempt.want, err, response)
+		}
+	}
+
+	// The Mac connected before both deadlines passed; its WebSocket is not affected.
+	if status, body := clientRequest(t, http.MethodPost, server.URL+"/mcp", key, "{}", nil); status != 200 {
+		t.Fatalf("status %d: %s", status, body["_raw"])
+	}
+}
+
+func TestHostLimitHoldsForConcurrentRegistrations(t *testing.T) {
+	cfg := testConfig()
+	cfg.MaxHosts = 3
+	server, relay := newRelayServer(t, cfg)
+	key := ClientKey(testSecret)
+
+	// Failed upgrades give their place back.
+	for range 5 {
+		req, _ := http.NewRequest(http.MethodGet, server.URL+"/v1/host/connect?name=plain", nil)
+		req.Header.Set("Authorization", "Bearer "+testSecret)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode == http.StatusSwitchingProtocols {
+			t.Fatal("a plain GET was upgraded")
+		}
+	}
+
+	var mu sync.Mutex
+	var connected []string
+	var wg sync.WaitGroup
+	for i := range 20 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			name := fmt.Sprintf("mac-%d", i)
+			conn, resp, err := dialHost(t, server.URL, testSecret, name, nil)
+			if err != nil {
+				if resp == nil || resp.StatusCode != http.StatusTooManyRequests {
+					t.Errorf("%s: %v", name, err)
+				}
+				return
+			}
+			t.Cleanup(func() { conn.CloseNow() })
+			mu.Lock()
+			connected = append(connected, name)
+			mu.Unlock()
+		}()
+	}
+	wg.Wait()
+	if len(connected) != cfg.MaxHosts {
+		t.Fatalf("%d Macs connected, want %d: %v", len(connected), cfg.MaxHosts, connected)
+	}
+	waitForHosts(t, server.URL, key, cfg.MaxHosts)
+
+	// A Mac reconnecting under its name replaces itself even when the key is full.
+	conn, _, err := dialHost(t, server.URL, testSecret, connected[0], nil)
+	if err != nil {
+		t.Fatalf("reconnect: %v", err)
+	}
+	t.Cleanup(func() { conn.CloseNow() })
+	if _, resp, err := dialHost(t, server.URL, testSecret, "another", nil); err == nil || resp == nil || resp.StatusCode != 429 {
+		t.Fatalf("a fourth Mac: %v %v", resp, err)
+	}
+	waitForHosts(t, server.URL, key, cfg.MaxHosts)
+	relay.mu.Lock()
+	joining := len(relay.joining)
+	relay.mu.Unlock()
+	if joining != 0 {
+		t.Fatalf("%d spaces still have Macs joining", joining)
+	}
+}
+
+func TestLimitsRequestsInFlightPerHost(t *testing.T) {
+	server := newServer(t, testConfig())
+	mac, _, err := dialHost(t, server.URL, testSecret, "studio", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer mac.CloseNow()
+	key := ClientKey(testSecret)
+	waitForHosts(t, server.URL, key, 1)
+
+	var running []<-chan int
+	var ids []string
+	for range 4 {
+		running = append(running, startRequest(context.Background(), http.MethodGet, server.URL+"/v1/status", key, nil))
+		ids = append(ids, readFrame(t, mac).ID)
+	}
+	req, _ := http.NewRequest(http.MethodGet, server.URL+"/v1/status", nil)
+	req.Header.Set("Authorization", "Bearer "+key)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var refused struct{ Error string }
+	_ = json.NewDecoder(resp.Body).Decode(&refused)
+	resp.Body.Close()
+	want := `the Mac "studio" is already handling 4 requests; send more when one finishes`
+	if resp.StatusCode != 429 || resp.Header.Get("Retry-After") != "1" || refused.Error != want {
+		t.Fatalf("fifth request: %d, Retry-After %q, %q", resp.StatusCode, resp.Header.Get("Retry-After"), refused.Error)
+	}
+
+	// A finished request frees its slot.
+	answer(t, mac, ids[0])
+	if status := receive(t, running[0]); status != 200 {
+		t.Fatalf("first request: %d", status)
+	}
+	next := startRequest(context.Background(), http.MethodGet, server.URL+"/v1/status", key, nil)
+	answer(t, mac, readFrame(t, mac).ID)
+	if status := receive(t, next); status != 200 {
+		t.Fatalf("request after a slot freed up: %d", status)
+	}
+	for i := 1; i < len(ids); i++ {
+		answer(t, mac, ids[i])
+		if status := receive(t, running[i]); status != 200 {
+			t.Fatalf("request %d: %d", i, status)
+		}
+	}
+}
+
+func TestLimitsBufferedRequestBodies(t *testing.T) {
+	cfg := testConfig()
+	cfg.MaxBody = 500
+	cfg.MaxBuffered = 1000
+	server, relay := newRelayServer(t, cfg)
+	mac, _, err := dialHost(t, server.URL, testSecret, "studio", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer mac.CloseNow()
+	key := ClientKey(testSecret)
+	waitForHosts(t, server.URL, key, 1)
+	url := server.URL + "/mcp"
+
+	// 400 bytes with a Content-Length and a body of unknown length, which counts as MaxBody,
+	// take 900 of the 1000 bytes.
+	sized := startRequest(context.Background(), http.MethodPost, url, key, strings.NewReader(strings.Repeat("x", 400)))
+	sizedID := readFrame(t, mac).ID
+	chunked := startRequest(context.Background(), http.MethodPost, url, key, io.NopCloser(strings.NewReader("{}")))
+	chunkedID := readFrame(t, mac).ID
+	if status, body := clientRequest(t, http.MethodPost, url, key, strings.Repeat("x", 200), nil); status != 503 {
+		t.Fatalf("over budget: %d %s", status, body["_raw"])
+	}
+
+	answer(t, mac, sizedID)
+	if status := receive(t, sized); status != 200 {
+		t.Fatalf("sized request: %d", status)
+	}
+	later := startRequest(context.Background(), http.MethodPost, url, key, strings.NewReader(strings.Repeat("x", 200)))
+	answer(t, mac, readFrame(t, mac).ID)
+	if status := receive(t, later); status != 200 {
+		t.Fatalf("request after bytes freed up: %d", status)
+	}
+	answer(t, mac, chunkedID)
+	if status := receive(t, chunked); status != 200 {
+		t.Fatalf("chunked request: %d", status)
+	}
+
+	if status, _ := clientRequest(t, http.MethodPost, url, key, strings.Repeat("x", 501), nil); status != 413 {
+		t.Fatalf("body over MaxBody: %d", status)
+	}
+	relay.mu.Lock()
+	buffered := relay.buffered
+	relay.mu.Unlock()
+	if buffered != 0 {
+		t.Fatalf("%d bytes still reserved", buffered)
+	}
+}
+
+func TestCancelsRequestsNobodyWaitsFor(t *testing.T) {
+	key := ClientKey(testSecret)
+	connect := func(cfg Config) (string, *websocket.Conn) {
+		server := newServer(t, cfg)
+		mac, _, err := dialHost(t, server.URL, testSecret, "studio", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { mac.CloseNow() })
+		waitForHosts(t, server.URL, key, 1)
+		return server.URL, mac
+	}
+	expectCancel := func(mac *websocket.Conn, id string) {
+		t.Helper()
+		if frame := readFrame(t, mac); frame.Type != "cancel" || frame.ID != id {
+			t.Fatalf("expected a cancel frame for %s, got %+v", id, frame)
+		}
+	}
+
+	// The Mac does not answer in time.
+	cfg := testConfig()
+	cfg.RequestTimeout = 300 * time.Millisecond
+	url, mac := connect(cfg)
+	if status, _ := clientRequest(t, http.MethodGet, url+"/v1/status", key, "", nil); status != 504 {
+		t.Fatalf("status %d", status)
+	}
+	expectCancel(mac, readFrame(t, mac).ID)
+
+	// The agent gives up long before the request would time out (3 s).
+	url, mac = connect(testConfig())
+	ctx, stop := context.WithCancel(context.Background())
+	status := startRequest(ctx, http.MethodGet, url+"/v1/status", key, nil)
+	id := readFrame(t, mac).ID
+	stop()
+	expectCancel(mac, id)
+	if code := receive(t, status); code != 0 {
+		t.Fatalf("cancelled request finished with %d", code)
+	}
+}
+
+func TestCloseHostsTellsMacsToReconnect(t *testing.T) {
+	server, relay := newRelayServer(t, testConfig())
+	mac, _, err := dialHost(t, server.URL, testSecret, "studio", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer mac.CloseNow()
+	key := ClientKey(testSecret)
+	waitForHosts(t, server.URL, key, 1)
+
+	closed := make(chan struct{})
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		relay.CloseHosts(ctx)
+		close(closed)
+	}()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if _, _, err := mac.Read(ctx); websocket.CloseStatus(err) != websocket.StatusGoingAway {
+		t.Fatalf("expected close code 1001, got %v", err)
+	}
+	select {
+	case <-closed:
+	case <-time.After(3 * time.Second):
+		t.Fatal("CloseHosts did not return")
 	}
 	waitForHosts(t, server.URL, key, 0)
 }

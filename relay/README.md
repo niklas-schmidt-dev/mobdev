@@ -18,6 +18,10 @@ RELAY_HOST_ACCESS_TOKEN=secret go run .     # only Macs that know the token may 
 Put it behind HTTPS (Caddy, a load balancer, Cloudflare Tunnel). Mobdev refuses plain-http
 relays except on localhost.
 
+On SIGTERM or Ctrl-C the relay stops accepting connections, gives requests in flight 5 s to
+finish and then closes the Macs' WebSockets with code 1001 (going away); Mobdev reconnects on
+its own.
+
 ```sh
 docker build -t mobdev-relay .
 docker run -p 8080:8080 -e RELAY_HOST_ACCESS_TOKEN=secret mobdev-relay
@@ -48,7 +52,10 @@ revokes the client key.
 | Anyone | `GET /healthz` | |
 
 Messages are JSON text frames: the relay sends `{"type":"request","id","method","path","query","headers","body"}`
-and the Mac answers `{"type":"response","id","status","headers","body"}`, bodies in base64. The
+and the Mac answers `{"type":"response","id","status","headers","body"}`, bodies in base64. When
+the relay gives up on a request it has sent (the Mac did not answer within 90 s, or the agent
+went away), it sends `{"type":"cancel","id"}` so the Mac can stop working on it; a response
+that still comes is dropped. Macs that do not know the frame ignore it. The
 Mac sends `ping` every 20 s and the relay answers `pong`; a connection silent for 75 s is closed. Only `/mcp` and `/v1/...` are forwarded, and only the headers MCP needs
 (`Content-Type`, `Accept`, `MCP-Protocol-Version`, `Mcp-Method`, `Mcp-Name`, `Mcp-Param-*`).
 Cookies and the agent's `Authorization` header are never forwarded. Frames of an unknown `type`
@@ -81,8 +88,11 @@ A Mac that has not sent a list yet has `"devices":[]`. The hosted relay answers 
 and also lists every Mac of an account, including offline ones, at `GET /v1/account/devices`
 (see [`../cloud`](../cloud)).
 
-Limits: 16 MB bodies, 90 s per request and 32 Macs per key. Logs contain
-method, path, status and duration only.
+Limits: 16 MB bodies, 90 s per request, 32 Macs per key and, as on the hosted relay, 4 requests
+in flight per Mac (more get 429 with `Retry-After: 1`). An agent's request headers must arrive
+within 10 s and the whole request within 30 s. At most 256 MB of request bodies are held at once:
+each request reserves its `Content-Length`, or 16 MB without one, before its body is read and
+gets 503 when that does not fit. Logs contain method, path, status and duration only.
 
 ## Test
 

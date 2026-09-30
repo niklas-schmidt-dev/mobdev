@@ -1,6 +1,8 @@
 name: Relay
 # Tests the self-hosted relay and publishes its Docker image (amd64 + arm64) to GHCR on main:
 #   docker run -p 8080:8080 ghcr.io/niklas-schmidt-dev/mobdev-relay
+# Runs on main never overlap, so :latest is always the newest commit's image; every image is
+# also tagged with its commit SHA.
 on:
   push:
     branches: [main]
@@ -11,6 +13,10 @@ on:
 
 permissions:
   contents: read
+
+concurrency:
+  group: relay-${{ github.ref }}
+  cancel-in-progress: false
 
 defaults:
   run:

@@ -21,21 +21,22 @@ func main() {
 	}
 	cfg := DefaultConfig()
 	cfg.AccessToken = os.Getenv("RELAY_HOST_ACCESS_TOKEN")
-
-	server := &http.Server{
-		Addr:              addr,
-		Handler:           logRequests(NewRelay(cfg)),
-		ReadHeaderTimeout: 10 * time.Second,
-		IdleTimeout:       120 * time.Second,
-	}
+	relay := NewRelay(cfg)
+	server := httpServer(addr, relay)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	stopped := make(chan struct{})
 	go func() {
+		defer close(stopped)
 		<-ctx.Done()
+		// Requests in flight get 5 s to finish, then the Macs are told to reconnect.
 		shutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		_ = server.Shutdown(shutdown)
+		closing, cancelClosing := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancelClosing()
+		relay.CloseHosts(closing)
 	}()
 
 	access := "open registration"
@@ -45,6 +46,21 @@ func main() {
 	log.Printf("mobdev relay listening on %s (%s)", addr, access)
 	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Fatal(err)
+	}
+	<-stopped // ListenAndServe returns as soon as Shutdown begins.
+}
+
+// httpServer serves the relay. Headers must arrive within 10 s and a whole request within
+// BodyTimeout, including a small unread body the server discards after answering, so clients
+// that stall cannot hold connections. Hijacking a Mac's connection for its WebSocket clears
+// these deadlines; the WebSocket has its own idle timeout.
+func httpServer(addr string, relay *Relay) *http.Server {
+	return &http.Server{
+		Addr:              addr,
+		Handler:           logRequests(relay),
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       relay.cfg.BodyTimeout,
+		IdleTimeout:       120 * time.Second,
 	}
 }
 
