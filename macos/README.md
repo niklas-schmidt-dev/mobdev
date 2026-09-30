@@ -220,12 +220,14 @@ scripts/build-app.sh            # build/Mobdev Dev.app, the separate development
 Vision text recognition never returns on GitHub's virtualized macOS runners, so the OCR tests
 are skipped when `CI` is set and only run on real Macs.
 
-The developer tools are tested against scripted `devicectl` answers. To run them against a real
-device or simulator (Xcode 27's `devicectl` drives both), point the opt-in test at a device and an
-app that prints after launch; it installs, launches and uninstalls the app:
+The developer tools are tested against scripted `devicectl` answers. Opt-in tests run them against
+a real device or simulator (Xcode 27's `devicectl` drives both):
 
 ```sh
+# Installs the app (it should print after launch), launches it and uninstalls it.
 MOBDEV_TEST_DEVICE=<udid> MOBDEV_TEST_APP=/path/to/App.app swift test --filter DeveloperIntegration
+# Launches an installed developer app, reads its logs, stops it, reads crash reports. Installs nothing.
+MOBDEV_TEST_DEVICE=<udid> MOBDEV_TEST_BUNDLE_ID=<bundle id> swift test --filter DeveloperIntegration
 ```
 
 `MobdevCore` contains everything testable: HID reports and gestures (`HID/`), screen capture and

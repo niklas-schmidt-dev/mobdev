@@ -52,8 +52,10 @@ public struct CrashReport: Sendable, Equatable {
             let body = try? JSONValue.parse(Data(parts[1].utf8))
         else { return nil }
 
+        // System events such as SystemMemoryReset or JetsamEvent name no app.
         var report = CrashReport(
-            app: header["app_name"]?.stringValue ?? header["name"]?.stringValue ?? body["procName"]?.stringValue ?? "",
+            app: header["app_name"]?.stringValue ?? header["name"]?.stringValue ?? body["procName"]?.stringValue
+                ?? "System report (bug type \(header["bug_type"]?.stringValue ?? "unknown"))",
             bundleID: header["bundleID"]?.stringValue ?? "",
             version: [header["app_version"]?.stringValue, header["build_version"]?.stringValue.map { "(\($0))" }]
                 .compactMap { $0 }.joined(separator: " "),
@@ -76,6 +78,8 @@ public struct CrashReport: Sendable, Equatable {
                 if let text = reason.stringValue { report.reasons.append(text) }
             }
         }
+        if let reason = body["eventReason"]?.stringValue { report.reasons.append(reason) }
+        if let largest = body["largestProcess"]?.stringValue { report.reasons.append("Largest process: \(largest)") }
         // Application Specific Information: fatalError(), precondition and abort() messages.
         for (_, messages) in body["asi"]?.objectValue?.sorted(by: { $0.key < $1.key }) ?? [] {
             for message in messages.arrayValue ?? [] {
@@ -117,7 +121,10 @@ public struct CrashReport: Sendable, Equatable {
     }
 
     public var summary: String {
-        var lines = ["\(app) \(version), \(bundleID)", "\(date), \(osVersion)"]
+        func join(_ parts: [String], _ separator: String) -> String {
+            parts.filter { !$0.isEmpty }.joined(separator: separator)
+        }
+        var lines = [join([join([app, version], " "), bundleID], ", "), join([date, osVersion], ", ")]
         if let exception { lines.append("Exception: \(exception)") }
         lines += reasons
         if !frames.isEmpty {

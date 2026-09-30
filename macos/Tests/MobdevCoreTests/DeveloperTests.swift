@@ -375,6 +375,16 @@ final class FakeDevicectl: CommandRunning, @unchecked Sendable {
         #expect(runner.calls(to: "device copy from").count == 1)
     }
 
+    @Test func systemReportsGetATitleAndTheirReason() throws {
+        let text = """
+            {"bug_type":"301","timestamp":"2026-09-30 02:43:39.00 +0200","os_version":"iPhone OS 27.0 (24A437)"}
+            {"eventReason":"Memory pressure","largestProcess":"WhatsApp","processes":[]}
+            """
+        let report = try #require(CrashReport.parse(text))
+        #expect(report.summary.hasPrefix("System report (bug type 301)\n2026-09-30 02:43:39.00 +0200, iPhone OS 27.0"))
+        #expect(report.summary.contains("Memory pressure\nLargest process: WhatsApp"))
+    }
+
     @Test func crashFileNamesGiveTheProcess() {
         #expect(CrashReportFile.process(fromName: "WhatsApp-2026-09-29-173246.ips") == "WhatsApp")
         #expect(CrashReportFile.process(fromName: "Raycast Keyboard-2026-09-29-173246.ips") == "Raycast Keyboard")
