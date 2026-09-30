@@ -1,12 +1,12 @@
 /**
- * Renders the link preview image (public/og.png, 1200×630) and the home screen icon
- * (public/apple-touch-icon.png, 180×180) with headless Chrome. Uses the site's Inter font and the
- * logo from public/favicon.svg, so both stay in step with the site. macOS only (sips resizes the icon).
+ * Exports the Imagegen branding master as the website logo, favicons, home screen icon and
+ * link preview image. Uses the site's Inter font and ../assets/branding/mobdev.png so every
+ * surface shares the same artwork. macOS only (sips resizes the PNG exports).
  *
  *   bun run og-image                      # CHROME=/path/to/chrome to use another Chrome
  */
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -23,7 +23,18 @@ const fontFace = `@font-face {
   src: url(data:font/woff2;base64,${inter.toString("base64")}) format("woff2");
 }`;
 
-const logo = readFileSync(join(root, "public/favicon.svg"), "utf8");
+const master = join(root, "../assets/branding/mobdev.png");
+for (const [name, size] of [["logo.png", 128], ["app-icon.png", 512], ["favicon.png", 32]] as const) {
+  execFileSync("sips", ["-z", String(size), String(size), master, "--out", join(root, "public", name)], {
+    stdio: "ignore",
+  });
+}
+const logoData = readFileSync(join(root, "public/app-icon.png")).toString("base64");
+const logo = `<img src="data:image/png;base64,${logoData}" alt="" />`;
+// Preserve the existing SVG URL, embedding the generated artwork rather than redrawing it.
+const faviconData = readFileSync(join(root, "public/logo.png")).toString("base64");
+writeFileSync(join(root, "public/favicon.svg"),
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128"><image width="128" height="128" href="data:image/png;base64,${faviconData}"/></svg>\n`);
 
 function page(style: string, body: string): string {
   return `<!doctype html><html><head><meta charset="utf-8"><style>${fontFace}
@@ -36,19 +47,32 @@ function render(html: string, out: string, width: number, height: number): void 
   const dir = mkdtempSync(join(tmpdir(), "mobdev-og-"));
   try {
     const file = join(dir, "page.html");
+    const screenshot = join(dir, "render.png");
     writeFileSync(file, html);
-    execFileSync(
-      chrome,
-      [
-        "--headless=new",
-        "--hide-scrollbars",
-        "--force-device-scale-factor=1",
-        `--window-size=${width},${height}`,
-        `--screenshot=${out}`,
-        pathToFileURL(file).href,
-      ],
-      { stdio: "ignore" },
-    );
+    try {
+      execFileSync(
+        chrome,
+        [
+          "--headless=new",
+          `--user-data-dir=${join(dir, "chrome-profile")}`,
+          "--no-first-run",
+          "--disable-background-networking",
+          "--hide-scrollbars",
+          "--force-device-scale-factor=1",
+          `--window-size=${width},${height}`,
+          `--screenshot=${screenshot}`,
+          pathToFileURL(file).href,
+        ],
+        { stdio: "ignore", timeout: 30_000, killSignal: "SIGTERM" },
+      );
+    } catch (error) {
+      // Some Chrome versions keep background processes alive after writing the screenshot.
+      // Accept only a fresh render from this invocation; all other failures still propagate.
+      if (!(error instanceof Error && "code" in error && error.code === "ETIMEDOUT" && existsSync(screenshot))) {
+        throw error;
+      }
+    }
+    copyFileSync(screenshot, out);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -69,7 +93,7 @@ render(
   font-family: "Inter Variable"; font-optical-sizing: auto; -webkit-font-smoothing: antialiased;
 }
 .brand { display: flex; align-items: center; gap: 16px; font-size: 40px; font-weight: 600; letter-spacing: -0.02em; }
-.brand svg { width: 64px; height: 64px; }
+.brand img { width: 64px; height: 64px; }
 h1 { margin: 40px 0 0; font-size: 100px; font-weight: 650; letter-spacing: -0.028em; line-height: 1.05; }
 p { margin: 36px 0 0; font-size: 34px; letter-spacing: -0.01em; color: #6e6e73; }
 p b { font-weight: 600; color: #1d1d1f; }`,
@@ -82,12 +106,10 @@ p b { font-weight: 600; color: #1d1d1f; }`,
   630,
 );
 
-// The home screen icon: iOS rounds the corners itself and shows transparency as black, so the logo
-// fills the square. Rendered at 3× and scaled down, because Chrome cannot make a 180 px window.
-const square = logo.replace(/<rect width="64" height="64" rx="15"/, '<rect width="64" height="64"');
-if (square === logo) throw new Error("public/favicon.svg changed; update the background rect match");
+// iOS supplies its own corner mask. Composite the transparent master on its pale tile color so
+// the corners stay light. Render at 3× because Chrome cannot make a 180 px window.
 const icon = join(root, "public/apple-touch-icon.png");
-render(page(`body { width: 540px; height: 540px; } svg { display: block; width: 540px; height: 540px; }`, square), icon, 540, 540);
+render(page(`body { width: 540px; height: 540px; background: #f5f7fb; } img { display: block; width: 540px; height: 540px; }`, logo), icon, 540, 540);
 execFileSync("sips", ["-z", "180", "180", icon], { stdio: "ignore" });
 
-console.log(`Wrote ${og} and ${icon}`);
+console.log(`Wrote website logo, PNG/SVG favicons, ${og} and ${icon}`);

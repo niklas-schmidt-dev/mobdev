@@ -4,25 +4,7 @@ import { GITHUB_URL } from "../lib/releases";
 
 export function Logo({ className = "size-7" }: { className?: string }) {
   return (
-    <svg viewBox="0 0 64 64" className={className} aria-hidden="true">
-      <rect width="64" height="64" rx="15" fill="#142017" />
-      {/* On a black page the dark green tile needs an edge, as macOS draws on dark icons. */}
-      <rect
-        x="1.25"
-        y="1.25"
-        width="61.5"
-        height="61.5"
-        rx="13.75"
-        fill="none"
-        strokeWidth="2.5"
-        className="stroke-transparent dark:stroke-white/20"
-      />
-      <g fill="#d1eda5" transform="translate(0 4) skewY(-12)">
-        <rect x="16" y="28" width="8" height="22" rx="1.5" />
-        <rect x="28" y="20" width="8" height="34" rx="1.5" />
-        <rect x="40" y="24" width="8" height="27" rx="1.5" />
-      </g>
-    </svg>
+    <img src="/logo.png" width="64" height="64" className={`shrink-0 ${className}`} alt="" />
   );
 }
 

@@ -285,7 +285,9 @@ text recognition (`Capture/`), tools (`Phone/`), `devicectl` for the developer t
 and the relay client (`Relay/`). The `Mobdev` target is the SwiftUI app: a `NavigationSplitView` with
 Liquid Glass controls, an inspector for setup, a `Table` for activity and a Settings scene. Tests
 use a fake phone that renders real text, so OCR, `tap_text` and coordinates are exercised without
-hardware. `scripts/make-icon.swift` renders the app icon on the macOS 26 grid.
+hardware. `scripts/make-icon.swift` packages the Imagegen artwork from `../assets/branding/`
+on the macOS 26 icon grid; `--dev` selects the amber development variant. See
+[`../assets/branding/README.md`](../assets/branding/README.md) to regenerate all branding exports.
 
 ## Credits
 
