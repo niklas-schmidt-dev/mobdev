@@ -16,6 +16,7 @@ const sections = [
   ["iphone", "Set up the iPhone"],
   ["agents", "Connect an agent"],
   ["tools", "Tools"],
+  ["emulators", "Simulators and Android"],
   ["developer", "Build, run and debug"],
   ["skills", "Skills"],
   ["remote", "Remote access"],
@@ -24,8 +25,8 @@ const sections = [
 ] as const;
 
 const tools = [
-  ["list_devices", "", "The iPhones on this Mac: id, name, model, iOS version, ready"],
-  ["status", "", "Screen and Bluetooth readiness, screenshot size"],
+  ["list_devices", "", "iPhones, simulators and Android devices: id, name, model, system version, ready"],
+  ["status", "", "Screen and input readiness, screenshot size"],
   ["screenshot", "", "JPEG of the screen"],
   ["tap", "x, y", "Tap a point of the screenshot"],
   ["long_press", "x, y, seconds", "Touch and hold"],
@@ -34,7 +35,7 @@ const tools = [
   ["type_text", "text, submit", "Type into the focused field (up to 1000 characters per call)"],
   ["press_key", "key, modifiers", "e.g. space + cmd for Spotlight"],
   ["home", "", "Go to the home screen"],
-  ["open_app", "name", "Open an app through Spotlight"],
+  ["open_app", "name", "Open an app by name (Spotlight on an iPhone)"],
   ["read_screen", "", "All visible text with positions (on-device OCR)"],
   ["find_text", "text", "Where a label is"],
   ["tap_text", "text, index", "Tap a visible label"],
@@ -44,7 +45,7 @@ const tools = [
 /** Need Developer Mode on the iPhone and Xcode on the Mac. */
 const developerTools = [
   ["list_apps", "all", "Apps installed for development, or every app"],
-  ["install_app", "path", "Install an .app or .ipa built for iPhone from the Mac"],
+  ["install_app", "path", "Install a build from the Mac: .app/.ipa, simulator .app or .apk"],
   ["uninstall_app", "bundle_id", "Remove an app installed for development"],
   ["launch_app", "bundle_id, arguments, environment, restart", "Launch an app and capture what it prints"],
   ["stop_app", "bundle_id", "Stop a running app"],
@@ -175,11 +176,42 @@ function Docs() {
                 Coordinates are pixels of the image <code className="rounded bg-mist px-1.5 py-0.5 text-[15px]">screenshot</code> returns (long
                 edge 1280 px). Actions return a fresh screenshot unless you pass{" "}
                 <code className="rounded bg-mist px-1.5 py-0.5 text-[15px]">"screenshot": false</code>. With more
-                than one iPhone on the Mac, pass{" "}
-                <code className="rounded bg-mist px-1.5 py-0.5 text-[15px]">device</code> (an id or name from{" "}
-                <code className="rounded bg-mist px-1.5 py-0.5 text-[15px]">list_devices</code>) to pick one.
+                than one device, pass <code className="rounded bg-mist px-1.5 py-0.5 text-[15px]">device</code> (an id
+                or name from <code className="rounded bg-mist px-1.5 py-0.5 text-[15px]">list_devices</code>) to pick
+                one. Without it, Mobdev uses the only device, or the connected iPhone when simulators or Android
+                devices run next to it.
               </p>
               <ToolTable rows={tools} />
+            </Section>
+
+            <Section id="emulators" title="Simulators and Android">
+              <p>
+                Booted iOS simulators and Android emulators and phones appear next to your iPhones, in the app and in{" "}
+                <code className="rounded bg-mist px-1.5 py-0.5 text-[15px]">list_devices</code>, and take the same tools.
+                There is nothing to set up on them: no cable, no Bluetooth, no Developer Mode.
+              </p>
+              <ul className="list-disc space-y-2 pl-5">
+                <li>
+                  <strong>iOS Simulator</strong> needs Xcode. Mobdev reads the screen from the simulator itself and
+                  sends touches and keys the way Simulator.app does, so no window has to stay open. Install builds
+                  made for the simulator (<code className="rounded bg-mist px-1.5 py-0.5 text-[15px]">Debug-iphonesimulator</code>);
+                  crash reports come from the Mac.
+                </li>
+                <li>
+                  <strong>Android</strong> needs adb from the Android SDK, for example through Android Studio.
+                  Emulators and phones with USB debugging appear while adb runs. Install an{" "}
+                  <code className="rounded bg-mist px-1.5 py-0.5 text-[15px]">.apk</code>,{" "}
+                  <code className="rounded bg-mist px-1.5 py-0.5 text-[15px]">logs</code> follows logcat, and{" "}
+                  <code className="rounded bg-mist px-1.5 py-0.5 text-[15px]">press_key</code> with{" "}
+                  <code className="rounded bg-mist px-1.5 py-0.5 text-[15px]">escape</code> is Back. Text is typed as
+                  ASCII, and <code className="rounded bg-mist px-1.5 py-0.5 text-[15px]">open_app</code> matches package
+                  names: “Settings” opens com.android.settings.
+                </li>
+              </ul>
+              <Code>
+                {"xcodebuild -scheme MyApp -destination 'generic/platform=iOS Simulator' \\\n  -derivedDataPath build build\n# install_app {\"device\": \"iPhone 17\", \"path\": \"…/Debug-iphonesimulator/MyApp.app\"}\n# install_app {\"device\": \"emulator-5554\", \"path\": \"…/app-debug.apk\"}"}
+              </Code>
+              <p>Turn them off under Settings › General in the app if you only want iPhones.</p>
             </Section>
 
             <Section id="developer" title="Build, run and debug">
@@ -189,7 +221,8 @@ function Docs() {
                 installs, drives the app with the tools above and reads the logs. These tools use Xcode’s{" "}
                 <code className="rounded bg-mist px-1.5 py-0.5 text-[15px]">devicectl</code>, so they need{" "}
                 <strong>Xcode</strong> on the Mac and <strong>Developer Mode</strong> on the iPhone (Settings ›
-                Privacy &amp; Security › Developer Mode). Everything else works without them.
+                Privacy &amp; Security › Developer Mode). Everything else works without them. Simulators and Android
+                need neither.
               </p>
               <ToolTable rows={developerTools} />
               <Code>

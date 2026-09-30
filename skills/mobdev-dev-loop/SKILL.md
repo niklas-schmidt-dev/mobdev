@@ -1,6 +1,6 @@
 ---
 name: mobdev-dev-loop
-description: Build an iOS app, install it on a real iPhone, run it, drive its UI and read its logs and crash reports with Mobdev. Use when developing or debugging an iOS app on a device - "run it on my iPhone", "test this on the phone", "why does it crash on device", "check the logs", deep links, or verifying a fix end to end on real hardware.
+description: Build an iOS or Android app, install it on a real iPhone, an iOS simulator or an Android emulator or phone, run it, drive its UI and read its logs and crash reports with Mobdev. Use when developing or debugging a mobile app on a device - "run it on my iPhone", "try it in the simulator", "test it on Android", "why does it crash", "check the logs", deep links, or verifying a fix end to end.
 ---
 
 # Build, run and debug on a real iPhone
@@ -15,6 +15,8 @@ and crash reports. Read the `mobdev` skill for driving the UI.
   `list_apps` is a quick check; its error says what is missing.
 - The project signs for devices: a development team with automatic signing. Pass
   `-allowProvisioningUpdates` so Xcode registers the iPhone and creates the profile.
+- Simulators and Android devices need neither. Pick the target with `device` (from
+  `list_devices`) and build for it, see "Simulators and Android" below.
 
 ## Loop
 
@@ -47,6 +49,25 @@ and crash reports. Read the `mobdev` skill for driving the UI.
 
 `stop_app` stops the app. `uninstall_app` removes it with its data, which gives a true first launch
 on the next install. It only removes apps installed for development.
+
+## Simulators and Android
+
+The loop is the same; only the build differs.
+
+- **iOS Simulator:** build for the simulator and install the `.app` from `Debug-iphonesimulator`.
+  `install_app` refuses device builds on a simulator and simulator builds on an iPhone.
+
+  ```sh
+  xcodebuild -scheme MyApp -configuration Debug -destination 'generic/platform=iOS Simulator' \
+    -derivedDataPath build/simulator build
+  ```
+
+  Crash reports come from the Mac, so `crash_reports` works right away.
+- **Android:** build a debug APK, e.g. `./gradlew assembleDebug`, and install
+  `app/build/outputs/apk/debug/app-debug.apk`. `bundle_id` is the package name (`applicationId`).
+  `logs` follows the app's logcat lines; `crash_reports` reads the crash buffer and shows the Java
+  exception and stack, or the signal of a native crash. `launch_app` ignores `arguments` and
+  `environment`.
 
 ## When it crashes
 

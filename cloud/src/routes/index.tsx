@@ -29,6 +29,12 @@ const steps = [
 /** The roadmap in "Coming next". Keep the statuses honest; move shipped items into the page above. */
 const roadmap = [
   {
+    icon: "devices",
+    status: "Just shipped",
+    title: "Simulators and Android.",
+    body: "The same tools for booted iOS simulators, Android emulators and Android phones, with nothing to set up.",
+  },
+  {
     icon: "terminal",
     status: "Just shipped",
     title: "Install, launch, logs.",
@@ -41,14 +47,8 @@ const roadmap = [
     body: "Ready-made workflows: the build and debug loop, smoke tests, onboarding audits, competitor research.",
   },
   {
-    icon: "devices",
-    status: "Next",
-    title: "Simulators and Android.",
-    body: "The same tools for the iOS Simulator, Android emulators and Android phones.",
-  },
-  {
     icon: "tree",
-    status: "Planned",
+    status: "Next",
     title: "UI element tree.",
     body: "Tap elements by identifier instead of pixels, on simulators, Android and developer-mode iPhones.",
   },
@@ -76,8 +76,12 @@ const faqs = [
     "Yes. With Developer Mode on, it installs your build, launches it, drives it like a user and reads its logs and crash reports. Mobdev never removes App Store or system apps.",
   ],
   [
+    "Does it work with the Simulator and Android?",
+    "Yes. Booted iOS simulators and Android emulators and phones appear next to your iPhones and take the same tools, installing and reading logs included. Simulators need Xcode, Android needs adb from the Android SDK. Nothing is installed on them.",
+  ],
+  [
     "What do I need?",
-    "A Mac with macOS 26 or later, an iPhone and a USB data cable. The phone stays plugged in and unlocked while agents work.",
+    "A Mac with macOS 26 or later, an iPhone and a USB data cable. The phone stays plugged in and unlocked while agents work. For simulators and Android, Xcode or the Android SDK is enough.",
   ],
   [
     "Where do my screenshots go?",

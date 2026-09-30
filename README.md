@@ -10,6 +10,9 @@ take screenshots, tap, type, open apps and tap visible text.
 For apps you build, turn on Developer Mode and the agent also installs builds, launches them and
 reads their logs and crash reports: the whole build, run and debug loop on a real iPhone.
 
+The same tools drive booted iOS simulators and Android emulators and phones, with nothing to set
+up: iPhone, simulator and Android side by side in one list, for one agent.
+
 ```
    iPhone ──USB screen──▶ Mobdev.app ◀── MCP / HTTP ── agents on this Mac
           ◀─Bluetooth HID─     │
@@ -83,6 +86,8 @@ installed apps can no longer be updated.
 
 Early release. Verified on hardware: USB screen capture, Bluetooth pairing, MCP, OCR and remote
 access through both relays, and taps, swipes and scrolling with AssistiveTouch on iOS 27. Typing on
-a phone still needs broader hands-on testing. One iPhone per Mac for now.
+a phone still needs broader hands-on testing. One iPhone per Mac for now. Every tool is verified on
+an iOS 27 simulator (Xcode 27) and an Android 16 emulator; Android phones use the same adb path but
+have not been tried yet.
 
 MIT licensed. Independent project; not affiliated with Apple, TapKit or MobAI.

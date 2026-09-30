@@ -12,8 +12,8 @@ Or copy a folder into your agent's skills directory, e.g. `~/.claude/skills/`.
 
 | Skill | For |
 |---|---|
-| [`mobdev`](mobdev/SKILL.md) | Driving the iPhone reliably: seeing the screen, tapping, typing, safety |
-| [`mobdev-dev-loop`](mobdev-dev-loop/SKILL.md) | Build, install, launch, read logs and crash reports of your own app |
+| [`mobdev`](mobdev/SKILL.md) | Driving an iPhone, simulator or Android device reliably: seeing the screen, tapping, typing, safety |
+| [`mobdev-dev-loop`](mobdev-dev-loop/SKILL.md) | Build, install, launch, read logs and crash reports of your own iOS or Android app |
 | [`mobdev-smoke-test`](mobdev-smoke-test/SKILL.md) | A quick pass/fail check of an app's critical paths, with evidence |
 | [`mobdev-onboarding-audit`](mobdev-onboarding-audit/SKILL.md) | A first-run walkthrough with friction scores and fixes |
 | [`mobdev-competitor-research`](mobdev-competitor-research/SKILL.md) | App Store listings, onboarding and paywalls of competing apps |

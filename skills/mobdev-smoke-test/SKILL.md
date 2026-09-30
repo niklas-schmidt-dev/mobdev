@@ -1,6 +1,6 @@
 ---
 name: mobdev-smoke-test
-description: Smoke-test an iOS app on a real iPhone with Mobdev - walk its critical paths, capture evidence at each step, catch crashes and errors, and write a pass/fail report. Use for "smoke test", "quick test on device", "does the app still work", "sanity check before release" or checking a build after a change.
+description: Smoke-test a mobile app on a real iPhone, an iOS simulator or an Android device with Mobdev - walk its critical paths, capture evidence at each step, catch crashes and errors, and write a pass/fail report. Use for "smoke test", "quick test on device", "does the app still work", "sanity check before release" or checking a build after a change.
 ---
 
 # Smoke test on a real iPhone
@@ -30,7 +30,9 @@ device? It is not an exhaustive test. Read the `mobdev` skill first for driving 
   curl -s -H "Authorization: Bearer $TOKEN" "http://127.0.0.1:4686/v1/screenshot?format=png" -o smoke/01-launch.png
   ```
 
-  Add `&device=<id>` when several iPhones are connected.
+  Add `&device=<id>` when several devices are connected. The same test can run on a simulator or
+  an Android emulator by passing its id as `device`, which is a cheap way to cover more screen
+  sizes and both platforms.
 
 ## 3. Run each path
 

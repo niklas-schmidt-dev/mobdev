@@ -1,6 +1,6 @@
 ---
 name: mobdev
-description: Drive a real iPhone connected to a Mac with Mobdev's MCP tools - look at the screen, tap, swipe, type, open apps and read on-screen text. Use when the user wants an agent to use, test, check or automate something on their iPhone, see how an app behaves on a real device, or when Mobdev tools such as screenshot, tap_text or read_screen are available.
+description: Drive a real iPhone, an iOS simulator or an Android emulator or phone from a Mac with Mobdev's MCP tools - look at the screen, tap, swipe, type, open apps and read on-screen text. Use when the user wants an agent to use, test, check or automate something on their iPhone, a simulator or Android, see how an app behaves on a device, or when Mobdev tools such as screenshot, tap_text or read_screen are available.
 ---
 
 # Driving an iPhone with Mobdev
@@ -60,6 +60,17 @@ in the way, or the tap hit a neighbour. Do not repeat the same tap blindly.
   agents work.
 - `swipe` fails because the pointer snaps to items, or a swipe opened something instead of
   scrolling: Snap to Item is on in AssistiveTouch. Ask the user to turn it off, then swipe again.
+
+## Simulators and Android
+
+`list_devices` also lists booted iOS simulators and Android emulators and phones. Pass their id or
+name as `device`; without it Mobdev picks the connected iPhone when there is one. They need no
+setup, and the same tools work, with these differences:
+
+- Simulators take keys in their own keyboard layout; Mobdev handles that.
+- On Android, `press_key` with `escape` is Back, `type_text` types ASCII only, and `open_app` matches
+  package names ("Settings" opens com.android.settings; `list_apps` with `all: true` lists them).
+- An app reopens where it was left. `stop_app` first when you need its first screen.
 
 ## Safety
 
