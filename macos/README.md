@@ -106,13 +106,14 @@ earlier `initialize`-based versions from 2024-11-05 to 2025-11-25.
 ### Tools
 
 Coordinates are pixels of the image `screenshot` returns (long edge 1280 px, origin top-left).
-Actions return a fresh screenshot over MCP unless `screenshot` is `false`. With more than one iPhone
-on the Mac, pass `device` (an id or name from `list_devices`) to pick one.
+Actions return a fresh screenshot over MCP unless `screenshot` is `false`. With more than one
+device, pass `device` (an id or name from `list_devices`) to pick one. Without it, Mobdev uses the
+only device, or the connected iPhone when simulators or Android devices run next to it.
 
 | Tool | Arguments | |
 |---|---|---|
-| `list_devices` | | The iPhones on this Mac: id, name, model, iOS version, ready |
-| `status` | | Screen and Bluetooth readiness, screenshot size |
+| `list_devices` | | iPhones, booted simulators and Android devices: id, name, model, system version, ready |
+| `status` | | Screen and input readiness, screenshot size |
 | `screenshot` | | JPEG of the screen |
 | `tap` | `x`, `y` | |
 | `long_press` | `x`, `y`, `seconds` | |
@@ -121,13 +122,13 @@ on the Mac, pass `device` (an id or name from `list_devices`) to pick one.
 | `type_text` | `text`, `submit` | Into the focused field, at most 1000 characters per call |
 | `press_key` | `key`, `modifiers` | e.g. `space` + `cmd` for Spotlight |
 | `home` | | |
-| `open_app` | `name` | Through Spotlight |
+| `open_app` | `name` | Through Spotlight on an iPhone; by name or bundle ID on simulators and Android |
 | `read_screen` | | All visible text with positions (on-device OCR) |
 | `find_text` | `text` | |
 | `tap_text` | `text`, `index` | Taps a visible label |
 | `wait_for_text` | `text`, `timeout`, `gone` | |
 | `list_apps` | `all` | Apps installed for development, or every app |
-| `install_app` | `path` | An `.app` or `.ipa` built for iPhone, from a path on this Mac |
+| `install_app` | `path` | A build from a path on this Mac: `.app`/`.ipa` for iPhone, `.app` for simulators, `.apk` for Android |
 | `uninstall_app` | `bundle_id` | Only apps installed for development |
 | `launch_app` | `bundle_id`, `arguments`, `environment`, `restart` | Captures what the app prints |
 | `stop_app` | `bundle_id` | |
@@ -153,13 +154,33 @@ xcodebuild -scheme MyApp -destination 'generic/platform=iOS' -derivedDataPath bu
 ```
 
 - `launch_app` sets `OS_ACTIVITY_DT_MODE` so `Logger` and `os_log` messages reach the console, as
-  in Xcode. `logs` returns a `cursor`; pass it as `after` to get only newer lines. When the app
+  in Xcode. `devicectl` attaches the console a moment after launch, so lines printed in the first
+  milliseconds can be missing. `logs` returns a `cursor`; pass it as `after` to get only newer lines. When the app
   exits or crashes, `logs` says so, and `crash_reports` lists the report.
 - `crash_reports` with `name` copies the report to `~/Library/Application Support/dev.mobdev.mac/crash-reports`
   and returns the exception, the reason and the crashed thread. Frames of your own code carry
   addresses for `atos` when the report has no symbols.
 - `install_app` reads the path on the Mac that runs Mobdev, also when the agent connects through a
   relay. `uninstall_app` refuses App Store and system apps.
+
+### Simulators and Android
+
+Booted iOS simulators and Android emulators and phones appear next to your iPhones, in the app and
+in `list_devices`, and take the same 23 tools. Nothing needs to be set up on them: no cable, no
+Bluetooth, no Developer Mode. Turn them off in Settings › General if you only want iPhones.
+
+- **iOS Simulator** (needs Xcode): Mobdev reads the screen from the simulator's framebuffer and
+  sends touches, keys and the Home button through Xcode's SimulatorKit, the way Simulator.app and
+  idb do, so there is no helper app and no window to keep open. Keys follow the simulator's own
+  keyboard layout. Apps go through `devicectl`, `stop_app` through `simctl`; crash reports come
+  from `~/Library/Logs/DiagnosticReports`. `install_app` takes an `.app` built for the simulator:
+  `xcodebuild -scheme MyApp -destination 'generic/platform=iOS Simulator' build`.
+- **Android** (needs the Android SDK's adb, e.g. from Android Studio): emulators and phones with
+  USB debugging appear while the adb server runs; Mobdev never starts it. Screenshots are raw
+  `screencap` frames, input goes through `input`, `type_text` types ASCII text as a whole,
+  `press_key` with `escape` is Back. `open_app` matches launchable package names ("Settings" opens
+  `com.android.settings`). `launch_app` follows the app's logcat, `crash_reports` reads the crash
+  buffer, `install_app` takes an `.apk`; `arguments` and `environment` are ignored.
 
 ## HTTP API
 
@@ -219,6 +240,10 @@ the Mac.
   characters without a key cannot be typed.
 - Portrait orientation is the tested case. Coordinates follow the current screenshot size.
 - The phone must stay unlocked. Mobdev cannot enter the passcode.
+- Simulator input uses Xcode's private SimulatorKit; tested with Xcode 27. A later Xcode can change
+  it, as it did for idb and AXe. Simulator screens show the main display only.
+- Android types ASCII text only (`input text`), and adb does not know app names, so `open_app`
+  matches package names.
 
 ## Development
 
@@ -240,9 +265,24 @@ MOBDEV_TEST_DEVICE=<udid> MOBDEV_TEST_APP=/path/to/App.app swift test --filter D
 MOBDEV_TEST_DEVICE=<udid> MOBDEV_TEST_BUNDLE_ID=<bundle id> swift test --filter DeveloperIntegration
 ```
 
+Simulators and Android are tested with fake devices and parsers fed real `adb` output. The
+opt-in `EmulatorIntegration` tests drive a booted simulator and a running emulator through every
+tool. The simulator one needs a fixture app that prints each tap as `fixture: tap <x> <y> fraction
+<fx> <fy>`, echoes typed text as `fixture: submitted <text>`, shows "Tap anywhere" and "Type here",
+and crashes when launched with the argument `crash`:
+
+```sh
+MOBDEV_TEST_SIMULATOR=<udid> MOBDEV_TEST_SIMULATOR_APP=/path/to/Fixture.app swift test --filter EmulatorIntegration
+MOBDEV_TEST_ANDROID=emulator-5554 MOBDEV_TEST_ANDROID_APK=/path/to/any.apk swift test --filter EmulatorIntegration
+```
+
+The Android tests crash the Settings app with `am crash` and install, remove and reinstall the
+.apk; run the emulator with `-read-only` to throw those changes away.
+
 `MobdevCore` contains everything testable: HID reports and gestures (`HID/`), screen capture and
 text recognition (`Capture/`), tools (`Phone/`), `devicectl` for the developer tools
-(`Developer/`), HTTP, MCP and the stdio bridge (`Server/`) and the relay client (`Relay/`). The `Mobdev` target is the SwiftUI app: a `NavigationSplitView` with
+(`Developer/`), simulators and Android (`Emulators/`), HTTP, MCP and the stdio bridge (`Server/`)
+and the relay client (`Relay/`). The `Mobdev` target is the SwiftUI app: a `NavigationSplitView` with
 Liquid Glass controls, an inspector for setup, a `Table` for activity and a Settings scene. Tests
 use a fake phone that renders real text, so OCR, `tap_text` and coordinates are exercised without
 hardware. `scripts/make-icon.swift` renders the app icon on the macOS 26 grid.

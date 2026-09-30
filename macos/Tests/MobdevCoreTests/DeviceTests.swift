@@ -172,7 +172,7 @@ import Testing
         }
         #expect(throws: (any Error).self) { try tools.phone(for: "") }
         let missing = try await tools.call("home", arguments: ["device": .null], source: "test", screenshotByDefault: false)
-        #expect(missing.text.contains("No iPhone is connected"))
+        #expect(missing.text.contains("No device is connected"))
     }
 
     @Test func everyToolTakesADeviceAndListDevicesExists() {

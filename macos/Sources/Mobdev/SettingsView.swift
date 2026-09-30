@@ -27,6 +27,16 @@ private struct GeneralSettings: View {
                 .font(.callout)
                 .foregroundStyle(.secondary)
 
+            Section {
+                Toggle(
+                    "Show simulators and Android devices",
+                    isOn: Binding(get: { model.settings.emulatorsEnabled }, set: { model.setEmulatorsEnabled($0) }))
+            } footer: {
+                Text(
+                    "Booted iOS simulators (with Xcode) and Android emulators and phones (with a running adb) appear next to your iPhones. Agents drive them with the same tools."
+                )
+            }
+
             Section("Updates") {
                 LabeledContent("Version", value: Updates.version)
                 if Updates.shared.isAvailable {

@@ -126,10 +126,24 @@ public struct DeveloperError: Error, CustomStringConvertible {
     public init(_ description: String) { self.description = description }
 }
 
+/// What builds a device runs, so a path is checked before the device sees it.
+public enum AppPlatform: Sendable, Equatable {
+    /// .app or .ipa built for iOS devices.
+    case iPhone
+    /// .app built for the iOS Simulator.
+    case simulator
+    /// .apk.
+    case android
+}
+
 /// App development on a device: install, launch and stop apps, open links, read what apps print
-/// and their crash reports. `DeviceControl` implements it with Xcode's `devicectl`.
+/// and their crash reports. `DeviceControl` implements it with Xcode's `devicectl` for iPhones and
+/// simulators, `AndroidDevice` with adb.
 public protocol AppBackend: Sendable {
     var logs: AppLogs { get }
+    var platform: AppPlatform { get }
+    /// Brings an installed app to the front, starting it if needed, without capturing its output.
+    func activate(_ bundleID: String) async throws
     /// Developer apps, or every app with `all`.
     func apps(all: Bool) async throws -> [InstalledApp]
     /// Any installed app by bundle ID.
@@ -150,22 +164,39 @@ public protocol AppBackend: Sendable {
     func crashReport(named name: String) async throws -> (report: CrashReport?, file: URL)
 }
 
-/// Xcode's `devicectl` for one device. Needs Xcode on the Mac and Developer Mode on the device.
+/// Xcode's `devicectl` for one device. Needs Xcode on the Mac and Developer Mode on an iPhone.
+/// Simulators need nothing; they stop apps with `simctl` and keep crash reports on the Mac.
 public final class DeviceControl: AppBackend, @unchecked Sendable {
     public let udid: String
     public let logs = AppLogs()
+    public let isSimulator: Bool
     private let runner: CommandRunning
     private let reportsFolder: URL
+    /// Where macOS writes simulator crash reports.
+    private let localReports: URL
     private let executable: Locked<URL?>
     /// The console of each app launched with log capture, by bundle ID.
     private let consoles = Locked<[String: (command: RunningCommand, launch: ConsoleLaunch)]>([:])
 
     /// `devicectl` is found through `xcode-select` unless given.
-    public init(udid: String, runner: CommandRunning = ProcessRunner(), devicectl: URL? = nil, reportsFolder: URL) {
+    public init(
+        udid: String, runner: CommandRunning = ProcessRunner(), devicectl: URL? = nil, reportsFolder: URL,
+        simulator: Bool = false,
+        localReports: URL = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Logs/DiagnosticReports")
+    ) {
         self.udid = udid
         self.runner = runner
         self.reportsFolder = reportsFolder
+        isSimulator = simulator
+        self.localReports = localReports
         executable = Locked(devicectl)
+    }
+
+    public var platform: AppPlatform { isSimulator ? .simulator : .iPhone }
+
+    public func activate(_ bundleID: String) async throws {
+        _ = try await call(["device", "process", "launch"], arguments: [bundleID])
     }
 
     // MARK: Apps
@@ -259,6 +290,7 @@ public final class DeviceControl: AppBackend, @unchecked Sendable {
 
     public func stop(_ bundleID: String) async throws -> Bool {
         guard let app = try await app(bundleID) else { throw DeveloperError("\(bundleID) is not installed.") }
+        if isSimulator { return try await stopOnSimulator(bundleID) }
         let processes = try await call(["device", "info", "processes"])
         let pids = (processes["runningProcesses"]?.arrayValue ?? []).compactMap { process -> Int? in
             // The app's own executable, not its extensions in PlugIns/.
@@ -283,6 +315,48 @@ public final class DeviceControl: AppBackend, @unchecked Sendable {
         return stopped
     }
 
+    /// Simulator crash reports land on the Mac. A report belongs to this simulator when its header
+    /// says iOS Simulator (platform 7) and the process path near the top names this UDID.
+    private func simulatorReports() -> [CrashReportFile] {
+        let manager = FileManager.default
+        guard
+            let names = try? manager.contentsOfDirectory(atPath: localReports.path)
+        else { return [] }
+        return names.filter { $0.hasSuffix(".ips") }.compactMap { name -> CrashReportFile? in
+            let url = localReports.appendingPathComponent(name)
+            guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
+            defer { try? handle.close() }
+            let head = String(decoding: (try? handle.read(upToCount: 8192)) ?? Data(), as: UTF8.self)
+            guard let headerLine = head.split(separator: "\n", maxSplits: 1).first,
+                let header = try? JSONValue.parse(Data(headerLine.utf8)),
+                header["platform"]?.doubleValue == 7, head.contains(udid)
+            else { return nil }
+            let attributes = try? manager.attributesOfItem(atPath: url.path)
+            return CrashReportFile(
+                name: name,
+                process: header["app_name"]?.stringValue ?? header["name"]?.stringValue
+                    ?? CrashReportFile.process(fromName: name) ?? name,
+                date: attributes?[.modificationDate] as? Date,
+                size: (attributes?[.size] as? NSNumber)?.intValue ?? 0)
+        }
+        .sorted { ($0.date ?? .distantPast) > ($1.date ?? .distantPast) }
+    }
+
+    /// devicectl cannot signal simulator processes (their pids are the Mac's), so `simctl` stops them.
+    private func stopOnSimulator(_ bundleID: String) async throws -> Bool {
+        let result = try await runner.run(
+            URL(fileURLWithPath: "/usr/bin/xcrun"), ["simctl", "terminate", udid, bundleID], timeout: 20)
+        let captured = detach(bundleID)
+        let stopped = result.status == 0
+        if !stopped, !result.output.contains("found nothing to terminate") {
+            throw DeveloperError(
+                "Could not stop \(bundleID): "
+                    + (result.output.split(separator: "\n").first.map(String.init) ?? "simctl failed"))
+        }
+        if stopped || captured { logs.setStatus("stopped", for: bundleID) }
+        return stopped
+    }
+
     /// Stops capturing an app's output. The app keeps running. True if it was being captured.
     @discardableResult
     private func detach(_ bundleID: String) -> Bool {
@@ -300,6 +374,7 @@ public final class DeviceControl: AppBackend, @unchecked Sendable {
     // MARK: Crash reports
 
     public func crashReports() async throws -> [CrashReportFile] {
+        if isSimulator { return simulatorReports() }
         let result = try await call(["device", "info", "files"], options: ["--domain-type", "systemCrashLogs"])
         let fractional = ISO8601DateFormatter()
         fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
@@ -323,6 +398,10 @@ public final class DeviceControl: AppBackend, @unchecked Sendable {
         // Only names the device listed, so a name cannot reach outside the crash log folder.
         guard try await crashReports().contains(where: { $0.name == name }) else {
             throw DeveloperError("No crash report named \"\(name)\". Call crash_reports without name to list them.")
+        }
+        if isSimulator {
+            let file = localReports.appendingPathComponent(name)
+            return (CrashReport.parse((try? String(contentsOf: file, encoding: .utf8)) ?? ""), file)
         }
         let folder = reportsFolder.appendingPathComponent(udid.filter { $0.isLetter || $0.isNumber || $0 == "-" })
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)

@@ -18,7 +18,13 @@ struct DeviceScreenView: View {
         ZStack {
             Backdrop(colors: status?.screen.isConnected == true ? model.ambient[id] ?? [] : [])
             Group {
-                if let size = status?.frameSize, model.device(id)?.capture.session != nil {
+                if model.state(id)?.isEmulated == true {
+                    if let size = status?.frameSize {
+                        EmulatorStage(id: id, frameSize: CGSize(width: size.width, height: size.height))
+                    } else {
+                        ProgressView("Waiting for the screen…")
+                    }
+                } else if let size = status?.frameSize, model.hardware(id)?.capture.session != nil {
                     PhoneStage(id: id, frameSize: CGSize(width: size.width, height: size.height))
                 } else {
                     ConnectPhone(id: id)
@@ -43,7 +49,7 @@ struct DeviceScreenView: View {
         .toolbar {
             ToolbarItemGroup {
                 Button("Home", systemImage: "house") { model.home(id) }
-                    .disabled(status?.bluetooth.isConnected != true)
+                    .disabled(status?.inputReady != true)
                     .help("Go to the home screen")
                 Button("Screenshot", systemImage: "camera") { model.saveScreenshot(id) }
                     .disabled(status?.frameSize == nil)
@@ -110,7 +116,7 @@ private struct ActivityPane: View {
         let ready = model.state(id)?.isReady ?? false
         VStack(spacing: 0) {
             Group {
-                if ready {
+                if ready || model.state(id)?.isEmulated == true {
                     StatusSummary(id: id)
                 } else {
                     SetupSteps(id: id)
@@ -141,7 +147,7 @@ private struct ActivityPane: View {
             .padding(.top, 16)
             .padding(.bottom, 6)
             if entries.isEmpty {
-                Text("Every action an agent takes on this iPhone appears here and stays after you quit.")
+                Text("Every action an agent takes on this device appears here and stays after you quit.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -207,7 +213,7 @@ private struct PhoneStage: View {
 
             VStack(spacing: 16) {
                 PhoneMirrorView(
-                    id: id, session: model.device(id)?.capture.session, input: model.device(id)?.input,
+                    id: id, session: model.hardware(id)?.capture.session, input: model.hardware(id)?.input,
                     layout: model.settings.keyboardLayout, focused: $focused,
                     onDrag: { model.checkPointerAfterDrag(id, at: $0) }
                 )
@@ -275,6 +281,16 @@ private struct ConnectPhone: View {
         case .failed(let message):
             ContentUnavailableView(
                 "Screen Capture Failed", systemImage: "exclamationmark.triangle", description: Text(message))
+        case .connected:
+            // Connected over USB, but no picture yet. Mobdev starts the capture again by itself.
+            ContentUnavailableView {
+                Label("Waiting for the Screen", systemImage: "iphone.gen3")
+                    .symbolEffect(.pulse, options: .repeating)
+            } description: {
+                Text(
+                    "\(model.state(id)?.name ?? "The iPhone") is connected, but no picture has arrived yet. Wake and unlock it. If it stays like this, plug the cable in again."
+                )
+            }
         default:
             ContentUnavailableView {
                 Label("Connect \(model.state(id)?.name ?? "Your iPhone")", systemImage: "iphone.gen3")
@@ -295,12 +311,30 @@ private struct StatusSummary: View {
     let id: String
 
     var body: some View {
-        let status = model.state(id)?.status
+        let state = model.state(id)
+        let status = state?.status
         VStack(alignment: .leading, spacing: 8) {
-            row("Screen", symbol: "rectangle.on.rectangle", value: screenText(status?.screen))
-            row("Bluetooth", symbol: "dot.radiowaves.left.and.right", value: "Paired")
-            row("Keyboard", symbol: "keyboard", value: model.settings.keyboardLayout.displayName)
-            pointerRow(status?.pointer)
+            if let state, state.isEmulated {
+                let waiting = ("circle.dashed", Color.secondary)
+                row(
+                    "Screen", symbol: "rectangle.on.rectangle", value: status?.frameSize == nil ? "Starting" : screenText(status?.screen),
+                    mark: status?.frameSize == nil ? waiting : ("checkmark.circle.fill", .green))
+                row("Input", symbol: "hand.tap", value: state.kind == .android ? "adb" : "Direct")
+                row(
+                    "Keyboard", symbol: "keyboard",
+                    value: state.kind == .android ? "Typed as text" : status?.keyboardLayout.displayName ?? "U.S.")
+                    .help(
+                        state.kind == .android
+                            ? "Text goes in as a whole through adb; it can be ASCII only."
+                            : "Keys are sent for the simulator's own keyboard layout.")
+                row("Apps", symbol: "square.stack.3d.up", value: "Install, launch, logs")
+                    .help("install_app, launch_app, logs and crash_reports work without further setup.")
+            } else {
+                row("Screen", symbol: "rectangle.on.rectangle", value: screenText(status?.screen))
+                row("Bluetooth", symbol: "dot.radiowaves.left.and.right", value: "Paired")
+                row("Keyboard", symbol: "keyboard", value: model.settings.keyboardLayout.displayName)
+                pointerRow(status?.pointer)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }

@@ -92,6 +92,8 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var relayURL = ""
     public var relayAccessToken = ""
     public var hostName = AppSettings.defaultHostName
+    /// Lists booted iOS simulators and Android devices next to iPhones.
+    public var emulatorsEnabled = true
 
     public init() {}
 
@@ -112,6 +114,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         relayURL = try container.decodeIfPresent(String.self, forKey: .relayURL) ?? ""
         relayAccessToken = try container.decodeIfPresent(String.self, forKey: .relayAccessToken) ?? ""
         hostName = try container.decodeIfPresent(String.self, forKey: .hostName) ?? defaults.hostName
+        emulatorsEnabled = try container.decodeIfPresent(Bool.self, forKey: .emulatorsEnabled) ?? true
     }
 
     public static func load() -> AppSettings {

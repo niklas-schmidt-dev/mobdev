@@ -70,7 +70,10 @@ public final class PhoneTools: Sendable {
         Swipes need AssistiveTouch with Snap to Item off and Perform Touch Gestures on; `status` shows \
         what the pointer does once it has been checked, and `swipe` refuses when the pointer snaps. \
         With Developer Mode on the iPhone and Xcode on the Mac, `install_app`, `launch_app`, `logs` and \
-        `crash_reports` close the loop for apps you build: install a build, run it, read its output.
+        `crash_reports` close the loop for apps you build: install a build, run it, read its output. \
+        Booted iOS simulators and Android emulators and phones (through adb) take the same tools with \
+        nothing to set up; `list_devices` shows every device and `device` picks one. On Android, \
+        `press_key` escape is Back and `open_app` matches package names such as com.android.settings.
         """
 
     /// A tool's input schema. Tools with `screenshot` return a screenshot after acting.
@@ -272,12 +275,16 @@ public final class PhoneTools: Sendable {
             return ToolOutput(text: "Scrolled \(direction) by \(amount).")
         case "type_text":
             let text = try args.string("text", maxLength: Self.maxTypedCharacters)
-            let layout = phone.status().keyboardLayout
-            var strokes = try layout.strokes(typing: text)
-            if args.bool("submit") == true { strokes.append(KeyStroke(0x28)) }
+            let submit = args.bool("submit") == true
             try requireTouch()
-            try await phone.type(strokes)
-            return ToolOutput(text: "Typed \(text.count) characters\(args.bool("submit") == true ? " and pressed Return" : "").")
+            if try await phone.typeText(text) {
+                if submit { try await phone.press(KeyStroke(0x28)) }
+            } else {
+                var strokes = try phone.status().keyboardLayout.strokes(typing: text)
+                if submit { strokes.append(KeyStroke(0x28)) }
+                try await phone.type(strokes)
+            }
+            return ToolOutput(text: "Typed \(text.count) characters\(submit ? " and pressed Return" : "").")
         case "press_key":
             let key = try args.string("key")
             let modifiers = args.strings("modifiers")
@@ -291,9 +298,13 @@ public final class PhoneTools: Sendable {
             return ToolOutput(text: "Went to the home screen.")
         case "open_app":
             let name = try args.string("name", maxLength: 100)
+            try requireTouch()
+            if let opened = try await phone.openApp(named: name) {
+                try await pause(1.0)
+                return ToolOutput(text: opened)
+            }
             let layout = phone.status().keyboardLayout
             let strokes = try layout.strokes(typing: name)
-            try requireTouch()
             try await phone.press(.home)
             try await pause(0.6)
             try await phone.press(.search)
@@ -370,16 +381,26 @@ public final class PhoneTools: Sendable {
     private func statusOutput() -> ToolOutput {
         let status = phone.status()
         var screenshot: JSONValue = .null
-        var lines = ["Screen (USB): \(status.screen.summary)", "Input (Bluetooth): \(status.bluetooth.summary)"]
+        var lines: [String]
+        switch status.input {
+        case .bluetooth:
+            lines = ["Screen (USB): \(status.screen.summary)", "Input (Bluetooth): \(status.bluetooth.summary)"]
+        case .direct:
+            lines = ["Screen: \(status.screen.summary)", "Input: \(status.inputSummary)"]
+        }
         if let size = status.frameSize {
             let shot = ScreenGeometry.screenshotSize(forFrameWidth: size.width, height: size.height)
             screenshot = ["width": .number(Double(shot.width)), "height": .number(Double(shot.height))]
             lines.append("Screenshot coordinates: \(shot.width)×\(shot.height) px")
         }
-        lines.append("Keyboard layout: \(status.keyboardLayout.displayName)")
+        if status.input == .bluetooth { lines.append("Keyboard layout: \(status.keyboardLayout.displayName)") }
         if let pointer = status.pointer { lines.append("Pointer: \(pointer.summary)") }
-        let ready = status.frameSize != nil && status.bluetooth.isConnected
+        let ready = status.isReady
         lines.insert(ready ? "Ready." : "Not ready.", at: 0)
+        var input: JSONValue = .null
+        if case .direct(let route) = status.input {
+            input = ["route": .string(route), "ready": .bool(status.inputReady)]
+        }
         return ToolOutput(
             text: lines.joined(separator: "\n"),
             data: [
@@ -388,6 +409,7 @@ public final class PhoneTools: Sendable {
                 "bluetooth": [
                     "connected": .bool(status.bluetooth.isConnected), "summary": .string(status.bluetooth.summary),
                 ],
+                "input": input,
                 "screenshot": screenshot,
                 "keyboard_layout": .string(status.keyboardLayout.rawValue),
                 "pointer": status.pointer.map { .string($0.rawValue) } ?? .null,
@@ -423,7 +445,11 @@ public final class PhoneTools: Sendable {
     }
 
     private func requireTouch() throws {
-        guard phone.status().bluetooth.isConnected else { throw HIDError.notConnected }
+        let status = phone.status()
+        guard status.inputReady else {
+            if status.input == .bluetooth { throw HIDError.notConnected }
+            throw ToolFailure("The device does not accept input right now: \(status.screen.summary).")
+        }
     }
 
     private func describe(_ point: NormalizedPoint) throws -> String {

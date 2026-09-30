@@ -21,14 +21,20 @@ struct DeviceState: Identifiable, Equatable {
     var activityCount: Int
     /// A connected Bluetooth host that may be this iPhone paired again, while its own is away.
     var replacementHost: BluetoothHost? = nil
+    var kind: DeviceKind = .iPhone
 
-    var modelName: String { info?.modelName ?? "iPhone" }
+    var modelName: String { info?.modelName ?? kind.label }
     var isConnected: Bool { status.screen.isConnected }
-    var isReady: Bool { status.frameSize != nil && status.bluetooth.isConnected }
+    var isReady: Bool { status.isReady }
+    /// A simulator or Android device: no cable, no Bluetooth, no setup.
+    var isEmulated: Bool { kind != .iPhone }
 
     /// One line for the window subtitle, sidebar and menu bar.
     var statusLine: String {
-        switch (status.screen, status.bluetooth) {
+        if isEmulated { return isReady ? "Ready for agents" : "Starting" }
+        // Found over USB, but no picture has arrived yet.
+        if isConnected, status.frameSize == nil { return "Waiting for the screen" }
+        return switch (status.screen, status.bluetooth) {
         case (.cameraDenied, _): "Camera access needed"
         case (.failed, _): "Screen capture failed"
         case (.connected, .connected): "Ready for agents"
@@ -75,6 +81,8 @@ final class AppModel {
     private(set) var relaySecret: String
 
     let hub: DeviceHub
+    /// Booted simulators and Android devices.
+    let emulators: EmulatorHub
     @ObservationIgnored private let router: APIRouter
     @ObservationIgnored private let server: HTTPServer
     /// Where `Mobdev mcp` connects: a Unix socket in the private data directory.
@@ -97,7 +105,9 @@ final class AppModel {
         let signal = ChangeSignal()
         let hub = DeviceHub(keyboardLayout: settings.keyboardLayout) { signal.fire() }
         self.hub = hub
-        let tools = DeviceTools(hub: hub)
+        let emulators = EmulatorHub { signal.fire() }
+        self.emulators = emulators
+        let tools = DeviceTools(hub: hub, emulators: emulators)
         let portBox = self.portBox
         let router = APIRouter(tools: tools, token: { tokenBox.get() }, port: { portBox.get() })
         self.router = router
@@ -146,6 +156,7 @@ final class AppModel {
             serverFailed = true
         }
         if settings.relayEnabled { startRelay() }
+        if settings.emulatorsEnabled { emulators.start() }
         refresh()
         Task.detached(priority: .utility) { TextRecognizer.warmUp() }
         Task { [weak self] in
@@ -186,20 +197,35 @@ final class AppModel {
         return (remote, device)
     }
 
+    /// iPhones, then simulators, then Android devices.
+    var allDevices: [any Device] { hub.devices + emulators.devices }
+
     func refresh() {
+        let peripheral = hub.peripheral.state
+        if peripheral != bluetoothState { bluetoothState = peripheral }
+        let access = hub.screenAccess
+        if access != screenAccess { screenAccess = access }
         let hardware = hub.devices
-        let states = hardware.map { device in
-            DeviceState(
-                id: device.id, name: device.name, info: device.info, status: device.status(), onUSB: device.isOnUSB,
-                activityCount: device.activity.all.count, replacementHost: hub.replacementHost(for: device.id))
-        }
+        let emulated = emulators.devices
+        let states =
+            hardware.map { device in
+                DeviceState(
+                    id: device.id, name: device.name, info: device.info, status: device.status(), onUSB: device.isOnUSB,
+                    activityCount: device.activity.all.count, replacementHost: hub.replacementHost(for: device.id))
+            }
+            + emulated.map { device in
+                DeviceState(
+                    id: device.id, name: device.name, info: device.info, status: device.status(), onUSB: true,
+                    activityCount: device.activity.all.count, kind: device.kind)
+            }
         if states != devices { devices = states }
-        for device in hardware where !observedLogs.contains(ObjectIdentifier(device.activity)) {
+        let all: [any Device] = hardware + emulated
+        for device in all where !observedLogs.contains(ObjectIdentifier(device.activity)) {
             observedLogs.insert(ObjectIdentifier(device.activity))
             device.activity.observe { [weak self] _ in Task { @MainActor in self?.refreshActivity() } }
         }
         refreshActivity()
-        relay.updateDevices(hardware.map(DeviceSummary.init))
+        relay.updateDevices(all.map(DeviceSummary.init))
         for id in thumbnails.keys where !(states.first { $0.id == id }?.isConnected ?? false) {
             thumbnails[id] = nil
             ambient[id] = nil
@@ -207,22 +233,30 @@ final class AppModel {
     }
 
     private func refreshActivity() {
-        let merged = hub.devices.flatMap { device in
+        let all = allDevices
+        let merged = all.flatMap { device in
             device.activity.all.map { ActivityItem(deviceID: device.id, deviceName: device.name, entry: $0) }
         }
         .sorted { $0.entry.date > $1.entry.date }
         let recent = merged
         if recent != activity { activity = recent }
         for index in devices.indices {
-            let count = hub.devices.first { $0.id == devices[index].id }?.activity.all.count ?? 0
+            let count = all.first { $0.id == devices[index].id }?.activity.all.count ?? 0
             if devices[index].activityCount != count { devices[index].activityCount = count }
         }
     }
 
+    @ObservationIgnored private var sampleRound = 0
+
     /// Thumbnails for the overview and backdrop colors for each connected device. Rendering full
     /// frames takes a while, so it happens off the main thread, and views only update on change.
+    /// An Android screenshot travels over adb, so those are taken every third round only.
     private func samplePictures() async {
-        for device in hub.devices where device.capture.state.isConnected {
+        sampleRound += 1
+        let connected: [any Device] =
+            hub.devices.filter { $0.capture.state.isConnected }
+            + emulators.devices.filter { $0.kind != .android || sampleRound % 3 == 1 }
+        for device in connected {
             let id = device.id
             let result = await Task.detached(priority: .utility) { () -> (CGImage, [Color])? in
                 guard let frame = device.frame() else { return nil }
@@ -236,32 +270,51 @@ final class AppModel {
 
     var port: UInt16 { portBox.get() == 0 ? MobdevPaths.port(settings: settings) : portBox.get() }
 
-    func device(_ id: String) -> HardwareDevice? { hub.devices.first { $0.id == id } }
+    func device(_ id: String) -> (any Device)? { allDevices.first { $0.id == id } }
+    /// An iPhone, for what only iPhones have: the USB capture and Bluetooth input.
+    func hardware(_ id: String) -> HardwareDevice? { hub.devices.first { $0.id == id } }
     func state(_ id: String) -> DeviceState? { devices.first { $0.id == id } }
 
-    /// The device the menu bar and setup assistant talk about: a ready one, else one with a screen.
+    /// Setup is about iPhones: simulators and Android devices are always connected and ready.
+    private var iPhones: [DeviceState] { devices.filter { !$0.isEmulated } }
+
+    /// The device the menu bar and setup assistant talk about: a ready iPhone, else one with a
+    /// screen, else any iPhone, else a ready simulator or Android device.
     var primary: DeviceState? {
-        devices.first(where: \.isReady) ?? devices.first(where: \.isConnected) ?? devices.first
+        iPhones.first(where: \.isReady) ?? iPhones.first(where: \.isConnected) ?? iPhones.first
+            ?? devices.first(where: \.isReady)
     }
 
-    var isReady: Bool { devices.contains(where: \.isReady) }
+    /// Whether an iPhone is ready, which the setup assistant and the menu bar wait for.
+    var isReady: Bool { iPhones.contains(where: \.isReady) }
 
-    /// Screen setup across devices: a connected screen, else camera access and the search.
+    /// Screen setup across iPhones: a connected screen, else camera access and the search.
     var setupScreen: ScreenState {
-        devices.first(where: \.isConnected)?.status.screen ?? hub.screenAccess
+        iPhones.first(where: \.isConnected)?.status.screen ?? screenAccess
     }
 
-    /// Bluetooth setup across devices: connected once any iPhone is paired.
-    var setupBluetooth: BluetoothState { hub.peripheral.state }
+    /// Bluetooth setup across iPhones: connected once any iPhone is paired.
+    var setupBluetooth: BluetoothState { bluetoothState }
+
+    /// Copies of the Bluetooth and camera states, stored so views update when they change: SwiftUI
+    /// does not see changes inside `hub`.
+    private(set) var bluetoothState: BluetoothState = .starting
+    private(set) var screenAccess: ScreenState = .starting
 
     var statusLine: String {
         guard let primary else { return screenStarted ? "Connect an iPhone with a USB cable" : "Not set up" }
         let ready = devices.filter(\.isReady).count
-        return ready > 1 ? "\(ready) iPhones ready" : primary.statusLine
+        return ready > 1 ? "\(ready) devices ready" : primary.statusLine
     }
 
     func clearActivity(device: String? = nil) {
-        for hardware in hub.devices where device == nil || hardware.id == device { hardware.activity.clear() }
+        for item in allDevices where device == nil || item.id == device { item.activity.clear() }
+    }
+
+    func setEmulatorsEnabled(_ enabled: Bool) {
+        settings.emulatorsEnabled = enabled
+        save()
+        if enabled { emulators.start() } else { emulators.stop() }
     }
 
     func forget(_ id: String) { hub.forget(id) }
@@ -296,7 +349,7 @@ final class AppModel {
     /// known, each drag is followed by a check that moves the pointer without clicking; the setup
     /// panel shows the result.
     func checkPointerAfterDrag(_ id: String, at point: NormalizedPoint) {
-        guard let device = device(id), device.status().pointer != .follows, !checkingPointer.contains(id) else {
+        guard let device = hardware(id), device.status().pointer != .follows, !checkingPointer.contains(id) else {
             return
         }
         checkingPointer.insert(id)
@@ -316,7 +369,7 @@ final class AppModel {
     /// Moves the pointer to the middle of the iPhone without tapping. With AssistiveTouch on, iOS
     /// shows it as a round pointer.
     func showPointer() {
-        guard let id = primary?.id, let device = device(id) else { return }
+        guard let id = primary?.id, let device = hardware(id) else { return }
         Task { try? await device.move(to: NormalizedPoint(x: 0.5, y: 0.5)) }
     }
 
@@ -456,15 +509,53 @@ final class AppModel {
 
     func home(_ id: String) {
         guard let device = device(id) else { return }
-        Task { try? await device.press(.home) }
+        enqueue(id) { try? await device.press(.home) }
+    }
+
+    /// The last input queued for each device. Each key press and click becomes a task, and a
+    /// simulator or adb has no queue of its own, so every task waits for the one before it.
+    @ObservationIgnored private var inputQueues: [String: Task<Void, Never>] = [:]
+
+    private func enqueue(_ id: String, _ work: @escaping @Sendable () async -> Void) {
+        let previous = inputQueues[id]
+        inputQueues[id] = Task {
+            await previous?.value
+            await work()
+        }
     }
 
     func type(_ text: String, on id: String) {
-        guard let device = device(id), let strokes = try? settings.keyboardLayout.strokes(typing: text) else {
+        guard let device = device(id) else {
             NSSound.beep()
             return
         }
-        Task { try? await device.type(strokes) }
+        // Simulators say which layout they read keys with; iPhones use the one picked in Settings.
+        let layout = device.kind == .iPhone ? settings.keyboardLayout : device.status().keyboardLayout
+        guard let strokes = try? layout.strokes(typing: text) else {
+            // Android types whole text; others need every character on the layout.
+            if device.kind == .android { enqueue(id) { _ = try? await device.typeText(text) } } else { NSSound.beep() }
+            return
+        }
+        enqueue(id) {
+            if (try? await device.typeText(text)) == true { return }
+            try? await device.type(strokes)
+        }
+    }
+
+    /// A click or drag in a simulator's or Android device's screen.
+    func tap(_ id: String, at point: NormalizedPoint) {
+        guard let device = device(id) else { return }
+        enqueue(id) { try? await device.tap(at: point, hold: 0.08) }
+    }
+
+    func swipe(_ id: String, from start: NormalizedPoint, to end: NormalizedPoint, duration: TimeInterval) {
+        guard let device = device(id) else { return }
+        enqueue(id) { try? await device.swipe(from: start, to: end, duration: max(0.1, min(duration, 2))) }
+    }
+
+    func pressKey(_ stroke: KeyStroke, on id: String) {
+        guard let device = device(id) else { return }
+        enqueue(id) { try? await device.press(stroke) }
     }
 
     func saveScreenshot(_ id: String) {

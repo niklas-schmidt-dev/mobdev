@@ -47,6 +47,7 @@ public final class ScreenCapture: NSObject, AVCaptureVideoDataOutputSampleBuffer
     // Only touched on `queue`.
     private var retryScheduled = false
     private var stopped = false
+    private var frameWait: TimeInterval = 5
 
     /// `onlyDeviceID` pins the capture to one device; without it the preferred or first iPhone is used.
     public init(onlyDeviceID: String? = nil, onStateChange: @escaping @Sendable (ScreenState) -> Void = { _ in }) {
@@ -185,6 +186,23 @@ public final class ScreenCapture: NSObject, AVCaptureVideoDataOutputSampleBuffer
         sessionBox.set(session)
         Log.info("capturing \(device.localizedName) (\(device.modelID))")
         setState(.connected(name: device.localizedName, width: 0, height: 0))
+        expectFrame(from: session)
+    }
+
+    /// A session can run without ever delivering a frame, for example after another app held the
+    /// screen and quit without releasing it. Without a first frame in time, the session is started
+    /// again, after 5, 10, 20 and then every 30 seconds until a frame arrives.
+    private func expectFrame(from session: AVCaptureSession) {
+        let delay = frameWait
+        queue.asyncAfter(deadline: .now() + delay) {
+            guard !self.stopped, self.sessionBox.get() === session,
+                case .connected(_, 0, 0) = self.state
+            else { return }
+            Log.info("no frame after \(Int(delay)) s, starting the screen capture again")
+            self.frameWait = min(delay * 2, 30)
+            self.stopSession()
+            self.connect()
+        }
     }
 
     /// A locked iPhone offers no screen, and a running app is not always told when it is unlocked
@@ -223,6 +241,7 @@ public final class ScreenCapture: NSObject, AVCaptureVideoDataOutputSampleBuffer
         let width = CVPixelBufferGetWidth(buffer)
         let height = CVPixelBufferGetHeight(buffer)
         if case .connected(let name, let oldWidth, let oldHeight) = state, oldWidth != width || oldHeight != height {
+            frameWait = 5
             setState(.connected(name: name, width: width, height: height))
         }
     }

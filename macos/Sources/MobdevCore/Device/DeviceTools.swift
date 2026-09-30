@@ -69,13 +69,16 @@ public struct DeviceSummary: Sendable, Equatable, Codable {
             id: id, name: name, productType: model, osVersion: osVersion, buildVersion: "", deviceClass: deviceClass)
     }
 
-    public init(_ device: HardwareDevice) {
+    /// `bluetooth` means "input connected": Bluetooth for iPhones, always for simulators and Android.
+    /// A simulator's model name says so, since the relays only pass these fields.
+    public init(_ device: any Device) {
         let status = device.status()
+        let modelName = device.info?.modelName ?? device.kind.label
         self.init(
             id: device.id, name: device.name, model: device.info?.productType ?? "",
-            modelName: device.info?.modelName ?? "iPhone", osVersion: device.info?.osVersion ?? "",
-            deviceClass: device.info?.deviceClass ?? "iPhone", screen: status.screen.isConnected,
-            bluetooth: status.bluetooth.isConnected, ready: status.frameSize != nil && status.bluetooth.isConnected)
+            modelName: device.kind == .simulator ? "\(modelName) Simulator" : modelName,
+            osVersion: device.info?.osVersion ?? "", deviceClass: device.info?.deviceClass ?? "iPhone",
+            screen: status.screen.isConnected, bluetooth: status.inputReady, ready: status.isReady)
     }
 
     public var json: JSONValue {
@@ -83,27 +86,31 @@ public struct DeviceSummary: Sendable, Equatable, Codable {
     }
 }
 
-/// Routes tool calls to the device named by the `device` argument.
+/// Routes tool calls to the device named by the `device` argument: an iPhone, a booted simulator or
+/// an Android device.
 public final class DeviceTools: ToolCalling {
     private let hub: DeviceHub
+    private let emulators: EmulatorHub?
     private let settleDelay: TimeInterval
     /// Per device, with the object it was made for: a rescan can replace a device under the same id.
-    private let tools = Locked<[String: (device: HardwareDevice, tools: PhoneTools)]>([:])
+    private let tools = Locked<[String: (device: any Device, tools: PhoneTools)]>([:])
 
-    public init(hub: DeviceHub, settleDelay: TimeInterval = 0.6) {
+    public init(hub: DeviceHub, emulators: EmulatorHub? = nil, settleDelay: TimeInterval = 0.6) {
         self.hub = hub
+        self.emulators = emulators
         self.settleDelay = settleDelay
     }
 
     public static let definitions: [ToolDefinition] = {
         let device: JSONValue = [
             "type": "string",
-            "description": "Device id or name from list_devices. Needed when more than one iPhone is connected.",
+            "description":
+                "Device id or name from list_devices. Needed when several devices are connected; without it Mobdev uses the only one, and on a Mac with an iPhone always the iPhone.",
         ]
         let listDevices = ToolDefinition(
             name: "list_devices", title: "List devices",
             description:
-                "The iPhones and iPads on this Mac with id, name, model, iOS version and whether each is ready. Pass `device` to the other tools to pick one.",
+                "The iPhones and iPads on this Mac, booted iOS simulators and Android emulators and phones, with id, name, model, system version and whether each is ready. Pass `device` to the other tools to pick one.",
             inputSchema: ["type": "object", "properties": [:]], readOnly: true)
         return [listDevices]
             + PhoneTools.definitions.map { definition in
@@ -134,7 +141,7 @@ public final class DeviceTools: ToolCalling {
             case .string(let text)?: query = text
             default: throw ToolFailure("device must be a device id or name from list_devices.")
             }
-            if name == "status", query == nil, hub.devices.count != 1 { return overview() }
+            if name == "status", query == nil, devices(matching: nil).count != 1 { return overview() }
             let device = try resolve(query)
             var remaining = arguments ?? [:]
             if case .object(var object) = remaining {
@@ -150,10 +157,13 @@ public final class DeviceTools: ToolCalling {
 
     public func phone(for device: String?) throws -> PhoneBackend { try resolve(device) }
 
-    private func tools(for device: HardwareDevice) -> PhoneTools {
-        let current = Set(hub.devices.map(\.id))
+    /// iPhones first, then simulators, then Android devices.
+    public var allDevices: [any Device] { hub.devices + (emulators?.devices ?? []) }
+
+    private func tools(for device: any Device) -> PhoneTools {
+        let current = Set(allDevices.map(\.id))
         return tools.withLock { cache in
-            cache = cache.filter { current.contains($0.key) }  // Forgotten devices.
+            cache = cache.filter { current.contains($0.key) }  // Forgotten or shut down devices.
             if let existing = cache[device.id], existing.device === device { return existing.tools }
             let created = PhoneTools(phone: device, activity: device.activity, settleDelay: settleDelay)
             cache[device.id] = (device, created)
@@ -161,18 +171,34 @@ public final class DeviceTools: ToolCalling {
         }
     }
 
-    private func resolve(_ query: String?) throws -> HardwareDevice {
+    /// Like `DeviceHub.devices(matching:)` across every kind of device. Without a query, a Mac that
+    /// knows an iPhone picks among its iPhones only, as before simulators and Android existed: a
+    /// locked or unplugged iPhone must not hand an agent's input to a simulator.
+    func devices(matching query: String?) -> [any Device] {
+        let hardware = hub.devices
+        let virtual = emulators?.devices ?? []
+        if query == nil, !hardware.isEmpty { return hub.devices(matching: nil) }
+        let all: [any Device] = hardware + virtual
+        let keys =
+            hardware.map {
+                DeviceHub.DeviceKey(id: $0.id, captureID: $0.captureID, name: $0.name, connected: $0.capture.state.isConnected)
+            } + virtual.map { DeviceHub.DeviceKey(id: $0.id, captureID: $0.id, name: $0.name, connected: true) }
+        return DeviceHub.matches(query, in: keys).map { all[$0] }
+    }
+
+    private func resolve(_ query: String?) throws -> any Device {
         if let query, query.trimmingCharacters(in: .whitespaces).isEmpty {
             throw ToolFailure("device must be a device id or name from list_devices.")
         }
-        let matches = hub.devices(matching: query)
+        let matches = devices(matching: query)
         if matches.count == 1 { return matches[0] }
-        let devices = hub.devices
-        func list(_ devices: [HardwareDevice]) -> String {
+        let devices = allDevices
+        func list(_ devices: [any Device]) -> String {
             devices.map { "\($0.name) (\($0.id))" }.joined(separator: ", ")
         }
         if devices.isEmpty {
-            throw ToolFailure("No iPhone is connected. Connect an unlocked iPhone with a USB data cable.")
+            throw ToolFailure(
+                "No device is connected. Connect an unlocked iPhone with a USB data cable, boot a simulator or start an Android emulator.")
         }
         if let query {
             if matches.count > 1 {
@@ -183,26 +209,45 @@ public final class DeviceTools: ToolCalling {
         throw ToolFailure("Several devices are connected. Pass `device` with one of: \(list(devices)).")
     }
 
+    private static func state(_ device: any Device, _ summary: DeviceSummary) -> String {
+        if summary.ready { return "ready" }
+        if device.kind == .iPhone { return summary.screen ? "screen only, Bluetooth not paired" : "not connected" }
+        return "screen not available yet"
+    }
+
     private func listDevices() -> ToolOutput {
-        let summaries = hub.devices.map(DeviceSummary.init)
-        guard !summaries.isEmpty else {
-            return ToolOutput(text: "No devices. Connect an unlocked iPhone with a USB data cable.", data: .array([]))
+        let devices = allDevices
+        guard !devices.isEmpty else {
+            return ToolOutput(
+                text:
+                    "No devices. Connect an unlocked iPhone with a USB data cable, boot a simulator or start an Android emulator.",
+                data: .array([]))
         }
-        let lines = summaries.map { device in
-            let state = device.ready ? "ready" : device.screen ? "screen only, Bluetooth not paired" : "not connected"
-            return "\(device.name): \(device.modelName), iOS \(device.osVersion), \(state). id: \(device.id)"
+        let summaries = devices.map(DeviceSummary.init)
+        let lines = zip(devices, summaries).map { device, summary in
+            let system = device.info?.systemName ?? summary.osVersion
+            return "\(summary.name): \(summary.modelName), \(system), \(Self.state(device, summary)). id: \(summary.id)"
         }
-        return ToolOutput(text: lines.joined(separator: "\n"), data: .array(summaries.map(\.json)))
+        return ToolOutput(
+            text: lines.joined(separator: "\n"),
+            data: .array(zip(devices, summaries).map { device, summary in
+                guard case .object(var object) = summary.json else { return summary.json }
+                object["kind"] = .string(device.kind.rawValue)
+                return .object(object)
+            }))
     }
 
     /// Status without a device when there are none or several.
     private func overview() -> ToolOutput {
-        let summaries = hub.devices.map(DeviceSummary.init)
+        let devices = allDevices
+        let summaries = devices.map(DeviceSummary.init)
         let ready = summaries.filter(\.ready)
         var lines = [ready.isEmpty ? "Not ready." : "\(ready.count) of \(summaries.count) devices ready."]
-        lines += summaries.map { "\($0.name): \($0.ready ? "ready" : $0.screen ? "Bluetooth not paired" : "not connected")" }
+        lines += zip(devices, summaries).map { "\($1.name): \(Self.state($0, $1))" }
         if summaries.count > 1 { lines.append("Pass `device` to act on one of them.") }
-        if summaries.isEmpty { lines.append("Connect an unlocked iPhone with a USB data cable.") }
+        if summaries.isEmpty {
+            lines.append("Connect an unlocked iPhone with a USB data cable, boot a simulator or start an Android emulator.")
+        }
         return ToolOutput(
             text: lines.joined(separator: "\n"),
             data: ["ready": .bool(!ready.isEmpty), "devices": .array(summaries.map(\.json))])

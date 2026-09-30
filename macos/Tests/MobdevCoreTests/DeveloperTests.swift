@@ -66,6 +66,11 @@ final class FakeDevicectl: CommandRunning, @unchecked Sendable {
         return Stopped()
     }
 
+    func runBinary(_ executable: URL, _ arguments: [String], timeout: TimeInterval) throws -> (status: Int32, data: Data) {
+        calls.withLock { $0.append(arguments) }
+        return (1, Data())
+    }
+
     private struct Stopped: RunningCommand {
         func stop() {}
     }
@@ -383,6 +388,57 @@ final class FakeDevicectl: CommandRunning, @unchecked Sendable {
         let report = try #require(CrashReport.parse(text))
         #expect(report.summary.hasPrefix("System report (bug type 301)\n2026-09-30 02:43:39.00 +0200, iPhone OS 27.0"))
         #expect(report.summary.contains("Memory pressure\nLargest process: WhatsApp"))
+    }
+
+    func simulatorTools(reports: URL? = nil) -> PhoneTools {
+        let control = DeviceControl(
+            udid: udid, runner: runner, devicectl: URL(fileURLWithPath: "/usr/bin/true"), reportsFolder: folder,
+            simulator: true, localReports: reports ?? folder)
+        return PhoneTools(phone: FakePhone(lines: [], apps: control), activity: ActivityLog(), settleDelay: 0)
+    }
+
+    @Test func simulatorsTakeSimulatorBuildsOnly() async throws {
+        let tools = simulatorTools()
+        let deviceBuild = try appBundle(platform: "iPhoneOS")
+        let refused = try await call(tools, "install_app", ["path": .string(deviceBuild.path)])
+        #expect(refused.text.contains("built for devices"))
+        let ipa = try await call(tools, "install_app", ["path": "/tmp/App.ipa"])
+        #expect(ipa.text.contains("built for the simulator"))
+        runner.answers["device install app"] = FakeDevicectl.success([
+            "installedApplications": [["bundleID": "dev.mobdev.fixture"]]
+        ])
+        let simulatorBuild = try appBundle(platform: "iPhoneSimulator")
+        let installed = try await call(tools, "install_app", ["path": .string(simulatorBuild.path)])
+        #expect(installed.text.hasPrefix("Installed"))
+    }
+
+    @Test func simulatorsStopAppsWithSimctl() async throws {
+        runner.answers["device info apps"] = FakeDevicectl.success(["apps": [Self.fixtureApp]])
+        runner.answers["simctl terminate \(udid) dev.mobdev.fixture"] = FakeDevicectl.success([:])
+        let tools = simulatorTools()
+        let stopped = try await call(tools, "stop_app", ["bundle_id": "dev.mobdev.fixture"])
+        #expect(stopped.text == "Stopped dev.mobdev.fixture.")
+        #expect(runner.calls(to: "device info processes").isEmpty)
+    }
+
+    @Test func simulatorCrashReportsComeFromTheMac() async throws {
+        let reports = folder.appendingPathComponent("DiagnosticReports")
+        try FileManager.default.createDirectory(at: reports, withIntermediateDirectories: true)
+        let mine = Self.crashReport
+            .replacingOccurrences(of: "\"bug_type\":\"309\"", with: "\"bug_type\":\"309\",\"platform\":7")
+            .replacingOccurrences(of: "\"procName\":\"MobdevFixture\"", with: "\"procName\":\"MobdevFixture\",\"procPath\":\"/Devices/\(udid)/data/MobdevFixture\"")
+        try Data(mine.utf8).write(to: reports.appendingPathComponent("MobdevFixture-2026-09-30-184951.ips"))
+        let otherSimulator = mine.replacingOccurrences(of: udid, with: "AAAAAAAA-0000-0000-0000-000000000000")
+        try Data(otherSimulator.utf8).write(to: reports.appendingPathComponent("MobdevFixture-2026-09-30-100000.ips"))
+        let macApp = Self.crashReport.replacingOccurrences(of: "\"bug_type\":\"309\"", with: "\"bug_type\":\"309\",\"platform\":1")
+        try Data(macApp.utf8).write(to: reports.appendingPathComponent("Safari-2026-09-30-100000.ips"))
+
+        let tools = simulatorTools(reports: reports)
+        let list = try await call(tools, "crash_reports")
+        #expect(list.data?.arrayValue?.map { $0["name"] } == ["MobdevFixture-2026-09-30-184951.ips"])
+        let report = try await call(tools, "crash_reports", ["name": "MobdevFixture-2026-09-30-184951.ips"])
+        #expect(report.text.contains("Exception: EXC_BREAKPOINT (SIGTRAP)"))
+        #expect(runner.calls.get().isEmpty)
     }
 
     @Test func crashFileNamesGiveTheProcess() {

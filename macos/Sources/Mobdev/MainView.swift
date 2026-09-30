@@ -88,18 +88,29 @@ private struct Sidebar: View {
             .tag(Pane.overview)
 
             Section("This Mac") {
-                if model.devices.isEmpty {
+                let iPhones = model.devices.filter { !$0.isEmulated }
+                if iPhones.isEmpty {
                     Label("No iPhones yet", systemImage: "iphone.gen3")
                         .foregroundStyle(.secondary)
                         .selectionDisabled()
                 }
-                ForEach(model.devices) { device in
+                ForEach(iPhones) { device in
                     NavigationLink(value: Pane.device(device.id)) {
                         DeviceRow(device: device)
                     }
                     .contextMenu {
                         if !device.isConnected {
                             Button("Forget Device", role: .destructive) { model.forget(device.id) }
+                        }
+                    }
+                }
+            }
+            let emulated = model.devices.filter(\.isEmulated)
+            if !emulated.isEmpty {
+                Section("Simulators and Android") {
+                    ForEach(emulated) { device in
+                        NavigationLink(value: Pane.device(device.id)) {
+                            DeviceRow(device: device)
                         }
                     }
                 }
@@ -143,7 +154,7 @@ private struct DeviceRow: View {
         Label {
             VStack(alignment: .leading, spacing: 1) {
                 Text(device.name).lineLimit(1)
-                Text(device.isConnected ? device.statusLine : device.modelName)
+                Text(device.isEmulated ? "\(device.kind.label) · \(device.statusLine)" : device.isConnected ? device.statusLine : device.modelName)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -164,6 +175,7 @@ private struct DeviceRow: View {
         case .homeButton: "iphone.gen1"
         case .notch: "iphone.gen2"
         case .iPad: "ipad"
+        case .android: "candybarphone"
         default: "iphone.gen3"
         }
     }
@@ -183,7 +195,7 @@ private struct RemoteDeviceRow: View {
                     .lineLimit(1)
             }
         } icon: {
-            Image(systemName: device.deviceClass == "iPad" ? "ipad" : "iphone.gen3")
+            Image(systemName: device.deviceClass == "iPad" ? "ipad" : device.deviceClass == "Android" ? "candybarphone" : "iphone.gen3")
                 .foregroundStyle(online ? .primary : .secondary)
                 .overlay(alignment: .bottomTrailing) {
                     StatusDot(ready: device.ready).opacity(online ? 1 : 0).offset(x: 3, y: 2)

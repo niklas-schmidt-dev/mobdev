@@ -12,9 +12,11 @@ struct DevicesOverview: View {
         Group {
             if model.devices.isEmpty {
                 ContentUnavailableView {
-                    Label("No iPhones Yet", systemImage: "iphone.gen3")
+                    Label("No Devices Yet", systemImage: "iphone.gen3")
                 } description: {
-                    Text("Connect an iPhone with a USB data cable. Every iPhone you connect appears here.")
+                    Text(
+                        "Connect an iPhone with a USB data cable. Booted simulators and running Android emulators appear here too."
+                    )
                 } actions: {
                     Button("Set Up iPhone…") { model.showsOnboarding = true }
                         .buttonStyle(.glassProminent)
@@ -217,7 +219,8 @@ struct StateBadge: View {
     }
 
     private var text: String {
-        device.isReady ? "Ready" : device.isConnected ? "Pair over Bluetooth" : device.onUSB ? "Locked" : "Not connected"
+        if device.isEmulated { return device.isReady ? "Ready" : "Starting" }
+        return device.isReady ? "Ready" : device.isConnected ? "Pair over Bluetooth" : device.onUSB ? "Locked" : "Not connected"
     }
 
     private var color: Color {
@@ -273,6 +276,11 @@ struct DeviceArtwork: View {
                     .strokeBorder(light ? Color.black.opacity(0.15) : Color.white.opacity(0.18), lineWidth: 1.5)
                     .frame(width: chin * 0.62, height: chin * 0.62)
                     .padding(.top, height - chin + chin * 0.19)
+            case .android:
+                Circle()
+                    .fill(.black)
+                    .frame(width: width * 0.075, height: width * 0.075)
+                    .padding(.top, chin + width * 0.04)
             case .iPad:
                 EmptyView()
             }
@@ -344,7 +352,9 @@ struct DeviceInfoView: View {
     var compact = false
 
     var body: some View {
-        if let state = model.state(id) {
+        if let state = model.state(id), state.isEmulated {
+            EmulatorInfo(state: state, compact: compact)
+        } else if let state = model.state(id) {
             Form {
                 Section { DeviceHeader(state: state, compact: compact) }
                 Section("Device") {
@@ -406,6 +416,55 @@ struct DeviceInfoView: View {
     private func screenText(_ state: DeviceState) -> String {
         if case .connected(_, let width, let height) = state.status.screen, width > 0 { return "Connected · \(width) × \(height)" }
         return state.status.screen.summary
+    }
+}
+
+/// A simulator or Android device: what it is and how agents reach it. Nothing to set up.
+private struct EmulatorInfo: View {
+    let state: DeviceState
+    let compact: Bool
+
+    var body: some View {
+        Form {
+            Section { DeviceHeader(state: state, compact: compact) }
+            Section("Device") {
+                LabeledContent("Name", value: state.name)
+                LabeledContent("Kind", value: state.kind == .simulator ? "iOS Simulator" : "Android")
+                LabeledContent("Model", value: state.modelName)
+                if let info = state.info { LabeledContent("Software", value: info.systemName) }
+                if let size = state.status.frameSize { LabeledContent("Screen", value: "\(size.width) × \(size.height)") }
+            }
+            Section {
+                LabeledContent("Device ID") {
+                    HStack {
+                        Text(state.id).font(.system(.body, design: .monospaced)).textSelection(.enabled)
+                        CopyButton { state.id }
+                    }
+                }
+            } header: {
+                Text("For Agents")
+            } footer: {
+                Text("Pass this id or the name as `device` when several devices are connected. `list_devices` returns them all.")
+            }
+            Section("Tips") {
+                if state.kind == .simulator {
+                    StepRow(
+                        title: "Builds", detail: "install_app takes an .app built for the simulator (Debug-iphonesimulator).",
+                        state: .info)
+                    StepRow(
+                        title: "Crash reports", detail: "Read from the Mac's DiagnosticReports folder; nothing to turn on.",
+                        state: .info)
+                } else {
+                    StepRow(title: "Builds", detail: "install_app takes an .apk.", state: .info)
+                    StepRow(
+                        title: "Phones", detail: "Android phones appear too once USB debugging is on and this Mac is allowed.",
+                        state: .info)
+                    StepRow(title: "Back", detail: "press_key with escape is Android's Back button.", state: .info)
+                }
+            }
+        }
+        .formStyle(.grouped)
+        .scrollContentBackground(compact ? .hidden : .automatic)
     }
 }
 

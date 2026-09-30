@@ -31,13 +31,21 @@ public struct DeviceInfo: Sendable, Equatable, Codable, Identifiable {
     public var modelName: String { DeviceModels.name(for: productType) ?? (productType.isEmpty ? deviceClass : productType) }
     public var formFactor: FormFactor { DeviceModels.formFactor(for: productType, deviceClass: deviceClass) }
     public var isLightColor: Bool { colorCode == "2" || colorCode?.lowercased() == "white" }
-    /// "iOS 27.0" or "iPadOS 27.0".
-    public var systemName: String { "\(deviceClass == "iPad" ? "iPadOS" : "iOS") \(osVersion)" }
+    /// "iOS 27.0", "iPadOS 27.0" or "Android 16".
+    public var systemName: String {
+        let system = switch deviceClass {
+        case "iPad": "iPadOS"
+        case "Android": "Android"
+        default: "iOS"
+        }
+        return "\(system) \(osVersion)"
+    }
 }
 
 /// The front of the device, for drawing it.
 public enum FormFactor: String, Sendable, Codable {
-    case dynamicIsland, notch, homeButton, iPad
+    /// `android` is a phone with a round camera hole.
+    case dynamicIsland, notch, homeButton, iPad, android
 }
 
 /// Marketing names and front designs by product type.
@@ -90,6 +98,7 @@ public enum DeviceModels {
 
     public static func formFactor(for productType: String, deviceClass: String) -> FormFactor {
         if let form = models[productType]?.1 { return form }
+        if deviceClass == "Android" { return .android }
         if deviceClass == "iPad" || productType.hasPrefix("iPad") { return .iPad }
         // Models newer than the table all have a Dynamic Island.
         return .dynamicIsland

@@ -1,20 +1,23 @@
 import Foundation
 
 /// Developer tools: install, launch and stop apps, open links, read app output and crash reports.
-/// They need Developer Mode on the iPhone and Xcode on the Mac, and run through `PhoneBackend.apps`.
+/// They run through `PhoneBackend.apps`: `devicectl` for iPhones (Developer Mode and Xcode needed)
+/// and simulators, adb for Android.
 extension PhoneTools {
     static let appDefinitions: [ToolDefinition] = {
-        let bundleID: JSONValue = ["type": "string", "description": "Bundle identifier, e.g. com.example.MyApp"]
+        let bundleID: JSONValue = [
+            "type": "string", "description": "Bundle ID, e.g. com.example.MyApp, or the package name on Android",
+        ]
         return [
             ToolDefinition(
                 name: "list_apps", title: "List apps",
                 description:
-                    "Apps installed for development (from Xcode or install_app) with bundle ID and version. all=true lists every app, including App Store and system apps. Needs Developer Mode.",
+                    "Apps installed for development (from Xcode, install_app or adb) with bundle ID and version. all=true lists every app, including App Store and system apps. On an iPhone this needs Developer Mode.",
                 inputSchema: schema(["all": ["type": "boolean"]], screenshot: false), readOnly: true),
             ToolDefinition(
                 name: "install_app", title: "Install app",
                 description:
-                    "Install an .app or .ipa built for iPhone from a path on the Mac that runs Mobdev, e.g. Xcode's DerivedData/…/Build/Products/Debug-iphoneos/MyApp.app. Replaces an older build and keeps its data. Needs Developer Mode.",
+                    "Install a build from a path on the Mac that runs Mobdev: for an iPhone an .app or .ipa built for devices (Debug-iphoneos), for a simulator an .app built for the simulator (Debug-iphonesimulator), for Android an .apk. Replaces an older build and keeps its data. On an iPhone this needs Developer Mode.",
                 inputSchema: schema(
                     ["path": ["type": "string", "description": "Absolute path on the Mac"]], required: ["path"],
                     screenshot: false),
@@ -28,7 +31,7 @@ extension PhoneTools {
             ToolDefinition(
                 name: "launch_app", title: "Launch app",
                 description:
-                    "Launch an app by bundle ID and capture what it prints: print, NSLog and os_log lines. Read them with logs. A running copy is restarted first unless restart is false.",
+                    "Launch an app by bundle ID and capture what it prints: print, NSLog and os_log lines, or its logcat lines on Android. Read them with logs. A running copy is restarted first unless restart is false. Android ignores arguments and environment.",
                 inputSchema: schema(
                     [
                         "bundle_id": bundleID,
@@ -63,7 +66,7 @@ extension PhoneTools {
             ToolDefinition(
                 name: "crash_reports", title: "Crash reports",
                 description:
-                    "Crash and hang reports on the phone, newest first, optionally for one app (name or bundle ID). Pass name to read one: exception, reason and the crashed thread. The full report is saved on the Mac. Needs Developer Mode.",
+                    "Crash and hang reports of the device, newest first, optionally for one app (name or bundle ID). Pass name to read one: exception, reason and the crashed thread. The full report is saved on the Mac. On an iPhone this needs Developer Mode.",
                 inputSchema: schema(
                     [
                         "app": ["type": "string", "description": "App name or bundle ID"],
@@ -90,8 +93,9 @@ extension PhoneTools {
                 text: apps.map { "\($0.title): \($0.bundleID)" }.joined(separator: "\n"),
                 data: .array(apps.map(\.json)))
         case "install_app":
-            let path = try appPath(args.string("path"))
-            let app = try await requireApps().install(at: path)
+            let apps = try requireApps()
+            let path = try appPath(args.string("path"), for: apps.platform)
+            let app = try await apps.install(at: path)
             return ToolOutput(
                 text: "Installed \(app.title) as \(app.bundleID). Start it with launch_app.", data: app.json)
         case "uninstall_app":
@@ -137,29 +141,40 @@ extension PhoneTools {
     private func requireApps() throws -> AppBackend {
         guard let apps = phone.apps else {
             throw ToolFailure(
-                "Developer tools are not available for this device yet: Mobdev has not read its identity over USB. Reconnect the cable and unlock the iPhone.")
+                "Tools for apps are not available for this device yet: Mobdev has not read its identity over USB. Reconnect the cable and unlock the iPhone.")
         }
         return apps
     }
 
-    /// An .app or .ipa on this Mac, checked before devicectl sees it.
-    private func appPath(_ text: String) throws -> URL {
+    /// A build on this Mac that fits the device, checked before devicectl or adb sees it.
+    private func appPath(_ text: String, for platform: AppPlatform) throws -> URL {
         let expanded = (text as NSString).expandingTildeInPath
         guard expanded.hasPrefix("/") else {
             throw ToolFailure("path must be absolute: a location on the Mac that runs Mobdev.")
         }
         let url = URL(fileURLWithPath: expanded).standardizedFileURL
         let kind = url.pathExtension.lowercased()
-        guard kind == "app" || kind == "ipa" else { throw ToolFailure("path must be an .app bundle or an .ipa file.") }
+        switch platform {
+        case .iPhone:
+            guard kind == "app" || kind == "ipa" else { throw ToolFailure("path must be an .app bundle or an .ipa file.") }
+        case .simulator:
+            guard kind == "app" else { throw ToolFailure("path must be an .app bundle built for the simulator.") }
+        case .android:
+            guard kind == "apk" else { throw ToolFailure("path must be an .apk file.") }
+        }
         guard FileManager.default.fileExists(atPath: url.path) else {
             throw ToolFailure("\(url.path) does not exist on this Mac.")
         }
-        if kind == "app",
-            let info = NSDictionary(contentsOf: url.appendingPathComponent("Info.plist")),
-            let platforms = info["CFBundleSupportedPlatforms"] as? [String], platforms.contains("iPhoneSimulator")
-        {
+        guard kind == "app", let info = NSDictionary(contentsOf: url.appendingPathComponent("Info.plist")),
+            let platforms = info["CFBundleSupportedPlatforms"] as? [String]
+        else { return url }
+        if platform == .iPhone, platforms.contains("iPhoneSimulator") {
             throw ToolFailure(
                 "\(url.lastPathComponent) is built for the Simulator. Build for a device, e.g. xcodebuild -scheme <scheme> -destination 'generic/platform=iOS' build, and install the app from Debug-iphoneos.")
+        }
+        if platform == .simulator, !platforms.contains("iPhoneSimulator") {
+            throw ToolFailure(
+                "\(url.lastPathComponent) is built for devices. Build for the simulator, e.g. xcodebuild -scheme <scheme> -destination 'generic/platform=iOS Simulator' build, and install the app from Debug-iphonesimulator.")
         }
         return url
     }
