@@ -67,7 +67,8 @@ export function SiteFooter() {
           <div className="col-span-2 flex items-start gap-2.5">
             <Logo className="size-6" />
             <p className="max-w-xs text-[12px] leading-relaxed text-muted">
-              Mobdev gives AI agents a real iPhone. Free and open source under the MIT license.
+              Mobdev is the mobile development toolkit for you and your AI agent: iPhones, simulators and Android
+              in one Mac app. Free and open source under the MIT license.
             </p>
           </div>
           <div>
@@ -173,7 +174,11 @@ type IconName =
   | "terminal"
   | "tree"
   | "replay"
-  | "browser";
+  | "browser"
+  | "bug"
+  | "check"
+  | "search"
+  | "pointer";
 
 const iconPaths: Record<IconName, ReactNode> = {
   plug: <path d="M9 3v4M15 3v4M7 7h10v4a5 5 0 0 1-10 0V7zM12 16v5" />,
@@ -239,6 +244,25 @@ const iconPaths: Record<IconName, ReactNode> = {
       <path d="M3 8.5h18M6.25 6.25h.01M8.75 6.25h.01" />
     </>
   ),
+  bug: (
+    <>
+      <rect x="7" y="7.5" width="10" height="13" rx="5" />
+      <path d="M9 8V6.5a3 3 0 0 1 6 0V8M12 12v8.5M3.5 13.5H7M17 13.5h3.5M4.5 9l2.8 1.5M19.5 9l-2.8 1.5M4.5 19l2.8-1.8M19.5 19l-2.8-1.8" />
+    </>
+  ),
+  check: (
+    <>
+      <rect x="4" y="3.5" width="16" height="17" rx="2.5" />
+      <path d="M8 9.5l1.5 1.5 2.5-3M8 15.5l1.5 1.5 2.5-3M14.5 10h2M14.5 16h2" />
+    </>
+  ),
+  search: (
+    <>
+      <circle cx="10.5" cy="10.5" r="6" />
+      <path d="M15 15l5 5" />
+    </>
+  ),
+  pointer: <path d="M6 3.5l12.5 8-5.6 1.3 3.3 6.1-2.3 1.2-3.3-6.1L6.5 18 6 3.5z" />,
 };
 
 export function Icon({ name, className = "size-7" }: { name: IconName; className?: string }) {

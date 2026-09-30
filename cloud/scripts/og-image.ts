@@ -74,8 +74,8 @@ h1 { margin: 40px 0 0; font-size: 100px; font-weight: 650; letter-spacing: -0.02
 p { margin: 36px 0 0; font-size: 34px; letter-spacing: -0.01em; color: #6e6e73; }
 p b { font-weight: 600; color: #1d1d1f; }`,
     `<div class="brand">${logo}Mobdev</div>
-<h1>Your agent.<br>A real iPhone.</h1>
-<p>Free and open source. <b>mobdev.sh</b></p>`,
+<h1>Mobile development.<br>All in one app.</h1>
+<p>iPhone, Simulator and Android. Free and open source. <b>mobdev.sh</b></p>`,
   ),
   og,
   1200,

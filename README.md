@@ -1,17 +1,25 @@
 # Mobdev
 
-Give your AI agent a real iPhone. Free and open source.
+Mobile development, all in one app. Free and open source.
 
-Mobdev is a small native Mac app. It reads the iPhone screen over the USB cable and taps and types
-through Bluetooth, posing as a keyboard and pointer. Nothing is installed on the phone: no
-developer mode, no jailbreak, no simulator. Claude Code, Codex, Cursor or any MCP client can then
-take screenshots, tap, type, open apps and tap visible text.
+Mobdev is a small native Mac app that puts your iPhones, iOS simulators and Android devices in one
+list and gives you and your AI agent everything to work with them. Claude Code, Codex, Cursor or
+any MCP client get the same 23 tools on every device.
 
-For apps you build, turn on Developer Mode and the agent also installs builds, launches them and
-reads their logs and crash reports: the whole build, run and debug loop on a real iPhone.
+| | |
+|---|---|
+| AI control | Screenshots, taps, swipes, typing, opening apps, tapping visible text (on-device OCR) |
+| Build and run | Install builds, launch apps with arguments and environment, open deep links |
+| Debug | Logs and crash reports of the apps you launch |
+| Test and research | [Skills](skills/README.md) for the dev loop, smoke tests, onboarding audits and competitor research |
+| Live mirror | Click, swipe and type on any device from the Mac |
+| Remote | Agents on other machines reach your devices through a hosted or self-hosted relay |
 
-The same tools drive booted iOS simulators and Android emulators and phones, with nothing to set
-up: iPhone, simulator and Android side by side in one list, for one agent.
+The iPhone needs nothing installed. Mobdev reads its screen over the USB cable and taps and types
+through Bluetooth, posing as a keyboard and pointer: no developer mode, no jailbreak, and every app
+works. Turn on Developer Mode only to install and debug your own builds. Booted simulators need
+Xcode, Android emulators and phones need adb. Keep building with Xcode, Gradle or XcodeBuildMCP;
+Mobdev takes over once there is a build.
 
 ```
    iPhone ──USB screen──▶ Mobdev.app ◀── MCP / HTTP ── agents on this Mac

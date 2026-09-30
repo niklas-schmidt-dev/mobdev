@@ -4,9 +4,9 @@ import type { ReactNode } from "react";
 import { SITE_URL } from "../lib/meta";
 import appCss from "../styles.css?url";
 
-const title = "Mobdev — Give your AI agent a real iPhone";
+const title = "Mobdev — Mobile development, all in one app";
 const description =
-  "Mobdev lets Claude Code, Codex and other agents see and tap a real iPhone from your Mac. No developer mode, nothing installed on the phone. Free and open source.";
+  "Let AI agents drive your phones, install and debug your builds and run smoke tests, on your iPhone, iOS simulators and Android. One native Mac app for you and Claude Code, Codex or any MCP agent. Free and open source.";
 
 // Pages override title, og:title and og:url with pageMeta(). og.png and apple-touch-icon.png come
 // from scripts/og-image.ts.
@@ -25,7 +25,7 @@ export const Route = createRootRoute({
       { property: "og:image", content: `${SITE_URL}/og.png` },
       { property: "og:image:width", content: "1200" },
       { property: "og:image:height", content: "630" },
-      { property: "og:image:alt", content: "Mobdev. Your agent. A real iPhone." },
+      { property: "og:image:alt", content: "Mobdev. Mobile development. All in one app." },
       { name: "twitter:card", content: "summary_large_image" },
     ],
     links: [

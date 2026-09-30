@@ -112,8 +112,9 @@ function Docs() {
           <p className="text-[17px] font-semibold text-tint">Documentation</p>
           <h1 className="headline mt-1 text-[48px]">Mobdev</h1>
           <p className="mt-4 text-[21px] leading-[1.45] text-muted">
-            Mobdev reads the iPhone screen over USB and taps and types as a Bluetooth keyboard and pointer. Agents use it
-            through MCP or HTTP.
+            Mobdev puts your iPhones, iOS simulators and Android devices in one Mac app, for you and your AI agent. It
+            reads the iPhone screen over USB and taps and types as a Bluetooth keyboard and pointer; simulators and
+            Android need only Xcode or adb. Agents use it through MCP or HTTP.
           </p>
           <div className="mt-14 space-y-12">
             <Section id="install" title="Install">
