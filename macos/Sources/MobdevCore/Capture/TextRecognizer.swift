@@ -83,7 +83,25 @@ public enum TextRecognizer {
         Log.info(String(format: "text recognition ready after %.1f s", Date().timeIntervalSince(started)))
     }
 
+    /// Vision can stall, for example while it compiles its models for the Neural Engine. Callers
+    /// wait at most this long, so an agent gets an answer instead of a tool that never returns.
+    static let timeout: TimeInterval = 90
+
     private static func recognize(_ image: CGImage) throws -> [VNRecognizedTextObservation] {
+        let done = DispatchSemaphore(value: 0)
+        let result = Locked<Result<[VNRecognizedTextObservation], any Error>?>(nil)
+        DispatchQueue.global(qos: .userInitiated).async {
+            result.set(Result { try perform(image) })
+            done.signal()
+        }
+        guard done.wait(timeout: .now() + timeout) == .success, let finished = result.get() else {
+            throw ToolFailure(
+                "Text recognition did not answer within \(Int(timeout)) s; Vision may still be preparing its models. Try again in a minute, or use screenshot.")
+        }
+        return try finished.get()
+    }
+
+    private static func perform(_ image: CGImage) throws -> [VNRecognizedTextObservation] {
         let request = VNRecognizeTextRequest()
         request.recognitionLevel = .accurate
         request.usesLanguageCorrection = true
