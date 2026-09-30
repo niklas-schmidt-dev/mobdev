@@ -138,6 +138,8 @@ function Docs() {
                 <li>Plug it in, unlock it and tap <strong>Trust</strong>. If the Mac asks to allow the accessory, click Allow.</li>
                 <li>
                   On the iPhone open <strong>Settings › Bluetooth</strong> and tap your Mac under Other Devices. iOS lists it by the Mac’s name.
+                  If it is missing, wait a moment or click <strong>Show on iPhone Again</strong> in Mobdev: an iPhone on the same Apple
+                  Account can miss the Mac until Mobdev offers it again.
                 </li>
                 <li>
                   Turn on <strong>Settings › Accessibility › Touch › AssistiveTouch</strong>. It turns the pointer into

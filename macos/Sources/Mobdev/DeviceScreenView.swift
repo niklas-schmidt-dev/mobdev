@@ -336,6 +336,9 @@ struct SetupSteps: View {
             StepRow(title: "Bluetooth", detail: bluetoothDetail, state: bluetoothState)
             if status.bluetooth == .unauthorized {
                 Button("Open Bluetooth Settings") { model.openPrivacySettings("Privacy_Bluetooth") }
+            } else if status.bluetooth == .advertising, !model.setupBluetooth.isConnected {
+                // Hidden while another iPhone is paired: republishing would interrupt it.
+                Button("Show on iPhone Again", systemImage: "arrow.clockwise") { model.offerBluetoothAgain() }
             }
             StepRow(
                 title: "AssistiveTouch",

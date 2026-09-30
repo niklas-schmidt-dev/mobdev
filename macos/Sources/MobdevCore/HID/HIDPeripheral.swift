@@ -29,6 +29,24 @@ public enum BluetoothState: Sendable, Equatable {
     }
 }
 
+/// The wait before the peripheral next rebuilds its GATT database while no iPhone is paired:
+/// 8 s, doubling up to 2 minutes.
+struct RefreshBackoff {
+    static let first: TimeInterval = 8
+    static let maximum: TimeInterval = 120
+    /// How long after a host's last request the database stays untouched.
+    static let quietPeriod: TimeInterval = 20
+
+    private var delay = first
+
+    mutating func next() -> TimeInterval {
+        defer { delay = min(delay * 2, Self.maximum) }
+        return delay
+    }
+
+    mutating func reset() { delay = Self.first }
+}
+
 /// An iPhone or iPad connected to the Mac's Bluetooth keyboard and pointer.
 public struct BluetoothHost: Sendable, Equatable, Identifiable {
     public let id: UUID
@@ -81,6 +99,9 @@ public final class HIDPeripheral: NSObject, CBPeripheralManagerDelegate, CBCentr
     private var subscriptions: [UUID: Set<ObjectIdentifier>] = [:]
     private var serviceChangedSent = Set<UUID>()
     private var outbox: [(CBMutableCharacteristic, Data, [CBCentral]?)] = []
+    private var refreshBackoff = RefreshBackoff()
+    private var refreshWork: DispatchWorkItem?
+    private var lastRequest: DispatchTime?
 
     private struct Host {
         enum Kind { case identifying, phone, other }
@@ -109,10 +130,15 @@ public final class HIDPeripheral: NSObject, CBPeripheralManagerDelegate, CBCentr
         }
     }
 
-    /// Republishes the GATT database. Helps hosts that cached an old one.
+    /// Republishes the GATT database now, so an iPhone that does not list the Mac looks again.
+    /// Also restarts the automatic republishing from its shortest interval.
     public func republish() {
         queue.async {
             guard let manager = self.manager, manager.state == .poweredOn else { return }
+            self.refreshBackoff.reset()
+            self.refreshWork?.cancel()
+            self.refreshWork = nil
+            Log.info("bluetooth: republishing on request")
             manager.stopAdvertising()
             self.publish(manager)
         }
@@ -246,6 +272,7 @@ public final class HIDPeripheral: NSObject, CBPeripheralManagerDelegate, CBCentr
         Log.info("bluetooth state \(peripheral.state.rawValue)")
         switch peripheral.state {
         case .poweredOn:
+            refreshBackoff.reset()
             publish(peripheral)
         case .unauthorized:
             setState(.unauthorized)
@@ -271,10 +298,12 @@ public final class HIDPeripheral: NSObject, CBPeripheralManagerDelegate, CBCentr
             setState(.failed("advertising failed: \(error.localizedDescription)"))
         } else if hostCount.get() == 0 {
             setState(.advertising)
+            scheduleRefresh()
         }
     }
 
     public func peripheralManager(_ peripheral: CBPeripheralManager, didReceiveRead request: CBATTRequest) {
+        lastRequest = .now()
         let value: Data
         switch request.characteristic.uuid {
         case CBUUID(string: "2A4E"): value = Data([0x01])
@@ -293,6 +322,7 @@ public final class HIDPeripheral: NSObject, CBPeripheralManagerDelegate, CBCentr
     }
 
     public func peripheralManager(_ peripheral: CBPeripheralManager, didReceiveWrite requests: [CBATTRequest]) {
+        lastRequest = .now()
         for request in requests where request.characteristic.uuid == CBUUID(string: "2A4C") {
             recoverStaleCacheIfNeeded(request.central)
         }
@@ -304,6 +334,7 @@ public final class HIDPeripheral: NSObject, CBPeripheralManagerDelegate, CBCentr
     public func peripheralManager(
         _ peripheral: CBPeripheralManager, central: CBCentral, didSubscribeTo characteristic: CBCharacteristic
     ) {
+        lastRequest = .now()
         subscriptions[central.identifier, default: []].insert(ObjectIdentifier(characteristic))
         if hosts[central.identifier] == nil {
             hosts[central.identifier] = Host(central: central)
@@ -432,9 +463,40 @@ public final class HIDPeripheral: NSObject, CBPeripheralManagerDelegate, CBCentr
         }
         if count > 0 {
             setState(.connected(hosts: count))
+            refreshWork?.cancel()
+            refreshWork = nil
+            refreshBackoff.reset()
         } else if published {
             setState(.advertising)
+            if refreshWork == nil { scheduleRefresh() }
         }
+    }
+
+    // MARK: Staying visible
+
+    /// An iPhone on the same Apple Account already knows the Mac for Continuity. It resolves the
+    /// advertisement to that Mac and trusts the services it cached, so a cache without the keyboard
+    /// keeps the Mac out of Settings › Bluetooth. Rebuilding the database makes iOS look again
+    /// (sryo/clak, "The Continuity identity fold"). While no iPhone is paired, it is rebuilt after
+    /// 8 s, then at doubling intervals up to 2 minutes.
+    private func scheduleRefresh() {
+        refreshWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in self?.refreshIfIdle() }
+        refreshWork = work
+        queue.asyncAfter(deadline: .now() + refreshBackoff.next(), execute: work)
+    }
+
+    private func refreshIfIdle() {
+        refreshWork = nil
+        guard let manager, manager.state == .poweredOn, published, hostCount.get() == 0 else { return }
+        // A host that just read, wrote or subscribed may be pairing; rebuilding now would break that.
+        if let lastRequest, DispatchTime.now() < lastRequest + RefreshBackoff.quietPeriod {
+            scheduleRefresh()
+            return
+        }
+        Log.info("bluetooth: no iPhone paired, republishing so iOS looks again")
+        manager.stopAdvertising()
+        publish(manager)
     }
 
     private func drain() {

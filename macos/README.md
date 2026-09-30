@@ -53,7 +53,11 @@ it again with **Mobdev › Set Up iPhone…**.
 1. Plug it in, unlock it and tap **Trust**. If the Mac asks to allow the accessory, click **Allow**.
    The screen appears in Mobdev.
 2. On the iPhone open **Settings > Bluetooth** and tap this Mac under **Other Devices** to pair. iOS lists
-   it by the Mac's name (System Settings › General › Sharing), not as “Mobdev”.
+   it by the Mac's name (System Settings › General › Sharing), not as “Mobdev”. An iPhone on the
+   same Apple Account can miss the Mac, because it already knows it from Handoff and trusts the
+   Bluetooth services it cached. Until an iPhone pairs, Mobdev rebuilds its Bluetooth services after
+   8 seconds and then at doubling intervals up to every 2 minutes, which makes iOS look again.
+   **Show on iPhone Again** in the setup does it right away.
 3. Turn on **Settings > Accessibility > Touch > AssistiveTouch**. iOS then shows a pointer and
    turns clicks into taps.
 4. In Mobdev pick the **keyboard layout** that matches Settings > General > Keyboard > Hardware

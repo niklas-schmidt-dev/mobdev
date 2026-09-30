@@ -86,6 +86,18 @@ struct OnboardingView: View {
                     ])
                 }
                 StatusPill(bluetoothStatus)
+                if model.setupBluetooth == .advertising {
+                    VStack(spacing: 8) {
+                        Button("Show on iPhone Again", systemImage: "arrow.clockwise") { model.offerBluetoothAgain() }
+                            .buttonStyle(.glass)
+                        Text("Not listed? iPhones on your Apple Account can miss this Mac. Mobdev offers it again by itself; this button does it now.")
+                            .font(.callout)
+                            .foregroundStyle(.tertiary)
+                            .multilineTextAlignment(.center)
+                            .frame(maxWidth: 400)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
             }
         case .assistiveTouch:
             StepPage(

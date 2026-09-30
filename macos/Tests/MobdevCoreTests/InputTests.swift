@@ -126,3 +126,18 @@ import Testing
         await #expect(throws: HIDError.self) { try await input.tap(at: NormalizedPoint(x: 0.5, y: 0.5)) }
     }
 }
+
+@Suite struct RefreshBackoffTests {
+    @Test func doublesFromEightSecondsUpToTwoMinutes() {
+        var backoff = RefreshBackoff()
+        #expect((0..<7).map { _ in backoff.next() } == [8, 16, 32, 64, 120, 120, 120])
+    }
+
+    @Test func resetStartsOverAtEightSeconds() {
+        var backoff = RefreshBackoff()
+        _ = backoff.next()
+        _ = backoff.next()
+        backoff.reset()
+        #expect(backoff.next() == 8)
+    }
+}

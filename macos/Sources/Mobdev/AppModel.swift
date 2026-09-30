@@ -270,6 +270,9 @@ final class AppModel {
         refresh()
     }
 
+    /// Offers the Mac to iPhones again, for one that does not list it under Other Devices.
+    func offerBluetoothAgain() { hub.peripheral.republish() }
+
     /// Closes the setup assistant. Skipped steps start anyway, so macOS asks for what is missing.
     func finishOnboarding() {
         showsOnboarding = false
