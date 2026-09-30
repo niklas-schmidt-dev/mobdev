@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { getAuth } from "@workos/authkit-tanstack-react-start";
 import { env } from "cloudflare:workers";
+import { carryOverUsage, removeAccount } from "../../shared/accounts";
 import { Autumn, currentSubscription, type Customer } from "../../shared/autumn";
 import { FEATURES, FREE_PLAN, PLANS, PRO_PLAN, planById, type Plan } from "../../shared/plans";
 import { hasRelayPlan } from "../../relay/src/billing";
@@ -30,7 +31,10 @@ async function requireUser() {
   return user;
 }
 
-/** Drops Macs connected with a revoked token. The token is already gone, so a failure only delays it. */
+/**
+ * Drops Macs connected with a revoked token. The token is already gone, so a failure only delays
+ * it: the relay also drops a connection whose token is gone at its next request (TOKEN_RECHECK_MS).
+ */
 async function disconnect(tokenId: string, spaceIds: string[]): Promise<void> {
   if (spaceIds.length === 0) return;
   try {
@@ -50,8 +54,12 @@ async function reconcile(hosts: HostRow[]): Promise<HostRow[]> {
   } catch {
     return hosts; // Relay unreachable: show what D1 knows.
   }
-  const stale = online.filter((host) => !connected[host.space_id]?.includes(host.name));
-  for (const host of stale) await recordHostOffline(env.DB, host.space_id, host.name);
+  const gone = online.filter((host) => !connected[host.space_id]?.includes(host.name));
+  // Only the connection seen here: a Mac that reconnected meanwhile has another connected_at.
+  const stale: HostRow[] = [];
+  for (const host of gone) {
+    if (await recordHostOffline(env.DB, host.space_id, host.name, host.connected_at)) stale.push(host);
+  }
   return hosts.map((host) => (stale.includes(host) ? { ...host, online: 0, disconnected_at: Date.now() } : host));
 }
 
@@ -116,6 +124,10 @@ async function loadBilling(user: { id: string; email: string }): Promise<Dashboa
   const client = autumn();
   if (!client) return "off";
   try {
+    // So the usage shown includes a deleted account's; createToken insists on it.
+    await carryOverUsage(env.DB, client, user).catch((error: unknown) =>
+      console.warn("could not carry over the usage of a deleted account", error),
+    );
     const customer = await client.customer(user.id, user.email);
     if (!hasRelayPlan(customer)) {
       console.warn("Autumn has no relay plan for this account; push autumn.config.ts");
@@ -170,6 +182,16 @@ export const createToken = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const user = await requireUser();
     await upsertAccount(env.DB, user.id, user.email);
+    const client = autumn();
+    if (client) {
+      // A deleted account's usage counts before the new one can use the relay.
+      try {
+        await carryOverUsage(env.DB, client, user);
+      } catch (error) {
+        console.warn("could not carry over the usage of a deleted account", error);
+        throw new Error("Billing could not be reached, so no token was created. Try again in a moment.");
+      }
+    }
     const { row, token } = await createAccessToken(env.DB, user.id, data.name);
     return { id: row.id, name: row.name, token };
   });
@@ -193,28 +215,9 @@ export const forgetMac = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+/** Deletes the account everywhere; see removeAccount for the order. Signing out is up to the page. */
 export const deleteAccount = createServerFn({ method: "POST" }).handler(async () => {
   const user = await requireUser();
-  const client = autumn();
-  if (client) {
-    // A running subscription would keep charging an account that no longer exists.
-    const billing = billingData(await client.customer(user.id, user.email));
-    if (billing.plan.priceUsd > 0 && billing.endsAt === null) {
-      throw new Error(`Cancel ${billing.plan.name} under “Manage billing” first, then delete your account.`);
-    }
-  }
-  const tokens = await listAccessTokens(env.DB, user.id);
-  for (const token of tokens) await disconnect(token.id, await deleteAccessToken(env.DB, user.id, token.id));
-  await env.DB.batch([
-    env.DB.prepare("DELETE FROM hosts WHERE account_id = ?1").bind(user.id),
-    env.DB.prepare("DELETE FROM accounts WHERE id = ?1").bind(user.id),
-  ]);
-  if (client) {
-    try {
-      await client.deleteCustomer(user.id); // Stripe keeps its invoices; tax law requires them.
-    } catch (error) {
-      console.warn("could not delete the Autumn customer", error);
-    }
-  }
+  await removeAccount(env.DB, autumn(), user, disconnect);
   return { ok: true };
 });

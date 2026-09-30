@@ -1,16 +1,21 @@
 import { SELF, env, runInDurableObject } from "cloudflare:test";
 import { exports } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
+import { TOKEN_RECHECK_MS } from "../relay/src/protocol";
 import {
   createAccessToken,
   deleteAccessToken,
   listAccessTokens,
   listHosts,
   MAX_TOKENS_PER_ACCOUNT,
+  recordHostOffline,
 } from "../shared/db";
 import type { MacDevices } from "../shared/devices";
 import { clientKeyForSecret, randomHex, spaceForSecret } from "../shared/keys";
+import { fakeAutumn } from "./fake-autumn";
 import { BASE, account, agent, connect, fakeMac, secret } from "./helpers";
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 describe("keys", () => {
   it("derives the same client key as the Mac app and the Go relay", async () => {
@@ -125,6 +130,126 @@ describe("hosted relay", () => {
     await expect(createAccessToken(env.DB, id, "one too many")).rejects.toThrow(/at most/);
     expect(await deleteAccessToken(env.DB, "user_someone_else", tokenId)).toEqual([]);
     expect(await listAccessTokens(env.DB, id)).toHaveLength(MAX_TOKENS_PER_ACCOUNT);
+  });
+
+  it("keeps the token limit when tokens are created at the same time", async () => {
+    const { id } = await account();
+    for (let i = 2; i < MAX_TOKENS_PER_ACCOUNT; i++) await createAccessToken(env.DB, id, `Mac ${i}`);
+    const results = await Promise.allSettled(
+      Array.from({ length: 5 }, (_, i) => createAccessToken(env.DB, id, `Race ${i}`)),
+    );
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    expect(await listAccessTokens(env.DB, id)).toHaveLength(MAX_TOKENS_PER_ACCOUNT);
+  });
+
+  it("disconnects Macs of a revoked token that D1 thinks are offline", async () => {
+    const { id, token, tokenId } = await account();
+    const hostSecret = secret();
+    const mac = await fakeMac(hostSecret, token);
+    const spaceId = await spaceForSecret(hostSecret);
+    const [host] = await listHosts(env.DB, id);
+    expect(await recordHostOffline(env.DB, spaceId, "studio", host!.connected_at)).toBe(true); // A stale flag.
+    const spaces = await deleteAccessToken(env.DB, id, tokenId);
+    expect(spaces).toEqual([spaceId]);
+    expect(await exports.RelayAdmin.disconnectToken(tokenId, spaces)).toBe(1);
+    expect(await mac.closed).toBe(4001);
+  });
+
+  it("does not keep a Mac whose token is revoked while it connects", async () => {
+    const { id, token, tokenId } = await account();
+    const hostSecret = secret();
+    let listed: string[] | null = null;
+    // connectHost has checked the token and now asks Autumn for the plan. Revoking lists no
+    // space yet, so no disconnect reaches this Mac; the space has to notice by itself.
+    fakeAutumn.beforeCustomer = async () => {
+      fakeAutumn.beforeCustomer = null;
+      listed = await deleteAccessToken(env.DB, id, tokenId);
+    };
+    try {
+      expect((await connect(hostSecret, token)).status).toBe(403);
+    } finally {
+      fakeAutumn.beforeCustomer = null;
+    }
+    expect(listed).toEqual([]);
+    const key = await clientKeyForSecret(hostSecret);
+    expect((await agent("/v1/relay/hosts", key)).body).toEqual({ hosts: [] });
+    expect((await agent("/mcp", key, { method: "POST" })).status).toBe(503);
+    expect((await listHosts(env.DB, id))[0]).toMatchObject({ online: 0 });
+  });
+
+  it("drops a Mac at its next request when its token was revoked but the disconnect got lost", async () => {
+    const { id, token, tokenId } = await account();
+    const hostSecret = secret();
+    const mac = await fakeMac(hostSecret, token);
+    const key = await clientKeyForSecret(hostSecret);
+    const space = env.RELAY_SPACE.getByName(await spaceForSecret(hostSecret));
+    await deleteAccessToken(env.DB, id, tokenId); // No disconnectToken call, as if it failed.
+    expect((await agent("/v1/status", key)).status).toBe(200); // Checked less than a minute ago.
+
+    await runInDurableObject(space, (_, state) => {
+      for (const socket of state.getWebSockets()) {
+        const attachment = socket.deserializeAttachment() as { tokenCheckedAt: number };
+        socket.serializeAttachment({ ...attachment, tokenCheckedAt: Date.now() - TOKEN_RECHECK_MS });
+      }
+    });
+    const answer = await agent("/v1/status", key);
+    expect(answer.status).toBe(503);
+    expect(answer.body.error).toContain("revoked");
+    expect(await mac.closed).toBe(4001);
+    expect((await agent("/v1/relay/hosts", key)).body).toEqual({ hosts: [] });
+    expect((await listHosts(env.DB, id))[0]).toMatchObject({ online: 0 });
+  });
+
+  it("marks only the connection it saw offline", async () => {
+    const { id, token } = await account();
+    const hostSecret = secret();
+    const spaceId = await spaceForSecret(hostSecret);
+    const key = await clientKeyForSecret(hostSecret);
+    await fakeMac(hostSecret, token);
+    const [first] = await listHosts(env.DB, id);
+    // D1 and the relay record the same connection time.
+    expect((await agent("/v1/relay/devices", key)).body).toMatchObject({ macs: [{ connected_at: first!.connected_at }] });
+
+    await sleep(5);
+    await fakeMac(hostSecret, token); // The Mac reconnects, e.g. while the dashboard reconciles.
+    const [second] = await listHosts(env.DB, id);
+    expect(second!.connected_at).toBeGreaterThan(first!.connected_at!);
+    expect(await recordHostOffline(env.DB, spaceId, "studio", first!.connected_at)).toBe(false);
+    expect((await listHosts(env.DB, id))[0]).toMatchObject({ online: 1, connected_at: second!.connected_at });
+    expect(await recordHostOffline(env.DB, spaceId, "studio", second!.connected_at)).toBe(true);
+  });
+
+  it("tells the Mac to stop a request the agent no longer waits for", async () => {
+    const { token } = await account();
+    const hostSecret = secret();
+    const mac = await fakeMac(hostSecret, token);
+    const frames: { type: string; id: string; path?: string }[] = [];
+    mac.socket.addEventListener("message", (event) => frames.push(JSON.parse(event.data as string)));
+    const space = env.RELAY_SPACE.getByName(await spaceForSecret(hostSecret));
+    await runInDurableObject(space, (instance) => {
+      instance.requestTimeoutMs = 100;
+    });
+    const answer = await agent("/v1/silent", await clientKeyForSecret(hostSecret));
+    expect(answer.status).toBe(504);
+    const request = frames.find((frame) => frame.type === "request" && frame.path === "/v1/silent");
+    for (let attempt = 0; attempt < 50 && !frames.some((frame) => frame.type === "cancel"); attempt++) await sleep(20);
+    expect(frames.find((frame) => frame.type === "cancel")).toEqual({ type: "cancel", id: request!.id });
+  });
+
+  it("stops reading a body without Content-Length once it is too large", async () => {
+    const key = await clientKeyForSecret(secret());
+    let pulled = 0;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulled++;
+        if (pulled > 64) controller.close();
+        else controller.enqueue(new Uint8Array(1024 * 1024));
+      },
+    });
+    // A stream has no Content-Length, so only reading tells the size.
+    const response = await SELF.fetch(`${BASE}/mcp`, { method: "POST", body, headers: { Authorization: `Bearer ${key}` } });
+    expect(response.status).toBe(413);
+    expect(pulled).toBeLessThan(32); // 16 MiB and a little buffering, not all 64.
   });
 });
 

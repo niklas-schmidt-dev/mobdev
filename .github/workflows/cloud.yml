@@ -1,6 +1,7 @@
 name: Cloud
 # Tests mobdev.sh and deploys it on every push to main. The relay worker is only redeployed when
-# its code changes, because a deploy briefly disconnects every Mac (they reconnect on their own).
+# its code changed since the last successful deploy (or on a manual run), because a deploy
+# briefly disconnects every Mac (they reconnect on their own).
 on:
   push:
     branches: [main]
@@ -35,6 +36,9 @@ jobs:
     needs: test
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read # gh run list
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -47,11 +51,21 @@ jobs:
       - name: Did the relay change?
         id: changes
         env:
-          BEFORE: ${{ github.event.before }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        # Compares with the last push to main that deployed successfully, not the previous push,
+        # so relay changes of a failed or cancelled run go out with the next one. Runs are
+        # serialized (concurrency above), so no other deploy is under way. Manual runs, and runs
+        # without a usable base commit, deploy the relay.
         run: |
-          if [ -z "$BEFORE" ] || ! git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+          BASE=""
+          if [ "$GITHUB_EVENT_NAME" = push ]; then
+            BASE=$(gh run list --workflow cloud.yml --branch main --event push --status success --limit 1 \
+              --json headSha --jq '.[0].headSha // ""') || BASE=""
+          fi
+          if [ -z "$BASE" ] || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
             echo "relay=true" >> "$GITHUB_OUTPUT"
-          elif git diff --name-only "$BEFORE" HEAD | grep -qE '^cloud/(relay/|shared/|migrations/|package.json|bun.lock)'; then
+          elif git diff --name-only "$BASE" HEAD | grep -qE '^cloud/(relay/|shared/|migrations/|package.json|bun.lock)'; then
             echo "relay=true" >> "$GITHUB_OUTPUT"
           else
             echo "relay=false" >> "$GITHUB_OUTPUT"

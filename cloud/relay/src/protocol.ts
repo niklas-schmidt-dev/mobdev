@@ -1,3 +1,11 @@
+// Frames on a Mac's WebSocket, JSON text like the Go relay's (../../../relay):
+// relay → Mac: {"type":"request","id","method","path","query","headers","body"} and
+//   {"type":"cancel","id"} when the relay stopped waiting for that request (REQUEST_TIMEOUT_MS), so
+//   the Mac can stop working on it. Macs that do not know "cancel" ignore it.
+// Mac → relay: {"type":"response","id","status","headers","body"}, {"type":"devices","devices"}
+//   (shared/devices.ts) and "ping", which the runtime answers with "pong".
+// Frames of an unknown type are ignored in both directions.
+
 /** An agent request on its way to a Mac. Bodies are base64. */
 export interface RelayRequest {
   name: string | null;
@@ -35,6 +43,11 @@ export const USAGE_FLUSH_MS = 30_000;
 export const USAGE_RETRY_MS = 60_000;
 /** An exhausted or unknown allowance is asked for again at most this often, so upgrades apply. */
 export const QUOTA_REFRESH_MS = 60_000;
+/**
+ * A connection checks at most this often, on its next request, that its access token still exists.
+ * Revoking a token disconnects its Macs right away; this catches connections that call missed.
+ */
+export const TOKEN_RECHECK_MS = 60_000;
 
 export const DASHBOARD_URL = "https://mobdev.sh/dashboard";
 
@@ -51,4 +64,10 @@ export function errorResponse(status: number, message: string, headers: Record<s
 
 export function jsonError(status: number, message: string, headers: HeadersInit = {}): Response {
   return Response.json({ ok: false, error: message }, { status, headers });
+}
+
+/** The account already has as many Macs connected as it may. The Mac app waits 5 minutes after a 429. */
+export function macLimitError(macs: number): Response {
+  const allowed = macs === 1 ? "1 connected Mac" : `${macs} connected Macs`;
+  return jsonError(429, `this account's plan allows ${allowed}; disconnect one or upgrade at ${DASHBOARD_URL}`);
 }

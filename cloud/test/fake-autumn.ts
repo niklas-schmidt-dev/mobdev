@@ -20,6 +20,10 @@ export class FakeAutumn {
   down = false;
   /** Records the next track call, then answers 503 as if the response got lost. */
   loseNextTrackResponse = false;
+  /** Answers customers.delete with this status instead of deleting. */
+  deleteAnswer: number | null = null;
+  /** Runs before customers.get_or_create answers, e.g. to revoke a token while a Mac connects. */
+  beforeCustomer: (() => Promise<void>) | null = null;
   /** New customers get this plan. Pro, so tests about other things are not limited. */
   defaultPlan: Plan = PRO_PLAN;
   /** Customers who have no plan, as when the plans were never pushed to Autumn. */
@@ -87,6 +91,7 @@ export class FakeAutumn {
     const customerId = String(body.customer_id);
     switch (route) {
       case "/v1/customers.get_or_create": {
+        await this.beforeCustomer?.();
         const customer = this.customer(customerId);
         if (typeof body.email === "string") customer.email = body.email;
         return Response.json(this.customerBody(customer));
@@ -114,7 +119,8 @@ export class FakeAutumn {
       case "/v1/billing.open_customer_portal":
         return Response.json({ customer_id: customerId, url: "https://billing.stripe.test/session" });
       case "/v1/customers.delete":
-        this.customers.delete(customerId);
+        if (this.deleteAnswer) return Response.json({ message: "delete failed" }, { status: this.deleteAnswer });
+        if (!this.customers.delete(customerId)) return Response.json({ message: "customer not found" }, { status: 404 });
         return Response.json({ success: true });
       default:
         return Response.json({ message: `no route ${route}` }, { status: 404 });

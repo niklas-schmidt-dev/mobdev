@@ -48,6 +48,12 @@ function Privacy() {
           records at once, disconnects your Macs and deletes your record at Autumn. A paid plan has to be cancelled
           first. Stripe keeps invoices as long as tax law requires.
         </p>
+        <p className="mt-3">
+          If you used the hosted relay that month, we keep one thing until your monthly allowance renews: a SHA-256 hash
+          of your WorkOS user ID with how many requests and active seconds you used. If you sign up again before then,
+          that usage counts toward your new account, so deleting and re-creating an account does not reset the free
+          allowance. After the renewal we delete it.
+        </p>
       </article>
     </Page>
   );

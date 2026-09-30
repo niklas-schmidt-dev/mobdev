@@ -1,6 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 import type { Autumn, Balance } from "../../shared/autumn";
-import { recordHostDevices, recordHostOffline, recordHostOnline } from "../../shared/db";
+import { accessTokenExists, recordHostDevices, recordHostOffline, recordHostOnline } from "../../shared/db";
 import { devicesFromFrame, type Device, type MacDevices } from "../../shared/devices";
 import { randomHex } from "../../shared/keys";
 import { FEATURES } from "../../shared/plans";
@@ -8,14 +8,18 @@ import { autumnFor, exhausted, hasRelayPlan, quotaFromCustomer, withBalance, typ
 import {
   CLOSE_REPLACED,
   CLOSE_REVOKED,
+  DASHBOARD_URL,
   MAX_HOSTS_PER_SPACE,
   MAX_IN_FLIGHT_PER_MAC,
+  MAX_ONLINE_HOSTS_PER_ACCOUNT,
   QUOTA_REFRESH_MS,
   REQUEST_TIMEOUT_MS,
+  TOKEN_RECHECK_MS,
   USAGE_FLUSH_MS,
   USAGE_RETRY_MS,
   errorResponse,
   jsonError,
+  macLimitError,
   type RelayRequest,
   type RelayResponse,
 } from "./protocol";
@@ -42,7 +46,10 @@ interface Attachment {
   spaceId: string;
   accountId: string;
   tokenId: string;
+  /** Also `hosts.connected_at` in D1, so a disconnect only marks this connection offline. */
   connectedAt: number;
+  /** When D1 last confirmed that the access token exists; see TOKEN_RECHECK_MS. */
+  tokenCheckedAt: number;
   /** Null when the relay does not bill (no Autumn key). */
   meter: Meter | null;
   /** The account's allowance; null until Autumn could be read, and requests pass meanwhile. */
@@ -51,10 +58,11 @@ interface Attachment {
 
 const METER_PREFIX = "meter:";
 
-function unconfirmed(meter: Meter): { requests: number; seconds: number } {
+/** What Autumn has not confirmed yet, plus `busyMs` of requests still in flight. */
+function unconfirmed(meter: Meter, busyMs = 0): { requests: number; seconds: number } {
   return {
     requests: meter.requests + (meter.batch?.requests ?? 0),
-    seconds: Math.floor(meter.activeMs / 1000) + (meter.batch?.seconds ?? 0),
+    seconds: Math.floor((meter.activeMs + busyMs) / 1000) + (meter.batch?.seconds ?? 0),
   };
 }
 
@@ -100,6 +108,8 @@ export class RelaySpace extends DurableObject<RelayEnv> {
   /** Closed connections whose meter already moved to storage. */
   private retired = new WeakSet<WebSocket>();
   private flushScheduled = false;
+  /** How long an agent waits for the Mac's answer. Tests shorten it. */
+  requestTimeoutMs = REQUEST_TIMEOUT_MS;
 
   constructor(ctx: DurableObjectState, env: RelayEnv) {
     super(ctx, env);
@@ -107,18 +117,22 @@ export class RelaySpace extends DurableObject<RelayEnv> {
   }
 
   /**
-   * Accepts a Mac's WebSocket. Only the relay worker calls this, after authenticating it and, when
-   * the relay bills, reading the account's allowance from Autumn (X-Mobdev-Billing).
+   * Accepts a Mac's WebSocket. Only the relay worker calls this, after authenticating it, reading
+   * how many Macs the account may connect (X-Mobdev-Macs) and, when the relay bills, its allowance
+   * from Autumn (X-Mobdev-Billing).
    */
   async fetch(request: Request): Promise<Response> {
     const accountId = request.headers.get("X-Mobdev-Account") ?? "";
     const billing = request.headers.get("X-Mobdev-Billing");
+    const macs = Math.min(Number(request.headers.get("X-Mobdev-Macs")), MAX_ONLINE_HOSTS_PER_ACCOUNT);
+    const connectedAt = Date.now();
     const attachment: Attachment = {
       name: request.headers.get("X-Mobdev-Name") ?? "mac",
       spaceId: request.headers.get("X-Mobdev-Space") ?? "",
       accountId,
       tokenId: request.headers.get("X-Mobdev-Token") ?? "",
-      connectedAt: Date.now(),
+      connectedAt,
+      tokenCheckedAt: connectedAt,
       meter: billing ? { id: randomHex(8), accountId, requests: 0, activeMs: 0, seq: 0, batch: null } : null,
       quota: billing ? ((JSON.parse(billing) as { quota: Quota | null }).quota ?? null) : null,
     };
@@ -130,11 +144,21 @@ export class RelaySpace extends DurableObject<RelayEnv> {
       await this.retire(socket);
       socket.close(CLOSE_REPLACED, "another connection with this key and name took over");
     }
+    // The access token may be revoked while this runs. Revoking deletes it and lists the spaces
+    // of its Macs in one D1 batch (deleteAccessToken), then asks those spaces to close them. So:
+    // record the Mac, accept its socket with no await in between, then check the token again. A
+    // revocation that ran after the D1 write lists this space, and its call finds the accepted
+    // socket; one that ran before it fails the check below. Either way no socket survives.
+    if (!(await recordHostOnline(this.env.DB, attachment, macs))) return macLimitError(macs);
     const { 0: client, 1: server } = new WebSocketPair();
     this.ctx.acceptWebSocket(server, [attachment.name]);
     server.serializeAttachment(attachment);
+    if (!(await accessTokenExists(this.env.DB, attachment.tokenId))) {
+      server.close(CLOSE_REVOKED, "access token revoked");
+      await this.disconnected(server);
+      return jsonError(403, `this relay needs an access token from ${DASHBOARD_URL}`);
+    }
     await this.pruneDevices(); // Macs dropped by a restart never reported a close.
-    await recordHostOnline(this.env.DB, attachment);
     return new Response(null, { status: 101, webSocket: client });
   }
 
@@ -177,6 +201,7 @@ export class RelaySpace extends DurableObject<RelayEnv> {
     }
     const socket = this.ctx.getWebSockets(name).find((ws) => ws.readyState === WebSocket.OPEN);
     if (!socket) return errorResponse(503, `the Mac "${name}" is not connected`);
+    if (await this.revoked(socket)) return errorResponse(503, `the access token of the Mac "${name}" was revoked`);
     if (this.inFlight(socket) >= MAX_IN_FLIGHT_PER_MAC) {
       return errorResponse(
         429,
@@ -185,8 +210,11 @@ export class RelaySpace extends DurableObject<RelayEnv> {
       );
     }
     const attachment = socket.deserializeAttachment() as Attachment | null;
+    const busySince = this.busySince.get(socket);
     if (attachment?.meter) {
-      const limit = exhausted(attachment.quota, unconfirmed(attachment.meter));
+      // Requests still in flight count too, or overlapping ones would never show as used time.
+      const busyMs = busySince === undefined ? 0 : Date.now() - busySince;
+      const limit = exhausted(attachment.quota, unconfirmed(attachment.meter, busyMs));
       if (limit) {
         await this.scheduleFlush(); // Asks Autumn again, so an upgrade takes effect.
         return errorResponse(429, limit.message, { "Retry-After": String(limit.retryAfter) });
@@ -194,14 +222,23 @@ export class RelaySpace extends DurableObject<RelayEnv> {
       attachment.meter.requests++;
       socket.serializeAttachment(attachment);
     }
-    if (!this.busySince.has(socket)) this.busySince.set(socket, Date.now());
+    if (busySince === undefined) {
+      this.busySince.set(socket, Date.now());
+      // Sends the busy time while it lasts, not only once the Mac is idle again.
+      if (attachment?.meter) this.ctx.waitUntil(this.scheduleFlush());
+    }
 
     const id = crypto.randomUUID().replaceAll("-", "");
     const answer = new Promise<RelayResponse>((resolve) => {
-      const timer = setTimeout(
-        () => this.settle(id, errorResponse(504, "the Mac did not answer in time")),
-        REQUEST_TIMEOUT_MS,
-      );
+      const timer = setTimeout(() => {
+        // The agent gets its answer; the Mac may stop working on the request.
+        try {
+          socket.send(JSON.stringify({ type: "cancel", id }));
+        } catch {
+          // Closed meanwhile; nothing left to cancel.
+        }
+        this.settle(id, errorResponse(504, "the Mac did not answer in time"));
+      }, this.requestTimeoutMs);
       this.pending.set(id, { resolve, timer, socket });
     });
     try {
@@ -288,9 +325,13 @@ export class RelaySpace extends DurableObject<RelayEnv> {
     }
     for (const [key, meter] of await this.ctx.storage.list<Meter>({ prefix: METER_PREFIX })) {
       try {
-        if (takeBatch(meter)) {
+        // A stored meter can hold a batch and newer counts; both go before it is deleted.
+        while (takeBatch(meter)) {
           await this.ctx.storage.put(key, meter); // A retry after a crash sends the same batch.
           await this.send(autumn, meter);
+          meter.batch = null;
+          meter.seq++;
+          await this.ctx.storage.put(key, meter);
         }
         await this.ctx.storage.delete(key);
       } catch (error) {
@@ -299,12 +340,21 @@ export class RelaySpace extends DurableObject<RelayEnv> {
       }
     }
     if (failed) await this.scheduleFlush(USAGE_RETRY_MS);
+    else if (this.busySince.size > 0) await this.scheduleFlush(); // Macs still busy keep being counted.
   }
 
   /** Sends one connected Mac's usage. Agent requests keep running while Autumn answers. */
   private async flushConnection(autumn: Autumn, socket: WebSocket): Promise<boolean> {
     const before = socket.deserializeAttachment() as Attachment | null;
     if (!before?.meter) return true;
+    const since = this.busySince.get(socket);
+    if (since !== undefined) {
+      // Counts the time of requests still in flight up to now; finished() adds the rest.
+      const now = Date.now();
+      before.meter.activeMs += now - since;
+      this.busySince.set(socket, now);
+      socket.serializeAttachment(before);
+    }
     try {
       if (takeBatch(before.meter)) {
         socket.serializeAttachment(before);
@@ -400,13 +450,41 @@ export class RelaySpace extends DurableObject<RelayEnv> {
     const others = this.ctx
       .getWebSockets(attachment.name)
       .filter((ws) => ws !== socket && ws.readyState === WebSocket.OPEN);
-    if (others.length === 0) await recordHostOffline(this.env.DB, attachment.spaceId, attachment.name);
+    if (others.length === 0) {
+      await recordHostOffline(this.env.DB, attachment.spaceId, attachment.name, attachment.connectedAt);
+    }
+  }
+
+  /**
+   * Whether the connection's access token was revoked, asking D1 at most every TOKEN_RECHECK_MS,
+   * and closes the connection if so. Revoking also closes it right away (revokeToken), but that
+   * call can fail; this bounds how long a revoked connection keeps working.
+   */
+  private async revoked(socket: WebSocket): Promise<boolean> {
+    const attachment = socket.deserializeAttachment() as Attachment | null;
+    if (!attachment || Date.now() - attachment.tokenCheckedAt < TOKEN_RECHECK_MS) return false;
+    let exists: boolean;
+    try {
+      exists = await accessTokenExists(this.env.DB, attachment.tokenId);
+    } catch (error) {
+      console.warn("could not check the access token; trying again with the next request", error);
+      return false;
+    }
+    if (exists) {
+      const latest = socket.deserializeAttachment() as Attachment; // Requests may have counted meanwhile.
+      latest.tokenCheckedAt = Date.now();
+      socket.serializeAttachment(latest);
+      return false;
+    }
+    if (socket.readyState === WebSocket.OPEN) socket.close(CLOSE_REVOKED, "access token revoked");
+    await this.disconnected(socket);
+    return true;
   }
 
   /** Keeps a Mac's latest device list here and in D1, where the account endpoint reads it. */
   private async storeDevices(socket: WebSocket, devices: Device[]): Promise<void> {
     // A replaced or revoked connection no longer speaks for its Mac.
-    if (socket.readyState !== WebSocket.OPEN) return;
+    if (socket.readyState !== WebSocket.OPEN || (await this.revoked(socket))) return;
     const attachment = socket.deserializeAttachment() as Attachment | null;
     if (!attachment) return;
     const stored: StoredDevices = { devices, updatedAt: Date.now() };

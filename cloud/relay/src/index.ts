@@ -14,6 +14,7 @@ import {
   MAX_BODY_BYTES,
   MAX_ONLINE_HOSTS_PER_ACCOUNT,
   jsonError,
+  macLimitError,
 } from "./protocol";
 
 export { RelaySpace } from "./space";
@@ -72,15 +73,14 @@ async function connectHost(request: Request, url: URL, env: RelayEnv, ctx: Execu
   if (!access) return jsonError(403, `this relay needs an access token from ${DASHBOARD_URL}`);
 
   const plan = await planForConnect(env, ctx, access);
+  const macs = Math.min(plan.macs, MAX_ONLINE_HOSTS_PER_ACCOUNT);
+  // A quick answer without waking the space. RelaySpace decides for good when it records the Mac.
   const online = await env.DB.prepare(
     "SELECT COUNT(*) AS count FROM hosts WHERE account_id = ?1 AND online = 1 AND NOT (space_id = ?2 AND name = ?3)",
   )
     .bind(access.account_id, spaceId, name)
     .first<{ count: number }>();
-  if ((online?.count ?? 0) >= plan.macs) {
-    const allowed = plan.macs === 1 ? "1 connected Mac" : `${plan.macs} connected Macs`;
-    return jsonError(429, `this account's plan allows ${allowed}; disconnect one or upgrade at ${DASHBOARD_URL}`);
-  }
+  if ((online?.count ?? 0) >= macs) return macLimitError(macs);
   ctx.waitUntil(touchAccessToken(env.DB, access.id));
 
   const headers = new Headers({
@@ -89,6 +89,7 @@ async function connectHost(request: Request, url: URL, env: RelayEnv, ctx: Execu
     "X-Mobdev-Name": name,
     "X-Mobdev-Account": access.account_id,
     "X-Mobdev-Token": access.id,
+    "X-Mobdev-Macs": String(macs),
   });
   if (plan.billing) headers.set("X-Mobdev-Billing", JSON.stringify(plan.billing));
   return env.RELAY_SPACE.getByName(spaceId).fetch(new Request(url, { headers }));
@@ -151,8 +152,8 @@ async function forwardToHost(request: Request, url: URL, env: RelayEnv): Promise
 
   const length = Number(request.headers.get("Content-Length") ?? 0);
   if (length > MAX_BODY_BYTES) return jsonError(413, "request body too large");
-  const body = await request.arrayBuffer();
-  if (body.byteLength > MAX_BODY_BYTES) return jsonError(413, "request body too large");
+  const body = await readBody(request, MAX_BODY_BYTES);
+  if (!body) return jsonError(413, "request body too large");
 
   const headers: Record<string, string> = {};
   for (const [header, value] of request.headers) {
@@ -164,7 +165,7 @@ async function forwardToHost(request: Request, url: URL, env: RelayEnv): Promise
     path,
     query: url.search.slice(1),
     headers,
-    body: Buffer.from(body).toString("base64"),
+    body: body.toString("base64"),
   });
 
   const responseHeaders = new Headers();
@@ -174,6 +175,27 @@ async function forwardToHost(request: Request, url: URL, env: RelayEnv): Promise
   const status = answer.status >= 200 && answer.status <= 599 ? answer.status : 502;
   const responseBody = status === 204 || status === 304 ? null : Buffer.from(answer.body, "base64");
   return new Response(responseBody, { status, headers: responseHeaders });
+}
+
+/**
+ * Reads a request body, or returns null and stops reading as soon as it grows past `limit` bytes.
+ * Content-Length is optional, so the size is only known while reading.
+ */
+async function readBody(request: Request, limit: number): Promise<Buffer | null> {
+  if (!request.body) return Buffer.alloc(0);
+  const reader: ReadableStreamDefaultReader<Uint8Array> = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) return Buffer.concat(chunks, size);
+    size += value.byteLength;
+    if (size > limit) {
+      await reader.cancel().catch(() => {});
+      return null;
+    }
+    chunks.push(value);
+  }
 }
 
 /** Called by the website over a service binding, never over HTTP. */

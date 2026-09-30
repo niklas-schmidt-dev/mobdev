@@ -6,7 +6,7 @@ The website, dashboard and hosted relay. Everything runs on Cloudflare.
 |---|---|---|
 | Website and dashboard | `src/`, worker `mobdev-web`, `mobdev.sh` | TanStack Start. Sign-in with WorkOS AuthKit. Dashboard issues access tokens and lists Macs. |
 | Hosted relay | `relay/`, worker `mobdev-relay`, `relay.mobdev.sh` | One Durable Object per space. Macs connect with hibernatable WebSockets, so an idle Mac costs nothing. Same protocol as [`../relay`](../relay). |
-| Database | D1 `mobdev`, `migrations/` | Accounts, hashed access tokens, which Macs are connected and the iPhones they report. No request or screenshot content. |
+| Database | D1 `mobdev`, `migrations/` | Accounts, hashed access tokens, which Macs are connected and the iPhones they report, and a deleted account's usage until its allowance renews (below). No request or screenshot content. |
 | Billing | [Autumn](https://docs.useautumn.com) on Stripe, `autumn.config.ts` | Plans, monthly allowances and usage per account; checkout and billing portal. |
 
 The relay is a separate worker so deploying the website never disconnects Macs. The website
@@ -19,8 +19,12 @@ token is revoked.
   access token (`mda_…`) from the dashboard. The relay stores only the token's SHA-256 hash.
 - Agents call `https://relay.mobdev.sh/h/<mac>/mcp` with the Mac's client key (`mdc_…`), derived
   from the host secret. The relay routes by `sha256(client key)` and never sees the secret.
-- Revoking a token deletes it and closes its Macs' connections (close code 4001).
-- Limits: 16 MB per request, 90 s per request, 32 Macs per key, 20 tokens per account, and at
+- Revoking a token deletes it and closes its Macs' connections (close code 4001). If that call
+  fails, each connection finds out at its next request: it checks its token at most once a
+  minute (`TOKEN_RECHECK_MS`). A Mac that connects while its token is revoked is checked again
+  after it is accepted.
+- Limits: 16 MB per request, 90 s per request (then the relay sends the Mac
+  `{"type":"cancel","id"}` so it can stop), 32 Macs per key, 20 tokens per account, and at
   most 10 connected Macs per account whatever the plan says.
 
 ## Plans, limits and billing
@@ -36,17 +40,24 @@ What keeps cost bounded, cheapest check first:
 |---|---|---|
 | 50 agent requests per 10 s per client key; 10 connects per minute per Mac | Rate limiting bindings in `relay/wrangler.jsonc`, checked in the worker before the Durable Object | `429`, `Retry-After` |
 | 4 requests in flight per Mac | `RelaySpace.forward` | `429`, `Retry-After: 1` |
-| Connected Macs per plan | `connectHost`, from Autumn's `macs` balance; the last value is cached in `accounts.macs_allowed` for when Autumn is down | `429` on connect; the Mac app waits 5 minutes |
+| Connected Macs per plan | `connectHost` reads Autumn's `macs` balance (the last value is cached in `accounts.macs_allowed` for when Autumn is down); `RelaySpace` enforces it in the same D1 statement that records the Mac, so concurrent connections cannot pass it | `429` on connect; the Mac app waits 5 minutes |
 | Requests and active seconds per month | Autumn balances `relay_requests`, `relay_active_seconds`, cached in each connection | `429`, `Retry-After` until renewal |
 
 How usage gets to Autumn: each Mac connection has a meter in its WebSocket attachment (so it
 survives hibernation) that counts forwarded requests and the time with at least one request in
-flight. That time is what Durable Object duration costs. About 30 s after a request finishes, a
-Durable Object alarm sends one batch per connection with `balances.track`. Idempotency keys make
-retries safe. The answer carries the remaining balance, which the connection enforces locally
-without calling Autumn per request. A Mac that disconnects leaves its meter in storage until the
-batch is confirmed. If Autumn is unreachable, requests pass, usage waits, and the relay retries
-every minute. Relay deploys can lose up to 30 s of uncounted usage.
+flight. That time is what Durable Object duration costs, and requests still in flight count
+against the allowance too. About 30 s after a Mac starts on a request, and every 30 s while it
+stays busy, a Durable Object alarm sends one batch per connection with `balances.track`.
+Idempotency keys make retries safe. The answer carries the remaining balance, which the
+connection enforces locally without calling Autumn per request. A Mac that disconnects leaves its
+meter in storage until all of it is confirmed. If Autumn is unreachable, requests pass, usage
+waits, and the relay retries every minute. Relay deploys can lose up to 30 s of uncounted usage.
+
+Deleting an account deletes nothing until Autumn has deleted the customer. Before that, the
+month's usage goes to `deleted_usage` under a SHA-256 hash of the WorkOS user ID, until the
+allowance renews. If the same user signs up again before then, the dashboard adds that usage to
+the new Autumn customer before it issues a token, so deleting the account does not reset the free
+allowance (`shared/accounts.ts`).
 
 Relay logs are sampled at 5 % (`head_sampling_rate`): at three log events per agent request,
 full logging would cost more than the requests themselves.

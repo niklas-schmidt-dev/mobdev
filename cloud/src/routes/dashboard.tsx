@@ -1,4 +1,6 @@
 import { createFileRoute, redirect, useRouter } from "@tanstack/react-router";
+import { useServerFn } from "@tanstack/react-start";
+import { signOut } from "@workos/authkit-tanstack-react-start";
 import { useState, type FormEvent, type ReactNode } from "react";
 import type { Device } from "../../shared/devices";
 import { PRO_PLAN, allowanceText } from "../../shared/plans";
@@ -245,6 +247,8 @@ function Dashboard({ data }: { data: DashboardData }) {
   const [created, setCreated] = useState<{ name: string; token: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // A POST to AuthKit's server function, which the CSRF check covers; see routes/sign-out.tsx.
+  const signOutNow = useServerFn(signOut);
   const online = data.hosts.filter((host) => host.online === 1).length;
   const tokenNames = new Map(data.tokens.map((token) => [token.id, token.name]));
 
@@ -299,9 +303,20 @@ function Dashboard({ data }: { data: DashboardData }) {
             <h1 className="headline text-[48px]">{data.user.firstName ? `Hi, ${data.user.firstName}.` : "Account"}</h1>
             <p className="mt-2 text-[17px] text-muted">{data.user.email}</p>
           </div>
-          <a href="/sign-out" className="ml-auto text-[15px] text-link hover:underline underline-offset-4">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => {
+              setBusy(true);
+              signOutNow({ data: { returnTo: "/" } }).catch((reason: unknown) => {
+                setError(reason instanceof Error ? reason.message : String(reason));
+                setBusy(false);
+              });
+            }}
+            className="ml-auto text-[15px] text-link hover:underline underline-offset-4"
+          >
             Sign out
-          </a>
+          </button>
         </div>
 
         {error && (
@@ -458,7 +473,7 @@ function Dashboard({ data }: { data: DashboardData }) {
                   setBusy(true);
                   // No reload in between: loading the dashboard would create the account again.
                   deleteAccount()
-                    .then(() => window.location.assign("/sign-out"))
+                    .then(() => signOutNow({ data: { returnTo: "/" } }))
                     .catch((reason: unknown) => {
                       setError(reason instanceof Error ? reason.message : String(reason));
                       setBusy(false);

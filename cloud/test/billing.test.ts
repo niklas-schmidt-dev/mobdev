@@ -1,7 +1,11 @@
 import { env, runDurableObjectAlarm, runInDurableObject } from "cloudflare:test";
+import { exports } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
 import { exhausted, type Quota } from "../relay/src/billing";
-import { clientKeyForSecret, spaceForSecret } from "../shared/keys";
+import { carryOverUsage, removeAccount } from "../shared/accounts";
+import { Autumn } from "../shared/autumn";
+import { listAccessTokens, listHosts, upsertAccount } from "../shared/db";
+import { clientKeyForSecret, sha256Hex, spaceForSecret } from "../shared/keys";
 import { FEATURES, FREE_PLAN, PRO_PLAN } from "../shared/plans";
 import { fakeAutumn } from "./fake-autumn";
 import { account, agent, connect, fakeMac, secret } from "./helpers";
@@ -46,6 +50,8 @@ async function macsAllowed(accountId: string): Promise<number | null> {
 beforeEach(() => {
   fakeAutumn.down = false;
   fakeAutumn.loseNextTrackResponse = false;
+  fakeAutumn.deleteAnswer = null;
+  fakeAutumn.beforeCustomer = null;
 });
 
 describe("plans", () => {
@@ -76,6 +82,27 @@ describe("plans", () => {
     await flush(hostSecret); // Autumn refuses the usage; requests keep passing.
     expect((await agent("/v1/status", key)).status).toBe(200);
     expect((await connect(secret(), token, "second")).status).toBe(429); // Free's Mac limit applies.
+  });
+
+  it("allows only as many Macs as the plan when several connect at once", async () => {
+    const { id, token } = await account();
+    fakeAutumn.setPlan(id, FREE_PLAN);
+    // All five wait at the plan lookup until each has arrived, so all pass the first count together.
+    let arrived = 0;
+    let release = () => {};
+    const together = new Promise<void>((resolve) => (release = resolve));
+    fakeAutumn.beforeCustomer = async () => {
+      if (++arrived === 5) release();
+      await together;
+    };
+    const responses = await Promise.all(
+      Array.from({ length: 5 }, (_, i) => connect(secret(), token, `mac-${i}`)),
+    ).finally(() => (fakeAutumn.beforeCustomer = null));
+    for (const response of responses) response.webSocket?.accept();
+    expect(responses.map((response) => response.status).sort()).toEqual([101, 429, 429, 429, 429]);
+    const refused = responses.find((response) => response.status === 429)!;
+    expect(((await refused.json()) as { error: string }).error).toContain("allows 1 connected Mac");
+    expect((await listHosts(env.DB, id)).filter((host) => host.online === 1)).toHaveLength(1);
   });
 
   it("keeps the last known Mac limit while Autumn is down", async () => {
@@ -181,6 +208,60 @@ describe("metering", () => {
     expect(fakeAutumn.trackedFor(id, FEATURES.requests)).toBe(2);
     expect(await stored()).toBe(0);
   });
+
+  it("sends what a Mac used after a failed batch once it disconnects", async () => {
+    const { id, token } = await account();
+    const hostSecret = secret();
+    const mac = await fakeMac(hostSecret, token);
+    const key = await clientKeyForSecret(hostSecret);
+    for (let i = 0; i < 2; i++) await agent("/v1/status", key);
+    fakeAutumn.down = true;
+    await flush(hostSecret); // The batch of 2 waits for Autumn.
+    await agent("/v1/status", key); // Counted next to that batch.
+
+    mac.socket.close(1000, "bye");
+    const stub = await space(hostSecret);
+    const stored = () => runInDurableObject(stub, async (_, state) => (await state.storage.list({ prefix: "meter:" })).size);
+    await until(async () => (await stored()) === 1);
+
+    fakeAutumn.down = false;
+    await flush(hostSecret);
+    expect(fakeAutumn.trackedFor(id, FEATURES.requests)).toBe(3);
+    expect(await stored()).toBe(0);
+  });
+
+  it("counts the time of requests still in flight against the allowance", async () => {
+    const { id, token } = await account();
+    fakeAutumn.setPlan(id, FREE_PLAN);
+    fakeAutumn.customer(id).used.seconds = FREE_PLAN.activeHours * 3600 - 1; // One second left.
+    const hostSecret = secret();
+    const mac = await fakeMac(hostSecret, token);
+    const key = await clientKeyForSecret(hostSecret);
+
+    const silent = agent("/v1/silent", key); // Keeps the Mac busy; overlapping requests never let it idle.
+    await sleep(1100);
+    const over = await agent("/v1/status", key);
+    expect(over.status).toBe(429);
+    expect(over.body.error).toContain("active time");
+    mac.socket.close(1000, "bye");
+    expect((await silent).status).toBe(502);
+  });
+
+  it("sends the active time of a Mac that stays busy", async () => {
+    const { id, token } = await account();
+    const hostSecret = secret();
+    const mac = await fakeMac(hostSecret, token);
+    const key = await clientKeyForSecret(hostSecret);
+
+    const silent = agent("/v1/silent", key);
+    await sleep(1100);
+    await flush(hostSecret); // Scheduled when the request started.
+    expect(fakeAutumn.trackedFor(id, FEATURES.requests)).toBe(1);
+    expect(fakeAutumn.trackedFor(id, FEATURES.activeSeconds)).toBe(1);
+    expect(await runDurableObjectAlarm(await space(hostSecret))).toBe(true); // Still busy: the next one is due.
+    mac.socket.close(1000, "bye");
+    expect((await silent).status).toBe(502);
+  });
 });
 
 describe("rate limits", () => {
@@ -218,6 +299,103 @@ describe("rate limits", () => {
     const refused = await connect(hostSecret, token);
     expect(refused.status).toBe(429);
     expect(refused.headers.get("Retry-After")).toBe("60");
+  });
+});
+
+describe("deleting an account", () => {
+  const autumn = new Autumn("am_sk_test_fake");
+  const disconnect = async (tokenId: string, spaceIds: string[]) => {
+    await exports.RelayAdmin.disconnectToken(tokenId, spaceIds);
+  };
+  const user = (id: string) => ({ id, email: `${id}@example.com` });
+  const accountExists = async (id: string) =>
+    (await env.DB.prepare("SELECT 1 FROM accounts WHERE id = ?1").bind(id).first()) !== null;
+  const kept = async (id: string) =>
+    env.DB.prepare("SELECT requests, active_seconds, deleted_at FROM deleted_usage WHERE user_hash = ?1")
+      .bind(await sha256Hex(id))
+      .first<{ requests: number; active_seconds: number; deleted_at: number | null }>();
+
+  it("deletes nothing until Autumn has deleted the customer", async () => {
+    const { id, token } = await account();
+    fakeAutumn.setPlan(id, FREE_PLAN);
+    const mac = await fakeMac(secret(), token);
+
+    fakeAutumn.deleteAnswer = 503;
+    await expect(removeAccount(env.DB, autumn, user(id), disconnect)).rejects.toThrow(/nothing was deleted/);
+    expect(fakeAutumn.customers.has(id)).toBe(true);
+    expect(await accountExists(id)).toBe(true);
+    expect(await listAccessTokens(env.DB, id)).toHaveLength(1);
+    expect((await listHosts(env.DB, id))[0]).toMatchObject({ online: 1 });
+
+    fakeAutumn.deleteAnswer = null;
+    await removeAccount(env.DB, autumn, user(id), disconnect);
+    expect(fakeAutumn.customers.has(id)).toBe(false);
+    expect(await mac.closed).toBe(4001);
+    expect(await accountExists(id)).toBe(false);
+    expect(await listAccessTokens(env.DB, id)).toEqual([]);
+    expect(await listHosts(env.DB, id)).toEqual([]);
+
+    // A retry after Autumn already deleted the customer goes through.
+    fakeAutumn.setPlan(id, FREE_PLAN); // What get_or_create makes of the missing customer.
+    fakeAutumn.deleteAnswer = 404;
+    await expect(removeAccount(env.DB, autumn, user(id), disconnect)).resolves.toBeUndefined();
+  });
+
+  it("refuses while a paid plan keeps charging", async () => {
+    const { id } = await account();
+    fakeAutumn.setPlan(id, PRO_PLAN);
+    await expect(removeAccount(env.DB, autumn, user(id), disconnect)).rejects.toThrow(/Cancel Pro/);
+    expect(fakeAutumn.customers.has(id)).toBe(true);
+    expect(await accountExists(id)).toBe(true);
+  });
+
+  it("carries this month's usage over to the user's next account", async () => {
+    const { id } = await account();
+    fakeAutumn.setPlan(id, FREE_PLAN);
+    fakeAutumn.customer(id).used = { requests: 500, seconds: 600 };
+    await removeAccount(env.DB, autumn, user(id), disconnect);
+    expect(await kept(id)).toMatchObject({ requests: 500, active_seconds: 600, deleted_at: expect.any(Number) });
+
+    // The same user signs up again.
+    await upsertAccount(env.DB, id, user(id).email);
+    fakeAutumn.down = true;
+    await expect(carryOverUsage(env.DB, autumn, user(id))).rejects.toThrow(); // createToken refuses then.
+    fakeAutumn.down = false;
+    fakeAutumn.loseNextTrackResponse = true;
+    await expect(carryOverUsage(env.DB, autumn, user(id))).rejects.toThrow();
+    await carryOverUsage(env.DB, autumn, user(id));
+    expect(fakeAutumn.customer(id).used).toEqual({ requests: 500, seconds: 600 });
+    expect(await kept(id)).toBeNull();
+    await carryOverUsage(env.DB, autumn, user(id));
+    expect(fakeAutumn.customer(id).used).toEqual({ requests: 500, seconds: 600 });
+  });
+
+  it("does not count usage twice when the deletion failed", async () => {
+    const { id } = await account();
+    fakeAutumn.setPlan(id, FREE_PLAN);
+    fakeAutumn.customer(id).used = { requests: 50, seconds: 0 };
+    fakeAutumn.deleteAnswer = 503;
+    await expect(removeAccount(env.DB, autumn, user(id), disconnect)).rejects.toThrow(/nothing was deleted/);
+    fakeAutumn.deleteAnswer = null;
+    await carryOverUsage(env.DB, autumn, user(id)); // The account lives on and has the usage itself.
+    expect(fakeAutumn.customer(id).used.requests).toBe(50);
+    expect(await kept(id)).toMatchObject({ requests: 50, deleted_at: null });
+  });
+
+  it("keeps nothing without usage, and forgets usage once the allowance renewed", async () => {
+    const unused = await account();
+    fakeAutumn.setPlan(unused.id, FREE_PLAN);
+    await removeAccount(env.DB, autumn, user(unused.id), disconnect);
+    expect(await kept(unused.id)).toBeNull();
+
+    const { id } = await account();
+    fakeAutumn.setPlan(id, FREE_PLAN);
+    fakeAutumn.customer(id).used = { requests: 5, seconds: 0 };
+    await removeAccount(env.DB, autumn, user(id), disconnect);
+    await upsertAccount(env.DB, id, user(id).email);
+    await carryOverUsage(env.DB, autumn, user(id), fakeAutumn.resetsAt);
+    expect(fakeAutumn.customers.has(id)).toBe(false);
+    expect(await kept(id)).toBeNull();
   });
 });
 
