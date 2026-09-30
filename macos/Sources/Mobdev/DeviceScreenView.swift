@@ -208,7 +208,8 @@ private struct PhoneStage: View {
             VStack(spacing: 16) {
                 PhoneMirrorView(
                     id: id, session: model.device(id)?.capture.session, input: model.device(id)?.input,
-                    layout: model.settings.keyboardLayout, focused: $focused
+                    layout: model.settings.keyboardLayout, focused: $focused,
+                    onDrag: { model.checkPointerAfterDrag(id, at: $0) }
                 )
                 .frame(width: screen.width, height: screen.height)
                 .clipShape(.rect(cornerRadius: radius, style: .continuous))
@@ -288,7 +289,7 @@ private struct ConnectPhone: View {
     }
 }
 
-/// The ready device's state in three short rows, so the panel does not change its layout.
+/// The ready device's state in four short rows, so the panel does not change its layout.
 private struct StatusSummary: View {
     @Environment(AppModel.self) private var model
     let id: String
@@ -299,18 +300,41 @@ private struct StatusSummary: View {
             row("Screen", symbol: "rectangle.on.rectangle", value: screenText(status?.screen))
             row("Bluetooth", symbol: "dot.radiowaves.left.and.right", value: "Paired")
             row("Keyboard", symbol: "keyboard", value: model.settings.keyboardLayout.displayName)
+            pointerRow(status?.pointer)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func row(_ title: String, symbol: String, value: String) -> some View {
+    private func row(
+        _ title: String, symbol: String, value: String, mark: (name: String, color: Color) = ("checkmark.circle.fill", .green)
+    ) -> some View {
         HStack(spacing: 10) {
-            Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+            Image(systemName: mark.name).foregroundStyle(mark.color)
             Label(title, systemImage: symbol).labelStyle(.titleOnly)
             Spacer()
             Text(value).foregroundStyle(.secondary).lineLimit(1)
         }
         .font(.callout)
+    }
+
+    /// Known after the first swipe or drag; with Snap to Item on, swipes turn into taps.
+    private func pointerRow(_ pointer: PointerBehavior?) -> some View {
+        let warning = ("exclamationmark.triangle.fill", Color.orange)
+        return switch pointer {
+        case .follows:
+            row("Pointer", symbol: "cursorarrow", value: "Swipes work")
+                .help("The pointer lands where it is aimed, so swipes work.")
+        case .snaps:
+            row("Pointer", symbol: "cursorarrow", value: "Snap to Item is on", mark: warning)
+                .help(
+                    "Swipes turn into taps. On the iPhone: Settings › Accessibility › Touch › AssistiveTouch, turn off Snap to Item.")
+        case .hidden:
+            row("Pointer", symbol: "cursorarrow", value: "Not visible", mark: warning)
+                .help("The pointer did not appear. Turn on Settings › Accessibility › Touch › AssistiveTouch.")
+        case nil:
+            row("Pointer", symbol: "cursorarrow", value: "Not checked yet", mark: ("circle.dashed", .secondary))
+                .help("Checked on the first swipe or drag. Snap to Item must be off in AssistiveTouch.")
+        }
     }
 
     private func screenText(_ screen: ScreenState?) -> String {
@@ -350,10 +374,7 @@ struct SetupSteps: View {
                 .fixedSize(horizontal: false, vertical: true)
                 Button("Use This Connection") { model.useBluetoothHost(host.id, for: id) }
             }
-            StepRow(
-                title: "AssistiveTouch",
-                detail: "Settings › Accessibility › Touch › AssistiveTouch. Turns the pointer into taps.",
-                state: .info)
+            StepRow(title: "AssistiveTouch", detail: assistiveTouchDetail, state: assistiveTouchState)
             Button("Open Setup Assistant…") { model.showsOnboarding = true }
                 .buttonStyle(.glass)
         }
@@ -373,6 +394,26 @@ struct SetupSteps: View {
         case .connected(let name, let width, let height): width > 0 ? "\(name) · \(width) × \(height)" : name
         case .searching, .starting: "Connect with a USB data cable and tap Trust."
         default: status.screen.summary
+        }
+    }
+
+    /// From the last pointer check (an agent's swipe or a drag in the mirror); only a guide before that.
+    private var assistiveTouchState: StepRow.State {
+        switch status.pointer {
+        case .follows: .done
+        case .snaps, .hidden: .attention
+        case nil: .info
+        }
+    }
+
+    private var assistiveTouchDetail: String {
+        switch status.pointer {
+        case .follows: "On. Taps and swipes work."
+        case .snaps:
+            "Snap to Item is on, so swipes turn into taps. On the iPhone: Settings › Accessibility › Touch › AssistiveTouch, turn off Snap to Item."
+        case .hidden: "The pointer did not appear. Turn on Settings › Accessibility › Touch › AssistiveTouch."
+        case nil:
+            "Settings › Accessibility › Touch › AssistiveTouch: turn it on, turn off Snap to Item and keep Perform Touch Gestures on."
         }
     }
 

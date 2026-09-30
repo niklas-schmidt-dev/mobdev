@@ -4,13 +4,15 @@ import MobdevCore
 import SwiftUI
 
 /// The live iPhone screen. Click to tap, drag to swipe, scroll to scroll, and type while it
-/// has focus. ⌘V types the Mac clipboard.
+/// has focus. ⌘V types the Mac clipboard. After a drag, `onDrag` gets where it started, so the
+/// app can check whether the pointer snapped and turned it into a tap.
 struct PhoneMirrorView: NSViewRepresentable {
     let id: String
     let session: AVCaptureSession?
     let input: HIDInput?
     let layout: KeyboardLayout
     @Binding var focused: Bool
+    var onDrag: ((NormalizedPoint) -> Void)?
 
     func makeNSView(context: Context) -> MirrorNSView {
         let view = MirrorNSView.view(for: id)
@@ -21,6 +23,7 @@ struct PhoneMirrorView: NSViewRepresentable {
     func updateNSView(_ view: MirrorNSView, context: Context) {
         view.input = input
         view.keyboardLayout = layout
+        view.onDrag = onDrag
         if view.previewLayer.session !== session {
             view.previewLayer.session = session
         }
@@ -44,7 +47,10 @@ final class MirrorNSView: NSView {
     var input: HIDInput?
     var keyboardLayout: KeyboardLayout = .us
     var onFocusChange: ((Bool) -> Void)?
+    var onDrag: ((NormalizedPoint) -> Void)?
     private var lastMove = Date.distantPast
+    private var dragStart: NormalizedPoint?
+    private var dragged = false
     private var scrollAccumulator: CGFloat = 0
 
     override init(frame: NSRect) {
@@ -89,22 +95,31 @@ final class MirrorNSView: NSView {
 
     override func mouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)
-        input?.pointerDown(at: normalized(event))
+        let point = normalized(event)
+        dragStart = point
+        dragged = false
+        input?.pointerDown(at: point)
     }
 
     override func mouseDragged(with event: NSEvent) {
         // BLE carries a report every 15-30 ms; more would only queue up.
         guard Date().timeIntervalSince(lastMove) > 0.025 else { return }
         lastMove = Date()
-        input?.pointerMove(to: normalized(event))
+        let point = normalized(event)
+        if let start = dragStart, hypot(point.x - start.x, point.y - start.y) > 0.02 { dragged = true }
+        input?.pointerMove(to: point)
     }
 
     override func mouseUp(with event: NSEvent) {
         input?.pointerUp(at: normalized(event))
+        if dragged, let start = dragStart { onDrag?(start) }
+        dragStart = nil
+        dragged = false
     }
 
     override func scrollWheel(with event: NSEvent) {
-        scrollAccumulator += event.scrollingDeltaY * (event.hasPreciseScrollingDeltas ? 0.1 : 1)
+        // Positive ticks reveal content further down; on the Mac that is a negative delta.
+        scrollAccumulator -= event.scrollingDeltaY * (event.hasPreciseScrollingDeltas ? 0.1 : 1)
         let ticks = Int(scrollAccumulator)
         guard ticks != 0, let input else { return }
         scrollAccumulator -= CGFloat(ticks)

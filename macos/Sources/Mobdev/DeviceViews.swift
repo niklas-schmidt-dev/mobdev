@@ -424,6 +424,14 @@ struct ActivityRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Text(ToolIcon.title(for: entry.tool)).font(.body.weight(.medium)).lineLimit(1)
+                    if entry.count > 1 {
+                        // Identical calls in a row, e.g. an agent polling status; the time is the last one's.
+                        Text("×\(entry.count)")
+                            .font(.caption.weight(.medium))
+                            .monospacedDigit()
+                            .foregroundStyle(.secondary)
+                            .accessibilityLabel("\(entry.count) times")
+                    }
                     if let deviceName {
                         Label(deviceName, systemImage: "iphone.gen3")
                             .font(.caption)

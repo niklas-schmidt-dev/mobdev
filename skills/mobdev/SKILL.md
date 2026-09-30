@@ -15,7 +15,9 @@ App Store apps.
    - Screen missing: the phone is locked, asleep or unplugged. Ask the user to unlock it. You
      cannot enter the passcode.
    - Bluetooth not connected: ask the user to open Settings > Bluetooth on the iPhone, tap the Mac,
-     and turn on Settings > Accessibility > Touch > AssistiveTouch.
+     and turn on Settings > Accessibility > Touch > AssistiveTouch with Snap to Item off.
+   - `Pointer: snaps to items`: swipes would become taps. Ask the user to turn off Snap to Item in
+     Settings > Accessibility > Touch > AssistiveTouch and keep Perform Touch Gestures on.
 2. With several iPhones, call `list_devices` and pass `device` (id or name) to every tool.
 
 ## See the screen
@@ -56,6 +58,8 @@ in the way, or the tap hit a neighbour. Do not repeat the same tap blindly.
   be typed.
 - Taps do nothing: AssistiveTouch is off, or the phone locked itself. Suggest Auto-Lock: Never while
   agents work.
+- `swipe` fails because the pointer snaps to items, or a swipe opened something instead of
+  scrolling: Snap to Item is on in AssistiveTouch. Ask the user to turn it off, then swipe again.
 
 ## Safety
 

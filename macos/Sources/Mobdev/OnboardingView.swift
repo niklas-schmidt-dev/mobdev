@@ -104,7 +104,10 @@ struct OnboardingView: View {
                 symbol: "hand.tap", title: "Turn On AssistiveTouch",
                 message: "iOS turns a Bluetooth pointer into taps only with AssistiveTouch."
             ) {
-                Instructions(lines: ["On your iPhone, open Settings › Accessibility › Touch › AssistiveTouch and turn it on."])
+                Instructions(lines: [
+                    "On your iPhone, open Settings › Accessibility › Touch › AssistiveTouch and turn it on.",
+                    "On the same page, turn off Snap to Item and keep Perform Touch Gestures on. Otherwise swipes turn into taps.",
+                ])
                 VStack(spacing: 8) {
                     Button("Show Pointer", systemImage: "cursorarrow.rays") { model.showPointer() }
                         .buttonStyle(.glass)

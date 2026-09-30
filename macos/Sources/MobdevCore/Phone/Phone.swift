@@ -5,11 +5,16 @@ public struct PhoneStatus: Sendable, Equatable {
     public var screen: ScreenState
     public var bluetooth: BluetoothState
     public var keyboardLayout: KeyboardLayout
+    /// How the pointer reacted the last time it was checked; nil until then.
+    public var pointer: PointerBehavior?
 
-    public init(screen: ScreenState, bluetooth: BluetoothState, keyboardLayout: KeyboardLayout) {
+    public init(
+        screen: ScreenState, bluetooth: BluetoothState, keyboardLayout: KeyboardLayout, pointer: PointerBehavior? = nil
+    ) {
         self.screen = screen
         self.bluetooth = bluetooth
         self.keyboardLayout = keyboardLayout
+        self.pointer = pointer
     }
 
     public var frameSize: (width: Int, height: Int)? {
@@ -28,10 +33,13 @@ public protocol PhoneBackend: Sendable {
     func type(_ strokes: [KeyStroke]) async throws
     func press(_ stroke: KeyStroke) async throws
     func press(_ button: ConsumerUsage) async throws
+    /// Moves the pointer to `point` without clicking and reads how it reacts. Nil when unknown.
+    func checkPointer(at point: NormalizedPoint) async throws -> PointerBehavior?
     /// Installing, launching and debugging apps, for devices in Developer Mode. Nil when unavailable.
     var apps: AppBackend? { get }
 }
 
 extension PhoneBackend {
     public var apps: AppBackend? { nil }
+    public func checkPointer(at point: NormalizedPoint) async throws -> PointerBehavior? { nil }
 }

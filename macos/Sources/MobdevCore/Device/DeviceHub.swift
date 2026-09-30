@@ -15,6 +15,8 @@ public final class HardwareDevice: PhoneBackend, @unchecked Sendable {
     private let layout: Locked<KeyboardLayout>
     private let state: Locked<(info: DeviceInfo?, captureName: String, host: UUID?, input: HIDInput?)>
     private let control = Locked<DeviceControl?>(nil)
+    private let pointer = Locked<PointerBehavior?>(nil)
+    private let onChange: @Sendable () -> Void
 
     init(
         id: String, captureID: String, captureName: String, info: DeviceInfo?, host: UUID?,
@@ -24,6 +26,7 @@ public final class HardwareDevice: PhoneBackend, @unchecked Sendable {
         self.captureID = captureID
         self.peripheral = peripheral
         self.layout = layout
+        self.onChange = onChange
         capture = ScreenCapture(onlyDeviceID: captureID) { _ in onChange() }
         activity = ActivityLog(limit: 1000, file: MobdevPaths.activityFile(device: id))
         state = Locked((info, captureName, host, host.map { HIDInput(sink: HostSink(peripheral: peripheral, host: $0)) }))
@@ -48,13 +51,15 @@ public final class HardwareDevice: PhoneBackend, @unchecked Sendable {
             guard current.host != host else { return }
             current.host = host
             current.input = host.map { HIDInput(sink: HostSink(peripheral: peripheral, host: $0)) }
+            // Another host may be another phone with other settings.
+            pointer.set(nil)
         }
     }
 
     // MARK: PhoneBackend
 
     public func status() -> PhoneStatus {
-        PhoneStatus(screen: capture.state, bluetooth: bluetooth, keyboardLayout: layout.get())
+        PhoneStatus(screen: capture.state, bluetooth: bluetooth, keyboardLayout: layout.get(), pointer: pointer.get())
     }
 
     /// Connected once this device's host is; otherwise what Bluetooth as a whole is doing.
@@ -97,6 +102,25 @@ public final class HardwareDevice: PhoneBackend, @unchecked Sendable {
 
     public func move(to point: NormalizedPoint) async throws {
         try await requireInput().move(to: point)
+    }
+
+    /// Parks the pointer far from `point`, then moves it there and compares the screen before and
+    /// after. Nothing is clicked. Takes about a second.
+    public func checkPointer(at point: NormalizedPoint) async throws -> PointerBehavior? {
+        let input = try requireInput()
+        try await input.move(to: PointerCheck.parking(for: point))
+        // iOS draws the pointer, and fades a snap outline in, within a few frames.
+        try await Task.sleep(for: .milliseconds(400))
+        guard let parked = frame() else { return nil }
+        try await Task.sleep(for: .milliseconds(150))
+        guard let before = frame(), PointerCheck.isStill(parked, before, around: point) else { return nil }
+        try await input.move(to: point)
+        try await Task.sleep(for: .milliseconds(400))
+        guard let after = frame(), let behavior = PointerCheck.classify(before: before, after: after, at: point)
+        else { return nil }
+        Log.info("pointer check on \(name): \(behavior.rawValue)")
+        if pointer.withLock({ let changed = $0 != behavior; $0 = behavior; return changed }) { onChange() }
+        return behavior
     }
 
     /// Developer tools through Xcode's devicectl, once the device's UDID is known. The same instance
@@ -253,7 +277,24 @@ public final class DeviceHub: @unchecked Sendable {
         scan()
         // A device can take a few seconds to appear after the screen-capture switch flips.
         queue.asyncAfter(deadline: .now() + 2) { self.scan() }
+        watchForScreens()
         onChange()
+    }
+
+    /// An iPhone that was locked when it was plugged in is listed from USB alone, and the running app
+    /// is not always told when its screen appears. While one waits, look for a screen no device
+    /// owns yet, and scan (which also asks lockdownd) only once there is one.
+    private func watchForScreens() {
+        queue.asyncAfter(deadline: .now() + 3) { [weak self] in
+            guard let self else { return }
+            let list = deviceList.get()
+            if list.contains(where: { $0.onUSB.get() && !$0.capture.state.isConnected }),
+                ScreenCapture.devices().contains(where: { capture in !list.contains { $0.captureID == capture.id } })
+            {
+                scan()
+            }
+            watchForScreens()
+        }
     }
 
     private func scan() {

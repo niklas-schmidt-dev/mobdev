@@ -101,6 +101,42 @@ extension Trait where Self == ConditionTrait {
         #expect(output.text.contains("Settings > Bluetooth"))
     }
 
+    /// With Snap to Item on, iOS taps the nearest item instead of swiping, so the swipe stops.
+    @Test func swipeRefusesWhenThePointerSnaps() async throws {
+        let snapping = FakePhone(lines: [], pointerCheckResult: .snaps)
+        let (tools, _) = tools(snapping)
+        let swipe: JSONValue = ["from_x": 295, "from_y": 960, "to_x": 295, "to_y": 320]
+        let output = try await tools.call("swipe", arguments: swipe, source: "test", screenshotByDefault: false)
+        #expect(output.isError)
+        #expect(output.text.contains("Snap to Item"))
+        #expect(snapping.events.get() == [.checkPointer(NormalizedPoint(x: 0.5, y: 0.75))])
+        let status = try await tools.call("status", arguments: nil, source: "test", screenshotByDefault: false)
+        #expect(status.data?["pointer"] == "snaps")
+        #expect(status.text.contains("Pointer: snaps to items"))
+    }
+
+    @Test func swipeChecksThePointerUntilItFollows() async throws {
+        let following = FakePhone(lines: [], pointerCheckResult: .follows)
+        let (tools, _) = tools(following)
+        let swipe: JSONValue = ["from_x": 295, "from_y": 960, "to_x": 295, "to_y": 320]
+        for _ in 0..<2 {
+            let output = try await tools.call("swipe", arguments: swipe, source: "test", screenshotByDefault: false)
+            #expect(!output.isError)
+        }
+        let start = NormalizedPoint(x: 0.5, y: 0.75), end = NormalizedPoint(x: 0.5, y: 0.25)
+        #expect(following.events.get() == [.checkPointer(start), .swipe(start, end), .swipe(start, end)])
+    }
+
+    /// Positive wheel ticks reveal content further down on an iPhone.
+    @Test func scrollDirectionMatchesTheContent() async throws {
+        let (tools, _) = tools()
+        _ = try await tools.call(
+            "scroll", arguments: ["direction": "down", "amount": 3], source: "test", screenshotByDefault: false)
+        _ = try await tools.call(
+            "scroll", arguments: ["direction": "up", "amount": 2], source: "test", screenshotByDefault: false)
+        #expect(phone.events.get() == [.scroll(3), .scroll(-2)])
+    }
+
     @Test func unknownToolThrows() async {
         let (tools, _) = tools()
         await #expect(throws: UnknownToolError.self) {

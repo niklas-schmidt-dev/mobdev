@@ -143,7 +143,8 @@ function Docs() {
                 </li>
                 <li>
                   Turn on <strong>Settings › Accessibility › Touch › AssistiveTouch</strong>. It turns the pointer into
-                  taps.
+                  taps. On the same page turn off <strong>Snap to Item</strong> and keep <strong>Perform Touch
+                  Gestures</strong> on, otherwise every swipe becomes a tap.
                 </li>
                 <li>
                   In Mobdev, pick the keyboard layout that matches <strong>Settings › General › Keyboard › Hardware

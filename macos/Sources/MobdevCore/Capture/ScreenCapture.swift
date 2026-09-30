@@ -44,6 +44,9 @@ public final class ScreenCapture: NSObject, AVCaptureVideoDataOutputSampleBuffer
     private let started = Locked(false)
     private let onlyDeviceID: String?
     private var observers: [NSObjectProtocol] = []
+    // Only touched on `queue`.
+    private var retryScheduled = false
+    private var stopped = false
 
     /// `onlyDeviceID` pins the capture to one device; without it the preferred or first iPhone is used.
     public init(onlyDeviceID: String? = nil, onStateChange: @escaping @Sendable (ScreenState) -> Void = { _ in }) {
@@ -109,7 +112,10 @@ public final class ScreenCapture: NSObject, AVCaptureVideoDataOutputSampleBuffer
     public func stop() {
         for observer in observers { NotificationCenter.default.removeObserver(observer) }
         observers = []
-        queue.async { self.stopSession() }
+        queue.async {
+            self.stopped = true
+            self.stopSession()
+        }
     }
 
     public func availableDevices() -> [CaptureDeviceInfo] {
@@ -157,6 +163,7 @@ public final class ScreenCapture: NSObject, AVCaptureVideoDataOutputSampleBuffer
         }
         guard let device = candidate else {
             setState(.searching)
+            retryLater()
             return
         }
         let session = AVCaptureSession()
@@ -178,6 +185,19 @@ public final class ScreenCapture: NSObject, AVCaptureVideoDataOutputSampleBuffer
         sessionBox.set(session)
         Log.info("capturing \(device.localizedName) (\(device.modelID))")
         setState(.connected(name: device.localizedName, width: 0, height: 0))
+    }
+
+    /// A locked iPhone offers no screen, and a running app is not always told when it is unlocked
+    /// later, so look again every few seconds until the screen appears.
+    private func retryLater() {
+        guard !retryScheduled, !stopped else { return }
+        retryScheduled = true
+        queue.asyncAfter(deadline: .now() + 3) {
+            self.retryScheduled = false
+            guard !self.stopped, self.sessionBox.get() == nil else { return }
+            Self.allowScreenCaptureDevices()
+            self.connect()
+        }
     }
 
     private func disconnect(_ deviceID: String?) {

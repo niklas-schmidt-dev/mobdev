@@ -290,6 +290,22 @@ final class AppModel {
     /// Offers the Mac to iPhones again, for one that does not list it under Other Devices.
     func offerBluetoothAgain() { hub.peripheral.republish() }
 
+    private var checkingPointer: Set<String> = []
+
+    /// A drag in the mirror only swipes when the pointer does not snap to items. Until that is
+    /// known, each drag is followed by a check that moves the pointer without clicking; the setup
+    /// panel shows the result.
+    func checkPointerAfterDrag(_ id: String, at point: NormalizedPoint) {
+        guard let device = device(id), device.status().pointer != .follows, !checkingPointer.contains(id) else {
+            return
+        }
+        checkingPointer.insert(id)
+        Task {
+            _ = try? await device.checkPointer(at: point)
+            checkingPointer.remove(id)
+        }
+    }
+
     /// Closes the setup assistant. Skipped steps start anyway, so macOS asks for what is missing.
     func finishOnboarding() {
         showsOnboarding = false

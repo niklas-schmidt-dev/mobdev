@@ -59,7 +59,11 @@ it again with **Mobdev › Set Up iPhone…**.
    8 seconds and then at doubling intervals up to every 2 minutes, which makes iOS look again.
    **Show on iPhone Again** in the setup does it right away.
 3. Turn on **Settings > Accessibility > Touch > AssistiveTouch**. iOS then shows a pointer and
-   turns clicks into taps.
+   turns clicks into taps. On the same page turn off **Snap to Item** and keep **Perform Touch
+   Gestures** on. With Snap to Item on, iOS moves the pointer onto the nearest item and every swipe
+   becomes a tap on it. Mobdev checks this without clicking before the first swipe and after a drag
+   in the mirror, shows the result as **Pointer** in the device panel and in `status`, and `swipe`
+   refuses while the pointer snaps.
 4. In Mobdev pick the **keyboard layout** that matches Settings > General > Keyboard > Hardware
    Keyboard on the iPhone (U.S. or German).
 5. Set **Auto-Lock** to Never while agents work. The phone must stay unlocked.
@@ -209,8 +213,8 @@ the Mac.
 - One iPhone per Mac for now. Several can be captured, but a Bluetooth host is not yet matched to
   a USB screen, so input goes to every paired phone.
 - Verified on hardware so far: screen capture from an iPhone over USB, Bluetooth pairing, the API,
-  OCR, MCP and the relay. Whether taps land correctly with AssistiveTouch, swipes and typing still
-  need a hands-on check.
+  OCR, MCP, the relay, and taps, swipes and the scroll wheel with AssistiveTouch on iOS 27. Typing
+  still needs a hands-on check.
 - Typing supports the U.S. and German hardware layouts, including common accents. Emoji and other
   characters without a key cannot be typed.
 - Portrait orientation is the tested case. Coordinates follow the current screenshot size.

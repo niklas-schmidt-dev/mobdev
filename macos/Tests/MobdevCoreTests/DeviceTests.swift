@@ -74,6 +74,61 @@ import Testing
         log.clear()
         #expect(ActivityLog(limit: 10, file: file).all.isEmpty)
     }
+
+    /// Polling status adds one entry with a count, and the file keeps one line for it.
+    @Test func identicalCallsInARowCollapse() throws {
+        let file = temporaryFile()
+        defer { try? FileManager.default.removeItem(at: file.deletingLastPathComponent()) }
+        let log = ActivityLog(limit: 10, file: file)
+        log.record(source: "local", tool: "tap", summary: "Tapped (1, 2).", failed: false)
+        for _ in 0..<3 { log.record(source: "local", tool: "status", summary: "Ready.", failed: false, collapsing: true) }
+        #expect(log.all.map(\.tool) == ["status", "tap"])
+        #expect(log.all.first?.count == 3)
+        // A different summary, source or tool in between starts a new entry.
+        log.record(source: "local", tool: "status", summary: "Not ready.", failed: false, collapsing: true)
+        log.record(source: "relay", tool: "status", summary: "Not ready.", failed: false, collapsing: true)
+        log.record(source: "relay", tool: "status", summary: "Not ready.", failed: false, collapsing: true)
+        #expect(log.all.map(\.count) == [2, 1, 3, 1])
+        // Without collapsing, repeats stay separate.
+        log.record(source: "relay", tool: "tap", summary: "Tapped (1, 2).", failed: false)
+        log.record(source: "relay", tool: "tap", summary: "Tapped (1, 2).", failed: false)
+        #expect(log.all.count == 6)
+
+        let lines = try String(contentsOf: file, encoding: .utf8).split(separator: "\n")
+        #expect(lines.count == 6)
+        let reloaded = ActivityLog(limit: 10, file: file)
+        #expect(reloaded.all == log.all)
+    }
+
+    /// After a relaunch the log did not write the last line itself, so it appends the newer
+    /// version; reading keeps only the newest line per entry.
+    @Test func aCollapsedEntryAppendedAfterAReloadIsReadOnce() throws {
+        let file = temporaryFile()
+        defer { try? FileManager.default.removeItem(at: file.deletingLastPathComponent()) }
+        let first = ActivityLog(limit: 10, file: file)
+        first.record(source: "local", tool: "tap", summary: "Tapped (1, 2).", failed: false)
+        Thread.sleep(forTimeInterval: 0.002)
+        first.record(source: "local", tool: "status", summary: "Ready.", failed: false, collapsing: true)
+        Thread.sleep(forTimeInterval: 0.002)
+        let second = ActivityLog(limit: 10, file: file)
+        second.record(source: "local", tool: "status", summary: "Ready.", failed: false, collapsing: true)
+        #expect(second.all.map(\.count) == [2, 1])
+        #expect(try String(contentsOf: file, encoding: .utf8).split(separator: "\n").count == 3)
+        #expect(ActivityLog(limit: 10, file: file).all == second.all)
+        // Paging back from the tap finds nothing older, and never the status entry's old version.
+        let tap = try #require(second.all.last)
+        #expect(second.older(than: tap.date, limit: 10).isEmpty)
+        #expect(second.older(than: Date.distantFuture, limit: 10).map(\.count) == [2, 1])
+    }
+
+    @Test func linesWithoutACountReadAsOne() throws {
+        let file = temporaryFile()
+        defer { try? FileManager.default.removeItem(at: file.deletingLastPathComponent()) }
+        try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let line = #"{"id":"6F9619FF-8B86-D011-B42D-00C04FC964FF","date":1790000000000,"source":"local","tool":"home","summary":"Went home.","failed":false}"#
+        try Data((line + "\n").utf8).write(to: file)
+        #expect(ActivityLog(limit: 10, file: file).all.first?.count == 1)
+    }
 }
 
 @Suite struct DeviceMatchingTests {

@@ -67,6 +67,8 @@ public final class PhoneTools: Sendable {
         `screenshot` (origin top-left); the size never changes while the phone keeps its orientation. \
         Prefer `tap_text` and `find_text` for visible labels, and `open_app` to launch an app by name. \
         Actions return a fresh screenshot unless `screenshot` is false. The phone must stay unlocked. \
+        Swipes need AssistiveTouch with Snap to Item off and Perform Touch Gestures on; `status` shows \
+        what the pointer does once it has been checked, and `swipe` refuses when the pointer snaps. \
         With Developer Mode on the iPhone and Xcode on the Mac, `install_app`, `launch_app`, `logs` and \
         `crash_reports` close the loop for apps you build: install a build, run it, read its output.
         """
@@ -119,7 +121,7 @@ public final class PhoneTools: Sendable {
             ToolDefinition(
                 name: "swipe", title: "Swipe",
                 description:
-                    "Drag from one point to another. To scroll a list down, swipe up: from a larger y to a smaller y.",
+                    "Drag from one point to another. To scroll a list down, swipe up: from a larger y to a smaller y. The first swipe checks the pointer without clicking; if it snaps to items (AssistiveTouch Snap to Item on), the swipe fails instead of tapping.",
                 inputSchema: schema(
                     [
                         "from_x": ["type": "number"], "from_y": ["type": "number"],
@@ -201,6 +203,8 @@ public final class PhoneTools: Sendable {
     ) async throws -> ToolOutput {
         guard let definition = Self.definition(named: name) else { throw UnknownToolError(name: name) }
         let args = Arguments(arguments ?? [:])
+        // An agent waiting for "Ready." polls status; repeats show as one entry with a count.
+        let collapsing = name == "status"
         do {
             var output = try await run(name, args)
             let wantsScreenshot = args.bool("screenshot") ?? screenshotByDefault
@@ -209,11 +213,12 @@ public final class PhoneTools: Sendable {
                 try await Task.sleep(nanoseconds: UInt64(settleDelay * 1_000_000_000))
                 output.image = phone.frame().flatMap(ImageTools.screenshot)
             }
-            activity.record(source: source, tool: name, summary: summary(name, args, output), failed: false)
+            activity.record(
+                source: source, tool: name, summary: summary(name, args, output), failed: false, collapsing: collapsing)
             return output
         } catch {
             let message = String(describing: error)
-            activity.record(source: source, tool: name, summary: message, failed: true)
+            activity.record(source: source, tool: name, summary: message, failed: true, collapsing: collapsing)
             return ToolOutput(text: message, isError: true)
         }
     }
@@ -246,6 +251,12 @@ public final class PhoneTools: Sendable {
             let end = try self.point(args, "to_x", "to_y")
             let duration = try args.number("duration", default: 0.3, range: 0.05...5)
             try requireTouch()
+            // With Snap to Item on, iOS would tap the nearest item instead of swiping.
+            if phone.status().pointer != .follows, try await phone.checkPointer(at: start) == .snaps {
+                throw ToolFailure(
+                    "Did not swipe: the pointer snaps to items, so iOS would tap the nearest item instead. \(PointerBehavior.snapAdvice) Then try again."
+                )
+            }
             try await phone.swipe(from: start, to: end, duration: duration)
             return ToolOutput(text: "Swiped from \(try describe(start)) to \(try describe(end)).")
         case "scroll":
@@ -257,7 +268,7 @@ public final class PhoneTools: Sendable {
             }
             let amount = Int(try args.number("amount", default: 5, range: 1...50))
             try requireTouch()
-            try await phone.scroll(at: point, ticks: direction == "up" ? amount : -amount)
+            try await phone.scroll(at: point, ticks: direction == "down" ? amount : -amount)
             return ToolOutput(text: "Scrolled \(direction) by \(amount).")
         case "type_text":
             let text = try args.string("text", maxLength: Self.maxTypedCharacters)
@@ -366,6 +377,7 @@ public final class PhoneTools: Sendable {
             lines.append("Screenshot coordinates: \(shot.width)×\(shot.height) px")
         }
         lines.append("Keyboard layout: \(status.keyboardLayout.displayName)")
+        if let pointer = status.pointer { lines.append("Pointer: \(pointer.summary)") }
         let ready = status.frameSize != nil && status.bluetooth.isConnected
         lines.insert(ready ? "Ready." : "Not ready.", at: 0)
         return ToolOutput(
@@ -378,6 +390,7 @@ public final class PhoneTools: Sendable {
                 ],
                 "screenshot": screenshot,
                 "keyboard_layout": .string(status.keyboardLayout.rawValue),
+                "pointer": status.pointer.map { .string($0.rawValue) } ?? .null,
             ])
     }
 

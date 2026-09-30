@@ -66,16 +66,15 @@ public final class HIDInput: @unchecked Sendable {
         }
     }
 
-    /// Scroll wheel at a point. Positive `ticks` scroll the content up (towards its top).
+    /// Scroll wheel at a point. Positive `ticks` reveal content further down, because iOS scrolls
+    /// wheels naturally by default. One report per tick: iOS scrolls by the number of reports, not
+    /// by their size, and hardly moves for the first one.
     public func scroll(at point: NormalizedPoint, ticks: Int) async throws {
         try await run {
             try self.pointer(point)
             self.pause(self.step * 2)
-            var remaining = ticks
-            while remaining != 0 {
-                let chunk = max(-8, min(8, remaining))
-                try self.sink.send(.relativeMouse, HIDReportMap.relativeMouseReport(buttons: 0, wheel: chunk))
-                remaining -= chunk
+            for _ in 0..<abs(ticks) {
+                try self.sink.send(.relativeMouse, HIDReportMap.relativeMouseReport(buttons: 0, wheel: ticks.signum()))
                 self.pause(self.step)
             }
         }

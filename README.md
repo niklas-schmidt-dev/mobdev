@@ -35,8 +35,8 @@ MOBDEV_VARIANT=release scripts/build-app.sh
 open build/Mobdev.app
 ```
 
-Then plug in the iPhone, pair it over Bluetooth and turn on AssistiveTouch. The app walks through
-it; details are in [`macos/README.md`](macos/README.md).
+Then plug in the iPhone, pair it over Bluetooth and turn on AssistiveTouch with Snap to Item off.
+The app walks through it; details are in [`macos/README.md`](macos/README.md).
 
 Remote access is optional. Create an access token at [mobdev.sh](https://mobdev.sh/dashboard) and
 click “Open in Mobdev”, or run [your own relay](relay/README.md).
@@ -82,7 +82,7 @@ installed apps can no longer be updated.
 ## Status
 
 Early release. Verified on hardware: USB screen capture, Bluetooth pairing, MCP, OCR and remote
-access through both relays. Tapping with AssistiveTouch, swipes and typing on a phone still need
-broader hands-on testing. One iPhone per Mac for now.
+access through both relays, and taps, swipes and scrolling with AssistiveTouch on iOS 27. Typing on
+a phone still needs broader hands-on testing. One iPhone per Mac for now.
 
 MIT licensed. Independent project; not affiliated with Apple, TapKit or MobAI.

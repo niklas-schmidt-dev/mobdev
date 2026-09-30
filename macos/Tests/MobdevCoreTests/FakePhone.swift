@@ -12,6 +12,7 @@ final class FakePhone: PhoneBackend, @unchecked Sendable {
         case type([KeyStroke])
         case key(KeyStroke)
         case button(ConsumerUsage)
+        case checkPointer(NormalizedPoint)
     }
 
     let image: CGImage
@@ -19,22 +20,33 @@ final class FakePhone: PhoneBackend, @unchecked Sendable {
     let bluetoothConnected: Bool
     let layout: KeyboardLayout
     let apps: AppBackend?
+    /// What `checkPointer` finds; the last result also shows in `status()`.
+    let pointerCheckResult: PointerBehavior?
+    let pointer = Locked<PointerBehavior?>(nil)
 
     /// Text lines drawn at (x, y) in pixels from the top-left of a 1179×2556 screen.
     init(
         lines: [(String, CGFloat, CGFloat)], bluetoothConnected: Bool = true, layout: KeyboardLayout = .us,
-        apps: AppBackend? = nil
+        apps: AppBackend? = nil, pointerCheckResult: PointerBehavior? = nil
     ) {
         image = Self.render(lines: lines, width: 1179, height: 2556)
         self.bluetoothConnected = bluetoothConnected
         self.layout = layout
         self.apps = apps
+        self.pointerCheckResult = pointerCheckResult
     }
 
     func status() -> PhoneStatus {
         PhoneStatus(
             screen: .connected(name: "Fake iPhone", width: image.width, height: image.height),
-            bluetooth: bluetoothConnected ? .connected(hosts: 1) : .advertising, keyboardLayout: layout)
+            bluetooth: bluetoothConnected ? .connected(hosts: 1) : .advertising, keyboardLayout: layout,
+            pointer: pointer.get())
+    }
+
+    func checkPointer(at point: NormalizedPoint) async throws -> PointerBehavior? {
+        events.withLock { $0.append(.checkPointer(point)) }
+        if let pointerCheckResult { pointer.set(pointerCheckResult) }
+        return pointerCheckResult
     }
 
     func frame() -> CGImage? { image }
