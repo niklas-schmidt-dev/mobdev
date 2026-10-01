@@ -137,12 +137,6 @@ const roadmap = [
     body: msg("Tap elements by identifier on developer-mode iPhones too, as on simulators and Android today."),
   },
   {
-    icon: "replay",
-    status: "Planned" as RoadmapStatus,
-    title: msg("A video of every run."),
-    body: msg("Keep a recording of each flow run, in the app and in CI."),
-  },
-  {
     icon: "browser",
     status: "Planned" as RoadmapStatus,
     title: msg("Live view in the browser."),
@@ -461,7 +455,8 @@ function Home() {
                 <h3 className="mt-6 text-[24px] font-semibold tracking-tight">Record once. Replay anywhere.</h3>
                 <p className="mt-2 max-w-lg text-[17px] leading-[1.47] text-muted">
                   Click Record, then use the app yourself or let your agent work. Mobdev saves the steps as a flow and
-                  replays it from the app, from your agent or in CI, and stops at the first step that fails.
+                  replays it from the app, from your agent or in CI, and stops at the first step that fails. Every run
+                  keeps a video, so you can watch where it went wrong.
                 </p>
               </T>
               <div className="mt-6">
@@ -556,7 +551,7 @@ function Home() {
               The toolkit keeps growing. Free, like everything else.
             </p>
           </T>
-          <ul className="mt-14 grid grid-cols-1 gap-5 md:grid-cols-3">
+          <ul className="mx-auto mt-14 grid max-w-3xl grid-cols-1 gap-5 md:grid-cols-2">
             {roadmap.map((item, index) => (
               <li key={item.title} {...reveal(index)} className={mistCard}>
                 <div className="flex items-start justify-between gap-4">

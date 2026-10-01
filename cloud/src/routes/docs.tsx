@@ -52,7 +52,7 @@ const tools = [
   ["ui_tree", "contains, all", msg("Elements from the accessibility tree (simulators and Android)")],
   ["tap_element", "id, text, index, timeout", msg("Tap an element by identifier or label")],
   ["wait_for_element", "id, text, timeout, gone", msg("Wait for an element to appear or disappear")],
-  ["run_flow", "path, steps", msg("Replay a flow; stops at the first failing step")],
+  ["run_flow", "path, steps, video", msg("Replay a flow; stops at the first failing step and can save a video")],
 ];
 
 /** Need Developer Mode on the iPhone and Xcode on the Mac. */
@@ -301,7 +301,8 @@ function Docs() {
                   become <code className={code}>tap_element</code>, so the flow survives layout changes. Replay it
                   with <strong>Run Flow…</strong>, the <code className={code}>run_flow</code> tool or, without the
                   app, <code className={code}>Mobdev flow</code>. Every run stops at the first failing step and says
-                  which.
+                  which. Run Flow… keeps a video of each run; <code className={code}>run_flow</code> saves one where
+                  its <code className={code}>video</code> argument says.
                 </p>
               </T>
               <Code>
@@ -311,7 +312,8 @@ function Docs() {
                 <p>
                   <code className={code}>Mobdev flow</code> runs on booted simulators and Android devices, for scripts
                   and CI. It exits 0 when every step passed and 1 when one failed; <code className={code}>--artifacts</code> keeps
-                  the activity, crash reports and a screenshot of the failure. In CI,
+                  a video of the run (<code className={code}>run.mp4</code>), the activity, crash reports and a
+                  screenshot of the failure. In CI,
                   prefer <code className={code}>tap_element</code> to the OCR tools, which do not work on GitHub’s
                   virtualized Macs.
                 </p>

@@ -308,7 +308,7 @@
   "a88f757dd0db33a6": "Elemente aus dem Accessibility-Baum (Simulatoren und Android)",
   "631ced74c82986c2": "Auf ein Element per Identifier oder Label tippen",
   "cde6ef43d109ddbf": "Warten, bis ein Element erscheint oder verschwindet",
-  "284d633cd0f1cb23": "Einen Flow abspielen; stoppt beim ersten fehlgeschlagenen Schritt",
+  "319fcd5a8366dc5a": "Einen Flow abspielen; stoppt beim ersten fehlgeschlagenen Schritt und kann ein Video speichern",
   "6661cfcb8d9efd9d": "Zur Entwicklung installierte Apps oder alle Apps",
   "5021ac0468eaa4e6": "Einen Build vom Mac installieren: .app/.ipa, Simulator-.app oder .apk",
   "f2d9c22dc9b53669": "Eine zur Entwicklung installierte App entfernen",
@@ -680,7 +680,7 @@
       " beziehen sich auf den Mac, auf dem Mobdev läuft, auch über ein Relay. Mobdev entfernt nie Apps aus dem App Store oder System-Apps."
     ]
   },
-  "be063cb332fd0180": {
+  "35f7e3fa41952f40": {
     "t": "p",
     "i": 1,
     "c": [
@@ -714,10 +714,22 @@
         "i": 6,
         "c": "Mobdev flow"
       },
-      ". Jeder Lauf stoppt beim ersten fehlgeschlagenen Schritt und nennt ihn."
+      ". Jeder Lauf stoppt beim ersten fehlgeschlagenen Schritt und nennt ihn. Mit „Run Flow…“ entsteht von jedem Lauf ein Video; ",
+      {
+        "t": "code",
+        "i": 7,
+        "c": "run_flow"
+      },
+      " speichert eines dort, wo sein Argument ",
+      {
+        "t": "code",
+        "i": 8,
+        "c": "video"
+      },
+      " es angibt."
     ]
   },
-  "123ea86a52d88ea2": {
+  "7ade48dd70ec3ed9": {
     "t": "p",
     "i": 1,
     "c": [
@@ -732,10 +744,16 @@
         "i": 3,
         "c": "--artifacts"
       },
-      " sichert das Aktivitätsprotokoll, Crash-Reports und einen Screenshot des Fehlers. Nutze in CI lieber ",
+      " sichert ein Video des Laufs (",
       {
         "t": "code",
         "i": 4,
+        "c": "run.mp4"
+      },
+      "), das Aktivitätsprotokoll, Crash-Reports und einen Screenshot des Fehlers. Nutze in CI lieber ",
+      {
+        "t": "code",
+        "i": 5,
         "c": "tap_element"
       },
       " als die Tools mit Texterkennung, denn die funktionieren auf den virtualisierten Macs von GitHub nicht."
@@ -1020,8 +1038,6 @@
   "8d8555364510a069": "Geplant",
   "ec843f776255abb5": "UI-Baum auf iPhones.",
   "6c69b1e9419c17c7": "Elemente per Identifier antippen, auch auf iPhones im Entwicklermodus, so wie heute schon in Simulatoren und auf Android.",
-  "02aaf338298c63aa": "Ein Video von jedem Lauf.",
-  "5bacea72e59ea075": "Jeder Flow-Lauf wird aufgezeichnet, in der App und in CI.",
   "e60bd40be027415a": "Live-Ansicht im Browser.",
   "0a73e54778118a8d": "Ein Smartphone im Dashboard verfolgen und übernehmen, und Geräte mit deinem Team teilen.",
   "abeb6ee67f73f8bd": "Ersetzt Mobdev Xcode oder Android Studio?",
@@ -1259,7 +1275,7 @@
       "c": "Skills machen aus den Tools ganze Abläufe. Füg sie einmal hinzu und frag deinen Agenten dann in einfachen Worten. Bevor etwas bezahlt, gesendet, gelöscht oder ein echtes Konto genutzt wird, halten sie an und fragen nach."
     }
   ],
-  "f937a4ed909213aa": [
+  "1db8222e4a13af85": [
     {
       "t": "h3",
       "i": 1,
@@ -1268,7 +1284,7 @@
     {
       "t": "p",
       "i": 2,
-      "c": "Klick auf „Record“ und bedien die App dann selbst oder lass deinen Agenten arbeiten. Mobdev speichert die Schritte als Flow, spielt ihn aus der App, über deinen Agenten oder in CI ab und stoppt beim ersten Schritt, der fehlschlägt."
+      "c": "Klick auf „Record“ und bedien die App dann selbst oder lass deinen Agenten arbeiten. Mobdev speichert die Schritte als Flow, spielt ihn aus der App, über deinen Agenten oder in CI ab und stoppt beim ersten Schritt, der fehlschlägt. Von jedem Lauf bleibt ein Video, so siehst du, wo es schiefging."
     }
   ],
   "836fc2fd0246326a": [

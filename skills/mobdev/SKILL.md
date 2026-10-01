@@ -83,7 +83,9 @@ device and stops at the first failing step, saying which. Users record flows in 
 **Record**. To turn a session you just drove into a flow, write the calls that mattered as steps,
 for example `{"steps": [{"tap_element": {"id": "login"}}, {"type_text": {"text": "hi"}}, "home"]}`,
 preferring `tap_element` and `wait_for_element` over coordinates so it survives layout changes.
-`Mobdev flow <file> --device <id>` runs one without the app, in CI.
+Pass `video` (an absolute .mp4 path on the Mac) to keep a recording of the run; it ends on the
+screen where the flow stopped. `Mobdev flow <file> --device <id> --artifacts <dir>` runs one
+without the app, in CI, and writes `run.mp4` to the directory.
 
 ## Safety
 

@@ -308,7 +308,7 @@
   "a88f757dd0db33a6": "Elements from the accessibility tree (simulators and Android)",
   "631ced74c82986c2": "Tap an element by identifier or label",
   "cde6ef43d109ddbf": "Wait for an element to appear or disappear",
-  "284d633cd0f1cb23": "Replay a flow; stops at the first failing step",
+  "319fcd5a8366dc5a": "Replay a flow; stops at the first failing step and can save a video",
   "6661cfcb8d9efd9d": "Apps installed for development, or every app",
   "5021ac0468eaa4e6": "Install a build from the Mac: .app/.ipa, simulator .app or .apk",
   "f2d9c22dc9b53669": "Remove an app installed for development",
@@ -679,7 +679,7 @@
       " are on the Mac that runs Mobdev, also through a relay. Mobdev never removes App Store or system apps."
     ]
   },
-  "be063cb332fd0180": {
+  "35f7e3fa41952f40": {
     "t": "p",
     "i": 1,
     "c": [
@@ -713,10 +713,22 @@
         "i": 6,
         "c": "Mobdev flow"
       },
-      ". Every run stops at the first failing step and says which."
+      ". Every run stops at the first failing step and says which. Run Flow… keeps a video of each run; ",
+      {
+        "t": "code",
+        "i": 7,
+        "c": "run_flow"
+      },
+      " saves one where its ",
+      {
+        "t": "code",
+        "i": 8,
+        "c": "video"
+      },
+      " argument says."
     ]
   },
-  "123ea86a52d88ea2": {
+  "7ade48dd70ec3ed9": {
     "t": "p",
     "i": 1,
     "c": [
@@ -731,10 +743,16 @@
         "i": 3,
         "c": "--artifacts"
       },
-      " keeps the activity, crash reports and a screenshot of the failure. In CI, prefer ",
+      " keeps a video of the run (",
       {
         "t": "code",
         "i": 4,
+        "c": "run.mp4"
+      },
+      "), the activity, crash reports and a screenshot of the failure. In CI, prefer ",
+      {
+        "t": "code",
+        "i": 5,
         "c": "tap_element"
       },
       " to the OCR tools, which do not work on GitHub’s virtualized Macs."
@@ -1018,8 +1036,6 @@
   "8d8555364510a069": "Planned",
   "ec843f776255abb5": "UI tree on iPhones.",
   "6c69b1e9419c17c7": "Tap elements by identifier on developer-mode iPhones too, as on simulators and Android today.",
-  "02aaf338298c63aa": "A video of every run.",
-  "5bacea72e59ea075": "Keep a recording of each flow run, in the app and in CI.",
   "e60bd40be027415a": "Live view in the browser.",
   "0a73e54778118a8d": "Watch and take over a phone from the dashboard, and share devices with your team.",
   "abeb6ee67f73f8bd": "Does it replace Xcode or Android Studio?",
@@ -1257,7 +1273,7 @@
       "c": "Skills turn the tools into whole workflows. Add them once, then ask your agent in plain words. They stop and ask before anything that pays, sends, deletes or uses real accounts."
     }
   ],
-  "f937a4ed909213aa": [
+  "1db8222e4a13af85": [
     {
       "t": "h3",
       "i": 1,
@@ -1266,7 +1282,7 @@
     {
       "t": "p",
       "i": 2,
-      "c": "Click Record, then use the app yourself or let your agent work. Mobdev saves the steps as a flow and replays it from the app, from your agent or in CI, and stops at the first step that fails."
+      "c": "Click Record, then use the app yourself or let your agent work. Mobdev saves the steps as a flow and replays it from the app, from your agent or in CI, and stops at the first step that fails. Every run keeps a video, so you can watch where it went wrong."
     }
   ],
   "836fc2fd0246326a": [

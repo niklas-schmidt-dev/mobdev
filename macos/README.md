@@ -141,7 +141,7 @@ only device, or the connected iPhone when simulators or Android devices run next
 | `ui_tree` | `contains`, `all` | Elements from the accessibility tree: role, label, identifier, value, position. Simulators and Android |
 | `tap_element` | `id`, `text`, `index`, `timeout` | Taps an element by identifier or label, waiting up to 5 s for it |
 | `wait_for_element` | `id`, `text`, `timeout`, `gone` | Like `wait_for_text`, from the tree |
-| `run_flow` | `path`, `steps` | Replays a flow and stops at the first failing step |
+| `run_flow` | `path`, `steps`, `video` | Replays a flow and stops at the first failing step; `video` saves a recording (.mp4) |
 | `list_apps` | `all` | Apps installed for development, or every app |
 | `install_app` | `path` | A build from a path on this Mac: `.app`/`.ipa` for iPhone, `.app` for simulators, `.apk` for Android |
 | `uninstall_app` | `bundle_id` | Only apps installed for development |
@@ -233,6 +233,11 @@ arguments:
 - **Run Flow…**, the `run_flow` tool (`path` to a file on the Mac, or `steps` inline) and
   `Mobdev flow` replay it, stop at the first step that fails and say which. `tap_element` waits up
   to 5 s for its element, so a flow rarely needs explicit waits.
+- Every run can keep a video. **Run Flow…** records one, and its result offers **Show Video**; the
+  app keeps the newest 20 in `~/Library/Application Support/dev.mobdev.mac/flow-videos`.
+  `run_flow` writes one when `video` names an .mp4 file on the Mac. The video has about
+  10 frames a second on simulators and iPhones; on Android, as many as `screencap` allows, one to
+  three. It ends on the screen the flow left, held for a moment, so a failure is easy to see.
 - `Mobdev flow` runs without the app, for scripts and CI, on booted simulators and Android devices:
 
   ```sh
@@ -240,8 +245,10 @@ arguments:
   ```
 
   It prints a line per step and exits 0 when every step passed, 1 when one failed and 2 when the
-  flow could not start. `--artifacts` keeps the activity log, copied crash reports and, after a
-  failure, `failure.png`. iPhones need the running app: call `run_flow` over MCP or the HTTP API.
+  flow could not start. `--artifacts` keeps a video of the run (`run.mp4`), the activity log,
+  copied crash reports and, after a failure, `failure.png`; `--no-video` skips the video. Ctrl-C
+  stops the flow and still finishes the video. iPhones need the running app: call `run_flow` over
+  MCP or the HTTP API.
 
 [`examples/flows`](../examples/flows) has a flow and a small app to try it with, and
 [`.github/workflows/flows.yml`](../.github/workflows/flows.yml) runs them on GitHub's free
@@ -264,6 +271,10 @@ arguments:
   if: failure()
   with: { name: flow-artifacts, path: flow-artifacts }
 ```
+
+When a flow fails, the uploaded artifact has `run.mp4`, a video of the run that ends on the failing
+screen, next to `failure.png` and the activity log. Use `if: always()` to keep the video of passing
+runs too.
 
 In CI, prefer `tap_element` and `wait_for_element` to the OCR tools: Vision text recognition does
 not return on GitHub's virtualized Macs, and Mobdev gives up on it after 90 seconds.
