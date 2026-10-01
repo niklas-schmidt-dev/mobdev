@@ -24,6 +24,16 @@ KINDS = {
 }
 FALLBACK = [("improved", "Improvements and bug fixes.")]
 
+# Notes live in commit messages, which cannot be rewritten. A note that turned out wrong is replaced
+# here, keyed by its original text without the prefix, so earlier releases in the update window
+# read right too. Edit the GitHub release of that version to match.
+CORRECTIONS = {
+    # 0.2.17: restarting the capture did not bring the picture back when macOS's capture helper was
+    # stuck; the restart button from the next note did.
+    "An iPhone whose screen stays black gets its picture back without replugging, and says it is waiting for the screen meanwhile.":
+        "An iPhone that is connected but shows no picture says it is waiting for the screen, and Mobdev restarts the capture by itself.",
+}
+
 
 def git(*args: str) -> str:
     return subprocess.run(["git", *args], capture_output=True, text=True, check=True).stdout
@@ -42,7 +52,7 @@ def notes(revisions: str) -> list[tuple[str, str]]:
             prefix = re.match(r"^(New|Improved|Fixed):\s*(.+)$", text, re.IGNORECASE)
             if prefix:
                 kind, text = prefix.group(1).lower(), prefix.group(2)
-            found.append((kind, text))
+            found.append((kind, CORRECTIONS.get(text, text)))
     return sorted(found, key=lambda entry: list(KINDS).index(entry[0]))
 
 
