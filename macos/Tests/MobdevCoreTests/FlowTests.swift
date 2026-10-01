@@ -86,6 +86,18 @@ import Testing
         #expect(missing.isError)
     }
 
+    @Test func buildPathsAreRelativeToTheFlowFile() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("mobdev-flow-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let file = folder.appendingPathComponent("smoke.json")
+        try Data(#"["home", {"install_app": {"path": "build/App.app"}}, {"install_app": {"path": "/abs/App.app"}}]"#.utf8)
+            .write(to: file)
+        let flow = try Flow.load(file)
+        #expect(flow.steps[1].arguments["path"] == .string(folder.appendingPathComponent("build/App.app").standardizedFileURL.path))
+        #expect(flow.steps[2].arguments["path"] == "/abs/App.app")
+    }
+
     @Test func recordsActionsAndSkipsLooks() async throws {
         let tools = tools(FakePhone(lines: []))
         tools.recorder.start()

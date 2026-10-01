@@ -5,13 +5,13 @@ import Testing
 /// Drives a booted simulator and a running Android emulator through the same tools agents use.
 /// Opt-in, because they act on those devices:
 ///
-///     MOBDEV_TEST_SIMULATOR=<udid> MOBDEV_TEST_SIMULATOR_APP=/path/to/Fixture.app \
+///     MOBDEV_TEST_SIMULATOR=<udid> MOBDEV_TEST_SIMULATOR_APP=../examples/flows/fixture/MobdevFixture.app \
 ///       swift test --filter EmulatorIntegration
 ///     MOBDEV_TEST_ANDROID=<serial> swift test --filter EmulatorIntegration
 ///
-/// The simulator app is the fixture described in the README: it prints every tap as a fraction of
-/// the screen, echoes typed text and crashes when launched with the argument "crash". It is
-/// uninstalled afterwards. On Android the test uses the Settings app and crashes it with `am crash`.
+/// The simulator app is the fixture in examples/flows/fixture (build it with its build.sh): it
+/// prints every tap as a fraction of the screen, echoes typed text and crashes when launched with
+/// the argument "crash". It is uninstalled afterwards. On Android the test uses the Settings app and crashes it with `am crash`.
 @Suite(.serialized) struct EmulatorIntegrationTests {
     static let environment = ProcessInfo.processInfo.environment
     static let simulator = environment["MOBDEV_TEST_SIMULATOR"]

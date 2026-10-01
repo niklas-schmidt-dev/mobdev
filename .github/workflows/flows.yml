@@ -1,0 +1,67 @@
+name: Flows
+# Runs the example flow in examples/flows on an iOS simulator on a GitHub-hosted Mac, the way the
+# README tells people to run flows in CI. Changes to the app run it with Mobdev built from that
+# commit; after every Mac release it runs again with the released app from the DMG.
+on:
+  push:
+    branches: [main]
+    paths: ["macos/**", "examples/flows/**", ".github/workflows/flows.yml"]
+  pull_request:
+    paths: ["macos/**", "examples/flows/**", ".github/workflows/flows.yml"]
+  workflow_run:
+    workflows: ["Mac app"]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: flows-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  flow:
+    # After "Mac app", only when it ran for a push to main and succeeded, so a release exists.
+    if: >-
+      github.event_name != 'workflow_run' || (github.event.workflow_run.conclusion == 'success'
+      && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main')
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use the newest Xcode
+        run: |
+          XCODE=$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
+      - name: Get Mobdev
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "workflow_run" ]; then
+            curl -fsSL -o Mobdev.dmg "https://github.com/$GITHUB_REPOSITORY/releases/latest/download/Mobdev.dmg"
+            hdiutil attach -nobrowse -mountpoint /tmp/mobdev Mobdev.dmg
+            echo "MOBDEV=/tmp/mobdev/Mobdev.app/Contents/MacOS/Mobdev" >> "$GITHUB_ENV"
+          else
+            swift build --package-path macos --product Mobdev
+            echo "MOBDEV=$PWD/macos/.build/debug/Mobdev" >> "$GITHUB_ENV"
+          fi
+      - name: Boot a simulator
+        run: |
+          # The first iPhone of the newest iOS runtime on the image.
+          UDID=$(xcrun simctl list devices available --json | jq -r '
+            .devices | to_entries | map(select(.key | test("iOS"))) | sort_by(.key) | last
+            | .value | map(select(.name | startswith("iPhone"))) | first | .udid')
+          echo "Simulator $UDID"
+          xcrun simctl boot "$UDID"
+          xcrun simctl bootstatus "$UDID" -b
+          echo "UDID=$UDID" >> "$GITHUB_ENV"
+      - name: Build the example app
+        run: examples/flows/fixture/build.sh
+      - name: Run the flow
+        working-directory: examples/flows
+        run: '"$MOBDEV" flow smoke.json --device "$UDID" --artifacts "$RUNNER_TEMP/flow-artifacts"'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: flow-artifacts
+          path: ${{ runner.temp }}/flow-artifacts

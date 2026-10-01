@@ -243,7 +243,9 @@ arguments:
   flow could not start. `--artifacts` keeps the activity log, copied crash reports and, after a
   failure, `failure.png`. iPhones need the running app: call `run_flow` over MCP or the HTTP API.
 
-A GitHub Actions job on a macOS 26 runner with Xcode:
+[`examples/flows`](../examples/flows) has a flow and a small app to try it with, and
+[`.github/workflows/flows.yml`](../.github/workflows/flows.yml) runs them on GitHub's free
+`macos-26` runners. A GitHub Actions job for your app:
 
 ```yaml
 - name: Boot a simulator
@@ -354,12 +356,13 @@ MOBDEV_TEST_DEVICE=<udid> MOBDEV_TEST_BUNDLE_ID=<bundle id> swift test --filter 
 
 Simulators and Android are tested with fake devices and parsers fed real `adb` output. The
 opt-in `EmulatorIntegration` tests drive a booted simulator and a running emulator through every
-tool. The simulator one needs a fixture app that prints each tap as `fixture: tap <x> <y> fraction
-<fx> <fy>`, echoes typed text as `fixture: submitted <text>`, shows "Tap anywhere" and "Type here",
-and crashes when launched with the argument `crash`:
+tool. The simulator one uses the fixture app in [`../examples/flows/fixture`](../examples/flows):
+it prints each tap as `fixture: tap <x> <y> fraction <fx> <fy>`, echoes typed text and crashes
+when launched with the argument `crash`. Build it with its `build.sh`:
 
 ```sh
-MOBDEV_TEST_SIMULATOR=<udid> MOBDEV_TEST_SIMULATOR_APP=/path/to/Fixture.app swift test --filter EmulatorIntegration
+../examples/flows/fixture/build.sh
+MOBDEV_TEST_SIMULATOR=<udid> MOBDEV_TEST_SIMULATOR_APP=../examples/flows/fixture/MobdevFixture.app swift test --filter EmulatorIntegration
 MOBDEV_TEST_ANDROID=emulator-5554 MOBDEV_TEST_ANDROID_APK=/path/to/any.apk swift test --filter EmulatorIntegration
 ```
 

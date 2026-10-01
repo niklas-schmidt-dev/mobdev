@@ -13,3 +13,4 @@ test-results/
 output/
 macos/.build/
 macos/build/
+examples/flows/fixture/MobdevFixture.app/

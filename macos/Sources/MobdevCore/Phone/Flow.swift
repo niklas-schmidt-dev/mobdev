@@ -78,7 +78,15 @@ public struct Flow: Sendable, Equatable {
             throw ToolFailure("Could not read \(url.path): \(error.localizedDescription)")
         }
         guard let value = try? JSONValue.parse(data) else { throw ToolFailure("\(url.lastPathComponent) is not JSON.") }
-        return try parse(value, name: url.deletingPathExtension().lastPathComponent)
+        var flow = try parse(value, name: url.deletingPathExtension().lastPathComponent)
+        // A build next to the flow file is found from wherever the flow runs: the app, an agent, CI.
+        let folder = url.deletingLastPathComponent()
+        for index in flow.steps.indices where flow.steps[index].tool == "install_app" {
+            guard let path = flow.steps[index].arguments["path"]?.stringValue, !path.hasPrefix("/"), !path.hasPrefix("~")
+            else { continue }
+            flow.steps[index].arguments["path"] = .string(folder.appendingPathComponent(path).standardizedFileURL.path)
+        }
+        return flow
     }
 
     /// One step per line, so a flow reads and diffs well.

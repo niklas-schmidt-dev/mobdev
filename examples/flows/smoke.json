@@ -1,0 +1,18 @@
+{
+  "name": "Fixture smoke test",
+  "steps": [
+    {"install_app": {"path": "fixture/MobdevFixture.app"}},
+    {"launch_app": {"bundle_id": "dev.mobdev.fixture", "restart": true}},
+    {"wait_for_element": {"id": "fixture.ping", "timeout": 30}},
+    {"tap_element": {"id": "fixture.field"}},
+    {"type_text": {"text": "hello from CI", "submit": true}},
+    {"tap_element": {"text": "Ping"}},
+    {"wait_for_element": {"text": "Pinged 1"}},
+    {"tap_element": {"id": "fixture.ping"}},
+    {"wait_for_element": {"text": "Pinged 2"}},
+    {"open_url": {"url": "mobdevfixture://hello"}},
+    {"stop_app": {"bundle_id": "dev.mobdev.fixture"}},
+    {"uninstall_app": {"bundle_id": "dev.mobdev.fixture"}},
+    "home"
+  ]
+}
