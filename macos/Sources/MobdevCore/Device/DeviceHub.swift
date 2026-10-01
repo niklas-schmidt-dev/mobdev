@@ -84,6 +84,8 @@ public final class HardwareDevice: PhoneBackend, @unchecked Sendable {
     /// Connected once this device's host is; otherwise what Bluetooth as a whole is doing.
     public var bluetooth: BluetoothState {
         if let host, peripheral.connectedHosts.contains(where: { $0.id == host }) { return .connected(hosts: 1) }
+        // Its own host comes back with the next input; a device without one waits for pairing.
+        if case .resting = peripheral.state { return host == nil ? .starting : .resting }
         if case .connected = peripheral.state { return .advertising }
         return peripheral.state
     }
@@ -91,7 +93,7 @@ public final class HardwareDevice: PhoneBackend, @unchecked Sendable {
     public func frame() -> CGImage? { capture.frame() }
 
     private func requireInput() throws -> HIDInput {
-        guard let input, case .connected = bluetooth else { throw HIDError.notConnected }
+        guard let input, bluetooth.isConnected else { throw HIDError.notConnected }
         return input
     }
 
@@ -343,6 +345,7 @@ public final class DeviceHub: @unchecked Sendable {
     private func watchForScreens() {
         queue.asyncAfter(deadline: .now() + 3) { [weak self] in
             guard let self else { return }
+            restWhenIdle()
             let list = deviceList.get()
             if list.contains(where: { $0.onUSB.get() && !$0.capture.state.isConnected }),
                 ScreenCapture.devices().contains(where: { capture in !list.contains { $0.captureID == capture.id } })
@@ -351,6 +354,23 @@ public final class DeviceHub: @unchecked Sendable {
             }
             watchForScreens()
         }
+    }
+
+    /// How long Bluetooth stays connected without input; MOBDEV_BLUETOOTH_REST_SECONDS overrides it.
+    static let restAfter: TimeInterval =
+        ProcessInfo.processInfo.environment["MOBDEV_BLUETOOTH_REST_SECONDS"].flatMap(TimeInterval.init) ?? 300
+
+    /// Lets go of the iPhones after `restAfter` without input, so they show their own keyboard
+    /// again (see `HIDPeripheral.rest()`), and stays awake while a plugged-in iPhone still has to
+    /// pair, since resting also hides the Mac from its Bluetooth settings.
+    private func restWhenIdle() {
+        let pairing = deviceList.get().contains { $0.onUSB.get() && $0.host == nil }
+        if peripheral.isResting {
+            if pairing { peripheral.wake() }
+            return
+        }
+        guard !pairing, case .connected = peripheral.state, peripheral.idleSeconds > Self.restAfter else { return }
+        peripheral.rest()
     }
 
     private func scan() {

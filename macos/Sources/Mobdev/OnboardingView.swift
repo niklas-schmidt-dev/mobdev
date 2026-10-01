@@ -285,7 +285,7 @@ struct OnboardingView: View {
         switch model.setupBluetooth {
         case .starting: return .waiting("Starting Bluetooth…")
         case .advertising: return .waiting("Waiting for your iPhone…")
-        case .connected: return .done("Paired")
+        case .connected, .resting: return .done("Paired")
         case .unauthorized: return .problem("Turned off in Privacy & Security")
         case .poweredOff: return .problem("Turn on Bluetooth on this Mac")
         case .unsupported, .failed: return .problem(model.setupBluetooth.summary)

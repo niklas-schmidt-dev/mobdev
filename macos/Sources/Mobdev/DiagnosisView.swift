@@ -100,6 +100,8 @@ struct DiagnosisView: View {
         switch state.status.bluetooth {
         case .connected:
             row("Bluetooth", .done, "Paired. \(MobdevPaths.appName) can tap and type.")
+        case .resting:
+            row("Bluetooth", .done, "Paired and resting, so the iPhone shows its own keyboard. The next tap or key connects again within seconds.")
         case .advertising:
             row("Bluetooth", .waiting, "Not paired. On the iPhone: Settings › Bluetooth, then tap “\(HIDPeripheral.macName)” under Other Devices.")
             Button("Show on iPhone Again") { model.offerBluetoothAgain() }

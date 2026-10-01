@@ -9,11 +9,17 @@ public enum BluetoothState: Sendable, Equatable {
     case unsupported(String)
     case advertising
     case connected(hosts: Int)
+    /// Paired, but let go while nobody used it, so the iPhone shows its own keyboard again. The
+    /// next input connects again by itself.
+    case resting
     case failed(String)
 
+    /// Paired: input reaches the iPhone now, or after a few seconds when resting.
     public var isConnected: Bool {
-        if case .connected = self { return true }
-        return false
+        switch self {
+        case .connected, .resting: true
+        default: false
+        }
     }
 
     public var summary: String {
@@ -24,6 +30,7 @@ public enum BluetoothState: Sendable, Equatable {
         case .unsupported(let reason): "Bluetooth unavailable: \(reason)"
         case .advertising: "Waiting for the iPhone to pair"
         case .connected(let hosts): hosts == 1 ? "iPhone paired" : "\(hosts) devices paired"
+        case .resting: "Paired, resting so the iPhone shows its own keyboard; the next action connects again"
         case .failed(let message): "Bluetooth failed: \(message)"
         }
     }
@@ -83,6 +90,11 @@ public final class HIDPeripheral: NSObject, CBPeripheralManagerDelegate, CBCentr
     private let stateBox = Locked<BluetoothState>(.starting)
     private let hostCount = Locked(0)
     private let hostList = Locked<[BluetoothHost]>([])
+    /// Resting: the keyboard is not published, so iOS shows its own (see `rest()`).
+    private let restingBox = Locked(false)
+    private let lastInput = Locked(Date())
+    /// Until when input waits for iPhones to come back after waking.
+    private let wakeDeadline = Locked<Date?>(nil)
 
     // Everything below is only touched on `queue`.
     private var manager: CBPeripheralManager?
@@ -119,6 +131,11 @@ public final class HIDPeripheral: NSObject, CBPeripheralManagerDelegate, CBCentr
 
     public var state: BluetoothState { stateBox.get() }
 
+    public var isResting: Bool { restingBox.get() }
+
+    /// Seconds since the last input report.
+    public var idleSeconds: TimeInterval { Date().timeIntervalSince(lastInput.get()) }
+
     /// The iPhones and iPads that receive input, in the order they connected.
     public var connectedHosts: [BluetoothHost] { hostList.get() }
 
@@ -130,9 +147,69 @@ public final class HIDPeripheral: NSObject, CBPeripheralManagerDelegate, CBCentr
         }
     }
 
+    /// Lets go of the iPhones while nobody uses them. iOS hides its on-screen keyboard while a
+    /// Bluetooth keyboard is connected, also when the cable is out, so a Mac running Mobdev took the
+    /// iPhone's keyboard away. Resting removes the keyboard and pointer from the GATT database, which
+    /// iOS notices, and the iPhone's own keyboard comes back. `wake()` publishes them again and the
+    /// paired iPhones reconnect by themselves.
+    public func rest() {
+        queue.async {
+            guard !self.restingBox.get(), let manager = self.manager, self.hostCount.get() > 0 else { return }
+            Log.info("bluetooth: resting after \(Int(self.idleSeconds)) s without input")
+            self.restingBox.set(true)
+            self.refreshWork?.cancel()
+            self.refreshWork = nil
+            manager.stopAdvertising()
+            manager.removeAllServices()
+            manager.delegate = nil
+            self.manager = nil
+            for peripheral in self.identifying.values { self.monitor?.cancelPeripheralConnection(peripheral) }
+            self.identifying = [:]
+            self.monitor?.delegate = nil
+            self.monitor = nil
+            self.published = false
+            self.hosts = [:]
+            self.subscriptions = [:]
+            self.serviceChangedSent = []
+            self.outbox = []
+            self.updateHostCount()
+            self.setState(.resting)
+        }
+    }
+
+    /// Publishes the keyboard and pointer again after `rest()`.
+    public func wake() {
+        queue.async {
+            guard self.restingBox.get() else { return }
+            self.restingBox.set(false)
+            self.lastInput.set(Date())
+            Log.info("bluetooth: waking up")
+            self.setState(.starting)
+            self.manager = CBPeripheralManager(delegate: self, queue: self.queue)
+            self.monitor = CBCentralManager(delegate: self, queue: self.queue)
+        }
+    }
+
+    /// Input after a rest wakes the peripheral and waits up to 20 s for the iPhone to come back.
+    /// Called on the input's own queue, never on `queue`.
+    private func comeBack(for host: UUID?) {
+        if restingBox.get() {
+            wakeDeadline.set(Date().addingTimeInterval(20))
+            wake()
+        }
+        guard let deadline = wakeDeadline.get(), Date() < deadline else { return }
+        func back() -> Bool { host.map { id in hostList.get().contains { $0.id == id } } ?? (hostCount.get() > 0) }
+        while Date() < deadline, !back() { Thread.sleep(forTimeInterval: 0.1) }
+        if back() { wakeDeadline.set(nil) }
+    }
+
     /// Republishes the GATT database now, so an iPhone that does not list the Mac looks again.
     /// Also restarts the automatic republishing from its shortest interval.
     public func republish() {
+        if restingBox.get() {
+            wake()
+            return
+        }
         queue.async {
             guard let manager = self.manager, manager.state == .poweredOn else { return }
             self.refreshBackoff.reset()
@@ -151,6 +228,8 @@ public final class HIDPeripheral: NSObject, CBPeripheralManagerDelegate, CBCentr
 
     /// Sends one input report to one host, or to every iPhone and iPad when `host` is nil.
     public func send(_ id: ReportID, _ bytes: [UInt8], to host: UUID?) throws {
+        lastInput.set(Date())
+        comeBack(for: host)
         if let host {
             guard hostList.get().contains(where: { $0.id == host }) else { throw HIDError.notConnected }
         } else {

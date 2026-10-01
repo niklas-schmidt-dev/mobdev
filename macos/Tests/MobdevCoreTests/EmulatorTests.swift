@@ -228,6 +228,18 @@ final class FakeDevice: Device, @unchecked Sendable {
         #expect(status.screen.summary.contains("sudo killall iOSScreenCaptureAssistant"))
     }
 
+    /// Resting Bluetooth lets the iPhone show its own keyboard; agents still see a ready device,
+    /// because the next input connects again.
+    @Test func restingBluetoothStillCountsAsPaired() {
+        let status = PhoneStatus(
+            screen: .connected(name: "iPhone", width: 1179, height: 2556), bluetooth: .resting, keyboardLayout: .german)
+        #expect(status.bluetooth.isConnected)
+        #expect(status.inputReady)
+        #expect(status.isReady)
+        #expect(BluetoothState.resting.summary.contains("own keyboard"))
+        #expect(DeviceHub.restAfter == 300 || ProcessInfo.processInfo.environment["MOBDEV_BLUETOOTH_REST_SECONDS"] != nil)
+    }
+
     /// Hosts told apart by their pointers: only a single clear answer assigns one.
     @Test func aHostIsChosenOnlyWhenItsPointerAloneAppeared() {
         let a = UUID(), b = UUID()

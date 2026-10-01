@@ -41,7 +41,7 @@ struct DeviceState: Identifiable, Equatable {
         return switch (status.screen, status.bluetooth) {
         case (.cameraDenied, _): "Camera access needed"
         case (.failed, _): "Screen capture failed"
-        case (.connected, .connected): "Ready for agents"
+        case (.connected, .connected), (.connected, .resting): "Ready for agents"
         case (.connected, .unauthorized): "Bluetooth access needed"
         case (.connected, .poweredOff): "Bluetooth is off"
         case (.connected, _): "Pair over Bluetooth to control"

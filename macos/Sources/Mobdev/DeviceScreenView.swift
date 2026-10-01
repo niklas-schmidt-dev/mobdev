@@ -514,7 +514,7 @@ struct SetupSteps: View {
 
     private var bluetoothState: StepRow.State {
         switch status.bluetooth {
-        case .connected: .done
+        case .connected, .resting: .done
         case .advertising, .starting: .waiting
         default: .attention
         }
@@ -523,6 +523,8 @@ struct SetupSteps: View {
     private var bluetoothDetail: String {
         switch status.bluetooth {
         case .connected: "Paired. \(MobdevPaths.appName) can tap and type."
+        case .resting:
+            "Paired, resting: after five minutes without input \(MobdevPaths.appName) lets go, so the iPhone shows its own keyboard. The next tap connects again."
         case .advertising: "On the iPhone: Settings › Bluetooth, then tap “\(HIDPeripheral.macName)” under Other Devices."
         default: status.bluetooth.summary
         }
