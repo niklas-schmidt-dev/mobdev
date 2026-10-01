@@ -1,4 +1,5 @@
 import { parseStoredDevices, type Device } from "./devices";
+import { UserError } from "./errors";
 import { randomHex, sha256Hex } from "./keys";
 
 export interface AccessTokenRow {
@@ -67,7 +68,13 @@ export async function createAccessToken(
     )
     .bind(row.id, accountId, row.name, await sha256Hex(token), row.prefix, row.created_at, MAX_TOKENS_PER_ACCOUNT)
     .run();
-  if (meta.changes === 0) throw new Error(`You can have at most ${MAX_TOKENS_PER_ACCOUNT} access tokens.`);
+  if (meta.changes === 0) {
+    throw new UserError(
+      "token-limit",
+      `You can have at most ${MAX_TOKENS_PER_ACCOUNT} access tokens.`,
+      MAX_TOKENS_PER_ACCOUNT,
+    );
+  }
   return { row, token };
 }
 

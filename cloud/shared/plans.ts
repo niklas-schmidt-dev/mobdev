@@ -30,10 +30,3 @@ export const PLANS = [FREE_PLAN, PRO_PLAN] as const;
 export function planById(id: string | null | undefined): Plan | null {
   return PLANS.find((plan) => plan.id === id) ?? null;
 }
-
-const count = new Intl.NumberFormat("en-US");
-
-/** "20,000 requests and 10 active hours a month". */
-export function allowanceText(plan: Plan): string {
-  return `${count.format(plan.requests)} requests and ${count.format(plan.activeHours)} active hours a month`;
-}

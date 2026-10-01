@@ -1,0 +1,7 @@
+# Cloudflare puts its managed content signals above these rules.
+User-agent: *
+Disallow: /api/
+Disallow: /dashboard
+Disallow: /de/dashboard
+
+Sitemap: https://mobdev.sh/sitemap.xml

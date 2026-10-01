@@ -1,0 +1,1595 @@
+{
+  "b334084b5da61a48": "Main",
+  "2c1c93a646bbea6e": "Language",
+  "b80f965a578b8557": "Copied",
+  "4d9a7f5bf6e64c38": "Copy",
+  "9588289bb956e0d6": "Docs",
+  "8d088a9a26ac644e": "Pricing",
+  "daf8daec701f0863": "Account",
+  "bff944189ba9c100": "Download",
+  "c6821db6e0e353e4": {
+    "t": "p",
+    "i": 1,
+    "c": "Mobdev is the mobile development toolkit for you and your AI agent: iPhones, simulators and Android in one Mac app. Free and open source under the MIT license."
+  },
+  "2eb39a53ad7f7c34": "Product",
+  "29f0824614831f53": "Overview",
+  "930abb59f6008555": "Coming next",
+  "f2b4af56025672c8": "Dashboard",
+  "7a6c957300c408f9": "Privacy",
+  "548b40023221b3b2": {
+    "t": "p",
+    "i": 1,
+    "c": "Not affiliated with Apple, TapKit or MobAI. iPhone and macOS are trademarks of Apple Inc."
+  },
+  "6557d80e1b24ace8": "USB cable",
+  "b7947bb47e9788eb": [
+    {
+      "t": "p",
+      "i": 1,
+      "c": "Mobdev for Mac"
+    },
+    {
+      "t": "h1",
+      "i": 2,
+      "c": [
+        "Mobile development.",
+        {
+          "t": "br",
+          "i": 3
+        },
+        "All in one app."
+      ]
+    },
+    {
+      "t": "p",
+      "i": 4,
+      "c": "Let AI agents drive your phones, install and debug your builds and run smoke tests. On your iPhone, iOS simulators and Android, from one native Mac app. Free and open source."
+    }
+  ],
+  "a23cdd89efb441fa": "Download for Mac",
+  "53ea457ed050c196": "See what’s inside ›",
+  "fb29bc8562fc5588": "Free. Updates itself. Requires macOS 26.",
+  "666ad49efd9c416e": "Every device in one list, and every device takes the same 23 tools.",
+  "6e3a1ad8ecdae7b4": "Your agent drives.",
+  "38b4bfda87fcb470": "Claude Code, Codex, Cursor or any MCP client sees, taps and types on every phone. You watch it happen.",
+  "d4615a60ce29cf83": "From anywhere.",
+  "b871b8329eff86e2": [
+    "Agents on other machines reach your Mac through a relay. Your Mac keeps one outgoing connection, so no port is ever opened. ",
+    {
+      "t": "a",
+      "i": 1,
+      "c": "Remote access ›"
+    }
+  ],
+  "4ba692b01a327ce3": "Offline",
+  "a553be36e93303cd": "Ready",
+  "a63e101587d02b86": "Screen only",
+  "358f8189da53a26e": "Bluetooth only",
+  "30e073ab10f35725": "Not ready",
+  "f96cc50da447c89d": "never",
+  "30589efe06e4d26f": "just now",
+  "a771b87e24b3a67e": "{minutes} min ago",
+  "9f87340ecd54bff6": "{hours} h ago",
+  "fb5edc430667c4a9": "{used} of unlimited hours",
+  "c9f10d90b4749579": "{used} of unlimited",
+  "17feff542207ba00": "{used} of {limit} hours",
+  "537677d0a8478124": "{used} of {limit}",
+  "67733c48eaaec73a": "Plan",
+  "63ec4b6c8c3e52ab": "{plan} · ${price} USD a month, plus applicable tax. Limits apply to the hosted relay; Mobdev on your Mac has none.",
+  "54573d34eb00a644": "{plan}. Limits apply to the hosted relay; Mobdev on your Mac has none.",
+  "e953de99f7863209": "Requests",
+  "ad8aa2055eb8f90b": "Active time",
+  "96ab1f96c6f00af5": "Connected Macs",
+  "4ba6bb04dd0163f3": "My Mac",
+  "d95cf7341a0698d0": "Connect a Mac",
+  "8bba08f42184e0c6": "An access token lets a Mac use the hosted relay, so agents on other computers can reach its iPhone.",
+  "1d89989bbe0279fc": "Copy token",
+  "2f97f592b9bfa1cf": "Name, e.g. Studio Mac",
+  "8d9b5ca8838b1fea": "Macs",
+  "a90fd628bf70096b": "{online} of {total} connected.",
+  "2288094b9939d4b1": "Connected {when}",
+  "10da6ac7e656ae95": "Last seen {when}",
+  "9486550ad71ea1c6": ", online",
+  "7ebd933ef8c24928": ", offline",
+  "5073157898471687": "Devices of {name}",
+  "e1183fb3e611a799": "Access tokens",
+  "125c4a8144fea48d": "Revoking a token disconnects every Mac that uses it.",
+  "ba79c433dafd2870": "Revoke “{name}”? Macs using it disconnect.",
+  "7c2e06c22290fdd0": "Delete account",
+  "a949f95322d37b62": "Removes your account, tokens and Mac records, and disconnects your Macs.",
+  "f1cd2bbb24aa7db4": "Delete your Mobdev account? This cannot be undone.",
+  "6f3dd60846be9974": [
+    {
+      "t": "h1",
+      "i": 1,
+      "c": "Almost there."
+    },
+    {
+      "t": "p",
+      "i": 2,
+      "c": "Accounts are being set up. The Mac app and self-hosted relay work without one in the meantime."
+    }
+  ],
+  "b711807130f5f97e": {
+    "t": "p",
+    "i": 1,
+    "c": "The last payment failed. Update your payment method under “Manage billing”."
+  },
+  "7fd482785781e202": {
+    "t": "p",
+    "i": 1,
+    "c": [
+      "Thanks! Stripe is confirming your payment. Reload this page in a moment to see ",
+      {
+        "i": 2,
+        "k": "_gt_value_2",
+        "v": "v"
+      },
+      "."
+    ]
+  },
+  "9bc1be2dd02036fb": "Active time counts while a Mac works on an agent’s request, not while it waits.",
+  "7da4f2486fc1b39f": [
+    "Requests and active time renew on ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    "."
+  ],
+  "57a51185cd36b755": [
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " ends on ",
+    {
+      "i": 2,
+      "k": "_gt_value_2",
+      "v": "v"
+    },
+    "; the Free plan applies after that."
+  ],
+  "3b584e457d415d2c": [
+    "Upgrade to ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " · $",
+    {
+      "i": 2,
+      "k": "_gt_n_2",
+      "v": "n"
+    },
+    " a month"
+  ],
+  "1b240fc48c41fd31": {
+    "t": "p",
+    "i": 1,
+    "c": [
+      "USD, plus applicable tax. ",
+      {
+        "i": 2,
+        "k": "_gt_n_2",
+        "v": "n"
+      },
+      " Macs, ",
+      {
+        "i": 3,
+        "k": "_gt_n_3",
+        "v": "n"
+      },
+      " requests and ",
+      {
+        "i": 4,
+        "k": "_gt_n_4",
+        "v": "n"
+      },
+      " active hours a month."
+    ]
+  },
+  "f93af118f0cc48b2": "Manage billing",
+  "f0d4a71d1db22c27": [
+    "Hi, ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    "."
+  ],
+  "78a1a02732fc74e8": "Sign out",
+  "1214c3f1114ec0e2": [
+    {
+      "t": "p",
+      "i": 1,
+      "c": [
+        "Your token for “",
+        {
+          "i": 2,
+          "k": "_gt_value_2",
+          "v": "v"
+        },
+        "”"
+      ]
+    },
+    {
+      "t": "p",
+      "i": 3,
+      "c": "It is shown only once. Open it in Mobdev on that Mac, or copy it."
+    }
+  ],
+  "2a9b52ded4d99898": "Open in Mobdev",
+  "fb4516dffeebe159": "Done",
+  "00e7538452be88e3": {
+    "t": "p",
+    "i": 1,
+    "c": "Then copy the remote command from Remote Access in the app and run it where your agent lives."
+  },
+  "c462251ad6f7f7bc": "Name for this Mac",
+  "662553d38caa918a": "Create token",
+  "278dd087de07e12f": {
+    "t": "p",
+    "i": 1,
+    "c": "No Mac has connected yet. Create a token above and open it in Mobdev."
+  },
+  "813b80a5f5f5b855": "Forget",
+  "496eb211c350d61e": {
+    "t": "p",
+    "i": 1,
+    "c": "No iPhone connected."
+  },
+  "57e5e7221c3a1383": {
+    "t": "p",
+    "i": 1,
+    "c": "Your plan could not be loaded right now. Your Macs and agents keep working; try again in a moment."
+  },
+  "f7461bea8036b3aa": {
+    "t": "p",
+    "i": 1,
+    "c": "No tokens yet."
+  },
+  "dd7d44881999ec99": {
+    "t": "p",
+    "i": 1,
+    "c": [
+      {
+        "i": 2,
+        "k": "_gt_value_2",
+        "v": "v"
+      },
+      "… · created ",
+      {
+        "i": 3,
+        "k": "_gt_value_3",
+        "v": "v"
+      },
+      " · used ",
+      {
+        "i": 4,
+        "k": "_gt_value_4",
+        "v": "v"
+      }
+    ]
+  },
+  "224e9839195b63b2": "Revoke",
+  "8c72ff0014375565": "Delete account…",
+  "5d973795984549fc": "Install",
+  "93feded7f96bfd7a": "Set up the iPhone",
+  "2b1d922a440a6e5c": "Connect an agent",
+  "0246f296a9647801": "Tools",
+  "fd71b8f02b0decc0": "Simulators and Android",
+  "c904a627a968008d": "Build, run and debug",
+  "af71ec8d1bc09ba6": "Flows and CI",
+  "75d18dac06f4f037": "Skills",
+  "01a394b897c45b5a": "Remote access",
+  "755fc95de75d13e3": "Run your own relay",
+  "1cd1ca9c30f65ef6": "Security and privacy",
+  "3e75d12bf13b8dcd": "iPhones, simulators and Android devices: id, name, model, system version, ready",
+  "2c0ccb56d576ea1d": "Screen and input readiness, screenshot size",
+  "762bc8625d017395": "JPEG of the screen",
+  "0d1004b02722af60": "Tap a point of the screenshot",
+  "c07ba3a4069bbf8b": "Touch and hold",
+  "20e86a2df1b039bb": "Drag, e.g. to scroll",
+  "8ba5b645cde2f75d": "Mouse wheel",
+  "1c05592420abed0b": "Type into the focused field (up to 1000 characters per call)",
+  "a6daf7dca0f6ab24": "e.g. space + cmd for Spotlight",
+  "b1fc445861a7ba55": "Go to the home screen",
+  "038de3a084a2d4de": "Open an app by name (Spotlight on an iPhone)",
+  "ea148fcf86e39555": "All visible text with positions (on-device OCR)",
+  "ddd038df170c14ab": "Where a label is",
+  "eebc314143e05858": "Tap a visible label",
+  "160bcf9c654c89a8": "Wait for text to appear or disappear",
+  "a88f757dd0db33a6": "Elements from the accessibility tree (simulators and Android)",
+  "631ced74c82986c2": "Tap an element by identifier or label",
+  "cde6ef43d109ddbf": "Wait for an element to appear or disappear",
+  "284d633cd0f1cb23": "Replay a flow; stops at the first failing step",
+  "6661cfcb8d9efd9d": "Apps installed for development, or every app",
+  "5021ac0468eaa4e6": "Install a build from the Mac: .app/.ipa, simulator .app or .apk",
+  "f2d9c22dc9b53669": "Remove an app installed for development",
+  "3124ba2e88cb6894": "Launch an app and capture what it prints",
+  "0a8a7f9c27843869": "Stop a running app",
+  "0ac466474519ce04": "Open a deep link, universal link or web page",
+  "c251abb37649208f": "print, NSLog and os_log output, and how the app ended",
+  "146352292b4cf39c": "List crash reports, or read one: exception, reason, crashed thread",
+  "e4911e502264cb64": "On this page",
+  "b18ddcdea5477466": "Tool",
+  "5772a96c29d1b1e0": "Arguments",
+  "0cec07430a396fe0": "What it does",
+  "bd4bc9e0c3371fb3": [
+    {
+      "t": "p",
+      "i": 1,
+      "c": "Documentation"
+    },
+    {
+      "t": "h1",
+      "i": 2,
+      "c": "Mobdev"
+    },
+    {
+      "t": "p",
+      "i": 3,
+      "c": "Mobdev puts your iPhones, iOS simulators and Android devices in one Mac app, for you and your AI agent. It reads the iPhone screen over USB and taps and types as a Bluetooth keyboard and pointer; simulators and Android need only Xcode or adb. Agents use it through MCP or HTTP."
+    }
+  ],
+  "b1e3f25fce7e95a5": {
+    "t": "p",
+    "i": 1,
+    "c": [
+      "You need a Mac with Bluetooth LE and ",
+      {
+        "t": "strong",
+        "i": 2,
+        "c": "macOS 26 or later"
+      },
+      ", an iPhone and a USB ",
+      {
+        "t": "strong",
+        "i": 3,
+        "c": "data"
+      },
+      " cable. Download the app, open the disk image and drag Mobdev into Applications. It is signed and notarized by Apple and updates itself."
+    ]
+  },
+  "3107b519781d5e20": {
+    "t": "p",
+    "i": 1,
+    "c": "Allow Bluetooth and Camera when macOS asks. macOS treats the iPhone screen like a camera, which is why it asks for camera access. To build it yourself with Xcode 26 or later:"
+  },
+  "aeeee8ce23292a9d": {
+    "t": "ol",
+    "i": 1,
+    "c": [
+      {
+        "t": "li",
+        "i": 2,
+        "c": [
+          "Plug it in, unlock it and tap ",
+          {
+            "t": "strong",
+            "i": 3,
+            "c": "Trust"
+          },
+          ". If the Mac asks to allow the accessory, click Allow."
+        ]
+      },
+      {
+        "t": "li",
+        "i": 4,
+        "c": [
+          "On the iPhone open ",
+          {
+            "t": "strong",
+            "i": 5,
+            "c": "Settings › Bluetooth"
+          },
+          " and tap your Mac under Other Devices. iOS lists it by the Mac’s name. If it is missing, wait a moment or click ",
+          {
+            "t": "strong",
+            "i": 6,
+            "c": "Show on iPhone Again"
+          },
+          " in Mobdev: an iPhone on the same Apple Account can miss the Mac until Mobdev offers it again."
+        ]
+      },
+      {
+        "t": "li",
+        "i": 7,
+        "c": [
+          "Turn on ",
+          {
+            "t": "strong",
+            "i": 8,
+            "c": "Settings › Accessibility › Touch › AssistiveTouch"
+          },
+          ". It turns the pointer into taps. On the same page turn off ",
+          {
+            "t": "strong",
+            "i": 9,
+            "c": "Snap to Item"
+          },
+          " and keep ",
+          {
+            "t": "strong",
+            "i": 10,
+            "c": "Perform Touch Gestures"
+          },
+          " on, otherwise every swipe becomes a tap."
+        ]
+      },
+      {
+        "t": "li",
+        "i": 11,
+        "c": [
+          "In Mobdev, pick the keyboard layout that matches ",
+          {
+            "t": "strong",
+            "i": 12,
+            "c": "Settings › General › Keyboard › Hardware Keyboard"
+          },
+          " on the iPhone."
+        ]
+      },
+      {
+        "t": "li",
+        "i": 13,
+        "c": "Set Auto-Lock to Never while agents work. The phone must stay unlocked."
+      }
+    ]
+  },
+  "e715dfa12f5a74c0": {
+    "t": "p",
+    "i": 1,
+    "c": "The app shows these with the right paths under Connect. They contain no secret."
+  },
+  "5ed837e9ec0985f9": {
+    "t": "p",
+    "i": 1,
+    "c": "Claude Desktop, Cursor and others"
+  },
+  "650bf4aa2ec097bd": {
+    "t": "p",
+    "i": 1,
+    "c": [
+      "HTTP clients can use ",
+      {
+        "t": "code",
+        "i": 2,
+        "c": "http://127.0.0.1:4686/mcp"
+      },
+      " with the token from Settings › API. The server speaks MCP 2026-07-28 and the earlier versions back to 2024-11-05."
+    ]
+  },
+  "088892da2fcf568e": {
+    "t": "p",
+    "i": 1,
+    "c": [
+      "Coordinates are pixels of the image ",
+      {
+        "t": "code",
+        "i": 2,
+        "c": "screenshot"
+      },
+      " returns (long edge 1280 px). Actions return a fresh screenshot unless you pass ",
+      {
+        "t": "code",
+        "i": 3,
+        "c": "\"screenshot\": false"
+      },
+      ". With more than one device, pass ",
+      {
+        "t": "code",
+        "i": 4,
+        "c": "device"
+      },
+      " (an id or name from ",
+      {
+        "t": "code",
+        "i": 5,
+        "c": "list_devices"
+      },
+      ") to pick one. Without it, Mobdev uses the only device, or the connected iPhone when simulators or Android devices run next to it."
+    ]
+  },
+  "6c762d7426ab8874": {
+    "t": "p",
+    "i": 1,
+    "c": [
+      "Booted iOS simulators and Android emulators and phones appear next to your iPhones, in the app and in ",
+      {
+        "t": "code",
+        "i": 2,
+        "c": "list_devices"
+      },
+      ", and take the same tools. There is nothing to set up on them: no cable, no Bluetooth, no Developer Mode."
+    ]
+  },
+  "9752b513b409e6bc": {
+    "t": "ul",
+    "i": 1,
+    "c": [
+      {
+        "t": "li",
+        "i": 2,
+        "c": [
+          {
+            "t": "strong",
+            "i": 3,
+            "c": "iOS Simulator"
+          },
+          " needs Xcode. Mobdev reads the screen from the simulator itself and sends touches and keys the way Simulator.app does, so no window has to stay open. Install builds made for the simulator (",
+          {
+            "t": "code",
+            "i": 4,
+            "c": "Debug-iphonesimulator"
+          },
+          "); crash reports come from the Mac."
+        ]
+      },
+      {
+        "t": "li",
+        "i": 5,
+        "c": [
+          {
+            "t": "strong",
+            "i": 6,
+            "c": "Android"
+          },
+          " needs adb from the Android SDK, for example through Android Studio. Emulators and phones with USB debugging appear while adb runs. Install an ",
+          {
+            "t": "code",
+            "i": 7,
+            "c": ".apk"
+          },
+          ", ",
+          {
+            "t": "code",
+            "i": 8,
+            "c": "logs"
+          },
+          " follows logcat, and ",
+          {
+            "t": "code",
+            "i": 9,
+            "c": "press_key"
+          },
+          " with ",
+          {
+            "t": "code",
+            "i": 10,
+            "c": "escape"
+          },
+          " is Back. Text is typed as ASCII, and ",
+          {
+            "t": "code",
+            "i": 11,
+            "c": "open_app"
+          },
+          " matches package names: “Settings” opens com.android.settings."
+        ]
+      }
+    ]
+  },
+  "4050125e5786ac9c": {
+    "t": "p",
+    "i": 1,
+    "c": [
+      "On both, ",
+      {
+        "t": "code",
+        "i": 2,
+        "c": "ui_tree"
+      },
+      " lists the elements on screen with their role, label and accessibility identifier, and ",
+      {
+        "t": "code",
+        "i": 3,
+        "c": "tap_element"
+      },
+      " and ",
+      {
+        "t": "code",
+        "i": 4,
+        "c": "wait_for_element"
+      },
+      " find them by identifier or label: steadier than OCR, and they find buttons that show only an icon. An iPhone has no such tree without a test runner on the phone, so there agents use ",
+      {
+        "t": "code",
+        "i": 5,
+        "c": "tap_text"
+      },
+      "."
+    ]
+  },
+  "5b8dc98d1b87059c": {
+    "t": "p",
+    "i": 1,
+    "c": "Turn them off under Settings › General in the app if you only want iPhones."
+  },
+  "914c376b07dd7339": {
+    "t": "p",
+    "i": 1,
+    "c": [
+      "For apps you build, Mobdev also installs builds, launches them and reads their output and crash reports. The agent builds with ",
+      {
+        "t": "code",
+        "i": 2,
+        "c": "xcodebuild"
+      },
+      ", installs, drives the app with the tools above and reads the logs. These tools use Xcode’s ",
+      {
+        "t": "code",
+        "i": 3,
+        "c": "devicectl"
+      },
+      ", so they need ",
+      {
+        "t": "strong",
+        "i": 4,
+        "c": "Xcode"
+      },
+      " on the Mac and ",
+      {
+        "t": "strong",
+        "i": 5,
+        "c": "Developer Mode"
+      },
+      " on the iPhone (Settings › Privacy & Security › Developer Mode). Everything else works without them. Simulators and Android need neither."
+    ]
+  },
+  "1c4d4763daf9a931": {
+    "t": "p",
+    "i": 1,
+    "c": [
+      {
+        "t": "code",
+        "i": 2,
+        "c": "logs"
+      },
+      " returns a cursor; pass it as ",
+      {
+        "t": "code",
+        "i": 3,
+        "c": "after"
+      },
+      " to get only new lines. When the app crashes, ",
+      {
+        "t": "code",
+        "i": 4,
+        "c": "logs"
+      },
+      " says so and ",
+      {
+        "t": "code",
+        "i": 5,
+        "c": "crash_reports"
+      },
+      " shows the report. Paths for ",
+      {
+        "t": "code",
+        "i": 6,
+        "c": "install_app"
+      },
+      " are on the Mac that runs Mobdev, also through a relay. Mobdev never removes App Store or system apps."
+    ]
+  },
+  "be063cb332fd0180": {
+    "t": "p",
+    "i": 1,
+    "c": [
+      "A flow is a list of tool calls saved as JSON. Click ",
+      {
+        "t": "strong",
+        "i": 2,
+        "c": "Record"
+      },
+      " in a device’s activity and everything you or an agent do on it is collected; on simulators and Android, clicks on named elements become ",
+      {
+        "t": "code",
+        "i": 3,
+        "c": "tap_element"
+      },
+      ", so the flow survives layout changes. Replay it with ",
+      {
+        "t": "strong",
+        "i": 4,
+        "c": "Run Flow…"
+      },
+      ", the ",
+      {
+        "t": "code",
+        "i": 5,
+        "c": "run_flow"
+      },
+      " tool or, without the app, ",
+      {
+        "t": "code",
+        "i": 6,
+        "c": "Mobdev flow"
+      },
+      ". Every run stops at the first failing step and says which."
+    ]
+  },
+  "123ea86a52d88ea2": {
+    "t": "p",
+    "i": 1,
+    "c": [
+      {
+        "t": "code",
+        "i": 2,
+        "c": "Mobdev flow"
+      },
+      " runs on booted simulators and Android devices, for scripts and CI. It exits 0 when every step passed and 1 when one failed; ",
+      {
+        "t": "code",
+        "i": 3,
+        "c": "--artifacts"
+      },
+      " keeps the activity, crash reports and a screenshot of the failure. In CI, prefer ",
+      {
+        "t": "code",
+        "i": 4,
+        "c": "tap_element"
+      },
+      " to the OCR tools, which do not work on GitHub’s virtualized Macs."
+    ]
+  },
+  "b52a625e5a15b378": {
+    "t": "p",
+    "i": 1,
+    "c": [
+      "Skills give your agent whole workflows on top of the tools: the build and debug loop, smoke tests, onboarding audits and competitor research. They work with Claude Code, Codex, Cursor and other agents that read ",
+      {
+        "t": "code",
+        "i": 2,
+        "c": "SKILL.md"
+      },
+      " files."
+    ]
+  },
+  "214c3f288d996284": {
+    "t": "p",
+    "i": 1,
+    "c": [
+      "Or copy a folder from ",
+      {
+        "t": "a",
+        "i": 2,
+        "c": "skills/"
+      },
+      " into your agent’s skills directory."
+    ]
+  },
+  "e2a33ade4537bc9b": {
+    "t": "p",
+    "i": 1,
+    "c": "To reach the phone from another computer, the Mac keeps an outgoing WebSocket to a relay. No port is opened on the Mac, and the relay stores nothing."
+  },
+  "ef42809746df2bbd": {
+    "t": "ol",
+    "i": 1,
+    "c": [
+      {
+        "t": "li",
+        "i": 2,
+        "c": [
+          "Sign in to the ",
+          {
+            "t": "Link",
+            "i": 3,
+            "c": "dashboard"
+          },
+          " and create an access token."
+        ]
+      },
+      {
+        "t": "li",
+        "i": 4,
+        "c": "Click “Open in Mobdev”, or paste the token under Remote Access in the app."
+      },
+      {
+        "t": "li",
+        "i": 5,
+        "c": "Copy the remote command from the app and run it on the other computer:"
+      }
+    ]
+  },
+  "e3ca20069d61e68f": {
+    "t": "p",
+    "i": 1,
+    "c": [
+      "The client key (",
+      {
+        "t": "code",
+        "i": 2,
+        "c": "mdc_…"
+      },
+      ") is derived from a secret that never leaves your Mac. Anyone with it can control the phone; “New Client Key” in the app revokes it. Revoking the access token in the dashboard disconnects the Mac."
+    ]
+  },
+  "d5d5541ae86ede6f": [
+    {
+      "t": "h3",
+      "i": 1,
+      "c": "Limits of the hosted relay"
+    },
+    {
+      "t": "p",
+      "i": 2,
+      "c": [
+        {
+          "i": 3,
+          "k": "_gt_value_3",
+          "v": "v"
+        },
+        " connects ",
+        {
+          "i": 4,
+          "k": "_gt_n_4",
+          "v": "n"
+        },
+        " Mac and includes ",
+        {
+          "i": 5,
+          "k": "_gt_n_5",
+          "v": "n"
+        },
+        " requests and ",
+        {
+          "i": 6,
+          "k": "_gt_n_6",
+          "v": "n"
+        },
+        " active hours a month. ",
+        {
+          "i": 7,
+          "k": "_gt_value_7",
+          "v": "v"
+        },
+        " ($",
+        {
+          "i": 8,
+          "k": "_gt_n_8",
+          "v": "n"
+        },
+        " USD a month, plus applicable tax) connects ",
+        {
+          "i": 9,
+          "k": "_gt_n_9",
+          "v": "n"
+        },
+        " Macs and includes ",
+        {
+          "i": 10,
+          "k": "_gt_n_10",
+          "v": "n"
+        },
+        " requests and ",
+        {
+          "i": 11,
+          "k": "_gt_n_11",
+          "v": "n"
+        },
+        " active hours a month. Active time counts while a Mac works on a request; a connected Mac that waits costs nothing. The dashboard shows what you used. Mobdev on the Mac and a relay you run yourself have no limits."
+      ]
+    }
+  ],
+  "a10099b766ef18f3": {
+    "t": "p",
+    "i": 1,
+    "c": "When a limit is reached, the relay answers with HTTP 429 and a Retry-After header:"
+  },
+  "667465bb06724f60": {
+    "t": "ul",
+    "i": 1,
+    "c": [
+      {
+        "t": "li",
+        "i": 2,
+        "c": [
+          "More than ",
+          {
+            "i": 3,
+            "k": "_gt_n_3",
+            "v": "n"
+          },
+          " requests in ",
+          {
+            "i": 4,
+            "k": "_gt_n_4",
+            "v": "n"
+          },
+          " seconds with one client key."
+        ]
+      },
+      {
+        "t": "li",
+        "i": 5,
+        "c": [
+          "More than ",
+          {
+            "i": 6,
+            "k": "_gt_n_6",
+            "v": "n"
+          },
+          " requests waiting for the same Mac."
+        ]
+      },
+      {
+        "t": "li",
+        "i": 7,
+        "c": "The month’s requests or active time used up. Retry-After points to when they renew."
+      }
+    ]
+  },
+  "905056501d038b8b": {
+    "t": "p",
+    "i": 1,
+    "c": "The relay in the repository speaks the same protocol. It is one Go binary or a small Docker image:"
+  },
+  "4468e5f146e1f369": {
+    "t": "p",
+    "i": 1,
+    "c": [
+      "Put it behind HTTPS and enter its URL in the app. With ",
+      {
+        "t": "code",
+        "i": 2,
+        "c": "RELAY_HOST_ACCESS_TOKEN"
+      },
+      " set, only Macs that know the token may connect."
+    ]
+  },
+  "8b0238933f22f5cb": {
+    "t": "ul",
+    "i": 1,
+    "c": [
+      {
+        "t": "li",
+        "i": 2,
+        "c": "The local API binds to 127.0.0.1, needs a bearer token and rejects browser requests."
+      },
+      {
+        "t": "li",
+        "i": 3,
+        "c": "Text recognition runs on the Mac. No screen content leaves it unless your agent sends it to its model."
+      },
+      {
+        "t": "li",
+        "i": 4,
+        "c": [
+          "The hosted relay stores your email, hashed access tokens, which Macs are connected and the iPhones they report. Requests and screenshots only pass through memory. See ",
+          {
+            "t": "Link",
+            "i": 5,
+            "c": "privacy"
+          },
+          "."
+        ]
+      },
+      {
+        "t": "li",
+        "i": 6,
+        "c": "Agents act on your real phone with your accounts. Keep a person in the loop for anything that sends messages, pays or deletes."
+      }
+    ]
+  },
+  "9b719b3d48911205": "AI control",
+  "ec808611335364cd": "Agents see, tap and type on any phone.",
+  "5016f1e9671cde73": "Every device",
+  "1d594e3559e74284": "iPhone, Simulator and Android in one list.",
+  "d983e2e71e036133": "Build and run",
+  "67a2f25a0607461e": "Install builds, launch apps, open deep links.",
+  "936ec164b44447a7": "Debug",
+  "0d353daf0f0f0d2c": "Logs and crash reports, straight to your agent.",
+  "5ed80fd96269f7e4": "Test",
+  "d39f3d369e75d48d": "Recorded flows, CI runs and smoke tests.",
+  "1738f499d0c9cf60": "Research",
+  "45ebd1091ee5c3e5": "Competing apps and their paywalls, on a real iPhone.",
+  "e6166776e3fa77ad": "Live mirror",
+  "9b41c8e50f08e334": "Click, swipe and type from your Mac.",
+  "5e8b5f680d43ceb4": "Remote",
+  "171ea50a5c54e304": "Every Mac and its phones, from anywhere.",
+  "9a663a1031947a8a": "The screen comes over the USB cable, taps and typing over Bluetooth. No developer mode and no app on the phone, so every app works: the App Store, Messages, Wallet.",
+  "8c1a00890dc615a2": "a USB data cable",
+  "1017eac8807f74a1": "iOS Simulator.",
+  "4b98a1b253e1cd2c": "Every booted simulator appears on its own. Install the build you just made and drive it like a user.",
+  "c6cc956fbc079d54": "Emulators and Android phones take the same tools: screenshots, taps, APK installs, logs and crash reports.",
+  "b4f32881fefcc053": "adb from the Android SDK",
+  "19e2a46c3b17b5cc": "Smoke tests.",
+  "a8c6d5ec3e65ee32": "Walks the critical paths on each device, keeps a screenshot of every step and writes a pass/fail report.",
+  "39a87b65b797200a": "Smoke-test the new build on the simulator and the Pixel.",
+  "f83b75f76acf2fa2": "Onboarding audits.",
+  "473122d83fd78f17": "Every first-run screen from launch to first value, scored for friction, with concrete fixes.",
+  "b5b7c7e66dbbc203": "Audit our onboarding on my iPhone.",
+  "af1334d650be323d": "Competitor research.",
+  "ba54df584eef022f": "App Store listings, ratings and prices, then the onboarding and paywalls of the apps themselves.",
+  "a6ee4857edf581fe": "Compare the top five habit trackers on the App Store.",
+  "7da507f7034c63e3": "The dev loop.",
+  "3d59e5262611ce08": "Build, install, run and debug until the fix is verified on the device, not just in the compiler.",
+  "6d92b3ac946aa3bb": "Run it on my iPhone and find out why it crashes.",
+  "7f8cb8174c6d288f": "Next",
+  "8d8555364510a069": "Planned",
+  "ec843f776255abb5": "UI tree on iPhones.",
+  "6c69b1e9419c17c7": "Tap elements by identifier on developer-mode iPhones too, as on simulators and Android today.",
+  "02aaf338298c63aa": "A video of every run.",
+  "5bacea72e59ea075": "Keep a recording of each flow run, in the app and in CI.",
+  "e60bd40be027415a": "Live view in the browser.",
+  "0a73e54778118a8d": "Watch and take over a phone from the dashboard, and share devices with your team.",
+  "abeb6ee67f73f8bd": "Does it replace Xcode or Android Studio?",
+  "44ee2c19acafea77": "No. Keep building with Xcode, Android Studio, Gradle or XcodeBuildMCP. Mobdev takes over once there is a build: it installs it on a device, runs it, drives it and reads its logs and crash reports.",
+  "e1e9ccdf882b927a": "Does the iPhone need developer mode or an app?",
+  "50802cc3d79c8d32": "No. Mobdev only uses the USB screen feed and a Bluetooth keyboard and pointer, which every iPhone supports. You turn on AssistiveTouch once. Only the optional tools for your own apps, such as installing builds and reading their logs, need Developer Mode and Xcode.",
+  "0d0c754624892508": "Does it work with the Simulator and Android?",
+  "f1812a1824958fc5": "Yes. Booted iOS simulators and Android emulators and phones appear next to your iPhones and take the same tools, installing and reading logs included. Simulators need Xcode, Android needs adb from the Android SDK. Nothing is installed on them.",
+  "234e7291b21b4445": "Do I need an AI agent?",
+  "b08e0d4688644e04": "No. Every device gets a live mirror in the app that you can click, swipe and type on. Agents add the automation: Claude Code, Codex, Cursor or any MCP client, or a script that calls the HTTP API.",
+  "bc87a4b0722594cb": "What do I need?",
+  "c098a8b2fbad4609": "A Mac with macOS 26 or later. For an iPhone, a USB data cable; the phone stays plugged in and unlocked while agents work. For simulators and Android, Xcode or the Android SDK is enough.",
+  "e9221184bd72aca4": "Where do my screenshots go?",
+  "82bc4e82c29ae753": "Nowhere, unless your agent sends them to its model. Mobdev keeps everything on your Mac. The relay passes requests through and stores nothing.",
+  "d3f1c5f31a87849e": "Can I run the relay myself?",
+  "eb8f0de834f34e29": "Yes. It is a small Go server in the repository, or a Docker image. The hosted relay just saves you the setup.",
+  "f938fdf3ee68cdad": "How many phones can I use?",
+  "8fae85b05da5577f": "As many as you own, for free. One Mac drives several iPhones, simulators and Android devices at once. Through the hosted relay, {free} connects {freeMacs} Mac and {pro} {proMacs}.",
+  "4e9d37fc303bdb47": "What counts toward the hosted relay’s limits?",
+  "c7337d41df8f6d0e": "Each request an agent sends to your Mac through the relay, and the time your Mac spends answering it. A connected Mac that waits costs nothing. Mobdev on the Mac itself and a relay you run yourself have no limits.",
+  "d8c3b35df9a02e61": "Every phone you own.",
+  "a18aed235fc3420b": "Every tool you need.",
+  "bd457679dfe92eb5": "No per-device fees.",
+  "0afe363d5d9bc180": [
+    {
+      "t": "h2",
+      "i": 1,
+      "c": [
+        "One app.",
+        {
+          "t": "br",
+          "i": 2
+        },
+        "Every step."
+      ]
+    },
+    {
+      "t": "p",
+      "i": 3,
+      "c": "Mobdev covers everything that happens on the device, for you and for your agent. Keep building the way you do; Mobdev takes it from there."
+    }
+  ],
+  "73aec3672cade57f": [
+    {
+      "t": "h2",
+      "i": 1,
+      "c": [
+        "Plug it in.",
+        {
+          "t": "br",
+          "i": 2
+        },
+        "It shows up."
+      ]
+    },
+    {
+      "t": "p",
+      "i": 3,
+      "c": "Plug in an iPhone, boot a simulator or start an emulator, and it shows up in Mobdev. Every device takes the same 27 tools, so one agent can test on all of them in one session."
+    }
+  ],
+  "0e93ea2eb9c558d4": [
+    "Needs ",
+    {
+      "t": "span",
+      "i": 1,
+      "c": {
+        "i": 2,
+        "k": "_gt_value_2",
+        "v": "v"
+      }
+    }
+  ],
+  "954efed0a67f3f65": "You bring the Mac and the phones. Mobdev brings the rest, free and open source.",
+  "82f0b9f6016e35f9": [
+    {
+      "t": "p",
+      "i": 1,
+      "c": "AI control"
+    },
+    {
+      "t": "h2",
+      "i": 2,
+      "c": [
+        "Hand every phone",
+        {
+          "t": "br",
+          "i": 3
+        },
+        "to your agent."
+      ]
+    }
+  ],
+  "f1ecd5a2ba51dada": [
+    {
+      "t": "h3",
+      "i": 1,
+      "c": "Connect Claude Code in one line."
+    },
+    {
+      "t": "p",
+      "i": 2,
+      "c": "The app shows the exact command for your agent. No token in the config: Mobdev reads it locally and starts in the background when your agent calls."
+    }
+  ],
+  "4e67e3739f0ae7ef": [
+    "tools, from ",
+    {
+      "t": "span",
+      "i": 1,
+      "c": "tap"
+    },
+    " and ",
+    {
+      "t": "span",
+      "i": 2,
+      "c": "tap_text"
+    },
+    " to ",
+    {
+      "t": "span",
+      "i": 3,
+      "c": "install_app"
+    },
+    " and ",
+    {
+      "t": "span",
+      "i": 4,
+      "c": "logs"
+    },
+    "."
+  ],
+  "353ee9cdfc9c17f2": [
+    {
+      "t": "h3",
+      "i": 1,
+      "c": "Reads the screen."
+    },
+    {
+      "t": "p",
+      "i": 2,
+      "c": "On-device text recognition finds buttons by their label. Fewer screenshots, fewer tokens."
+    }
+  ],
+  "65fba2c977862edf": [
+    {
+      "t": "h3",
+      "i": 1,
+      "c": "Any agent."
+    },
+    {
+      "t": "p",
+      "i": 2,
+      "c": "Claude Code, Codex, Cursor, Claude Desktop and every other MCP client. Scripts use the HTTP API."
+    }
+  ],
+  "5566645e9dde6be5": [
+    {
+      "t": "h3",
+      "i": 1,
+      "c": "Many devices."
+    },
+    {
+      "t": "p",
+      "i": 2,
+      "c": [
+        {
+          "t": "span",
+          "i": 3,
+          "c": "list_devices"
+        },
+        " shows every device and ",
+        {
+          "t": "span",
+          "i": 4,
+          "c": "device"
+        },
+        " picks one. Check the iPhone and the Pixel in one session."
+      ]
+    }
+  ],
+  "fa18bd7745dc9ce0": [
+    {
+      "t": "p",
+      "i": 1,
+      "c": "Build, run and debug"
+    },
+    {
+      "t": "h2",
+      "i": 2,
+      "c": [
+        "Install. Run. Debug.",
+        {
+          "t": "br",
+          "i": 3
+        },
+        "On the device."
+      ]
+    }
+  ],
+  "4a360dcee45a800b": [
+    {
+      "t": "h3",
+      "i": 1,
+      "c": "The whole loop, for your agent."
+    },
+    {
+      "t": "p",
+      "i": 2,
+      "c": "Point it at a build. It installs and launches the app, taps through it, reads what the app prints and finds the crash. Then it tries the fix, on the same device."
+    }
+  ],
+  "4ea17cab4452d3c4": "Keep building with Xcode, Gradle or XcodeBuildMCP. On an iPhone these tools need Developer Mode; simulators and Android work as they are.",
+  "17cd9fadd14af8c1": [
+    {
+      "t": "p",
+      "i": 1,
+      "c": "Test and research"
+    },
+    {
+      "t": "h2",
+      "i": 2,
+      "c": [
+        "Ask for a test.",
+        {
+          "t": "br",
+          "i": 3
+        },
+        "Get a report."
+      ]
+    },
+    {
+      "t": "p",
+      "i": 4,
+      "c": "Skills turn the tools into whole workflows. Add them once, then ask your agent in plain words. They stop and ask before anything that pays, sends, deletes or uses real accounts."
+    }
+  ],
+  "f937a4ed909213aa": [
+    {
+      "t": "h3",
+      "i": 1,
+      "c": "Record once. Replay anywhere."
+    },
+    {
+      "t": "p",
+      "i": 2,
+      "c": "Click Record, then use the app yourself or let your agent work. Mobdev saves the steps as a flow and replays it from the app, from your agent or in CI, and stops at the first step that fails."
+    }
+  ],
+  "836fc2fd0246326a": [
+    {
+      "t": "h3",
+      "i": 1,
+      "c": "Tap by identifier."
+    },
+    {
+      "t": "p",
+      "i": 2,
+      "c": "On simulators and Android, agents read the UI tree and tap elements by their accessibility identifier. Recorded clicks become identifiers too, so flows survive layout changes."
+    }
+  ],
+  "a1bec16fb5d59c3f": {
+    "t": "h2",
+    "i": 1,
+    "c": [
+      "At your desk.",
+      {
+        "t": "br",
+        "i": 2
+      },
+      "Or anywhere."
+    ]
+  },
+  "55c3462b43085aa5": [
+    {
+      "t": "h3",
+      "i": 1,
+      "c": "Take the controls."
+    },
+    {
+      "t": "p",
+      "i": 2,
+      "c": "Every device gets a live mirror: click to tap, drag to swipe, scroll, and type with your Mac’s keyboard. ⌘V types the clipboard. Take over whenever the agent needs a hand."
+    }
+  ],
+  "4a97a731a707bec0": "A native SwiftUI app with Liquid Glass. No Electron, no account, no telemetry.",
+  "4e2f8c86ddf5ecc6": [
+    {
+      "t": "h3",
+      "i": 1,
+      "c": "Every action logged."
+    },
+    {
+      "t": "p",
+      "i": 2,
+      "c": "See each tool call in the app, on every device, from this Mac or from afar."
+    }
+  ],
+  "0804fa0b8f0c68db": [
+    {
+      "t": "h3",
+      "i": 1,
+      "c": "Reach it from anywhere."
+    },
+    {
+      "t": "p",
+      "i": 2,
+      "c": "Turn on remote access and agents on other machines connect through a relay. Your Mac keeps one outgoing connection, so no port is ever opened. The app and the dashboard list every Mac and its phones."
+    }
+  ],
+  "88f06d6d8c22de6b": [
+    {
+      "t": "h2",
+      "i": 1,
+      "c": "Coming next."
+    },
+    {
+      "t": "p",
+      "i": 2,
+      "c": "The toolkit keeps growing. Free, like everything else."
+    }
+  ],
+  "e9b910d67c4cbd64": "Follow along on GitHub ›",
+  "c50a3345ae86b459": [
+    {
+      "t": "h2",
+      "i": 1,
+      "c": "Your screen stays on your Mac."
+    },
+    {
+      "t": "p",
+      "i": 2,
+      "c": "Text recognition runs locally. The API only answers on this Mac and needs a token. The relay forwards requests and stores nothing, and you can run your own."
+    }
+  ],
+  "4b5c798a696ef448": "Read the privacy details ›",
+  "0cbe14b50c021c4c": [
+    {
+      "t": "h2",
+      "i": 1,
+      "c": [
+        "Free. For every phone",
+        {
+          "t": "br",
+          "i": 2
+        },
+        "you own."
+      ]
+    },
+    {
+      "t": "p",
+      "i": 3,
+      "c": [
+        "You already have the Mac and the phones, so Mobdev never charges per device. ",
+        {
+          "i": 4,
+          "k": "_gt_value_4",
+          "v": "v"
+        },
+        " is for the hosted relay, when agents on other computers need more Macs or more time."
+      ]
+    }
+  ],
+  "71f1be41868d3802": "for any number of phones",
+  "a3b195b60a24544c": "The Mac app with every tool",
+  "c803be7b9e189fc7": "iPhones, simulators and Android",
+  "6cb4d1bbee7a96f5": "Self-hosted relay, MIT licensed",
+  "30996704347646c6": [
+    "Hosted relay for ",
+    {
+      "i": 1,
+      "k": "_gt_n_1",
+      "v": "n"
+    },
+    " Mac: ",
+    {
+      "i": 2,
+      "k": "_gt_n_2",
+      "v": "n"
+    },
+    " requests and ",
+    {
+      "i": 3,
+      "k": "_gt_n_3",
+      "v": "n"
+    },
+    " active hours a month"
+  ],
+  "db5182b21c81f098": "Get started",
+  "092f82796a4eab39": [
+    "per month, for up to ",
+    {
+      "i": 1,
+      "k": "_gt_n_1",
+      "v": "n"
+    },
+    " Macs"
+  ],
+  "cd586b6fa0bb3ac9": "USD, plus applicable tax",
+  "6bedca768ea9a9b7": [
+    "Everything in ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    }
+  ],
+  "7c4c824abc61d19e": [
+    "Hosted relay for ",
+    {
+      "i": 1,
+      "k": "_gt_n_1",
+      "v": "n"
+    },
+    " Macs: ",
+    {
+      "i": 2,
+      "k": "_gt_n_2",
+      "v": "n"
+    },
+    " requests and ",
+    {
+      "i": 3,
+      "k": "_gt_n_3",
+      "v": "n"
+    },
+    " active hours a month"
+  ],
+  "a05fe10c0c92b49b": "Cancel any time",
+  "631867ac7aa347c6": [
+    "Get ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    }
+  ],
+  "235e2d6ea4adde18": [
+    {
+      "t": "p",
+      "i": 1,
+      "c": "per phone, per month"
+    },
+    {
+      "t": "p",
+      "i": 2,
+      "c": "Agent control of your iPhone through your own Mac. Commands and screenshots go through their cloud."
+    }
+  ],
+  "3402afe7cb284b09": [
+    {
+      "t": "p",
+      "i": 1,
+      "c": "per month beyond one device"
+    },
+    {
+      "t": "p",
+      "i": 2,
+      "c": "A test automation workbench for iOS and Android. Closed source."
+    }
+  ],
+  "fcfa0a5eca6eee5b": "Other prices as listed on the vendors’ websites in September 2026.",
+  "2c3c0509d9f3fb63": "Questions? Answers.",
+  "af72dd8f96408089": {
+    "t": "h2",
+    "i": 1,
+    "c": [
+      "Every phone.",
+      {
+        "t": "br",
+        "i": 2
+      },
+      "One toolkit."
+    ]
+  },
+  "19c065090ac5adec": "Read the docs ›",
+  "bcbe114d1010427f": [
+    {
+      "t": "h1",
+      "i": 1,
+      "c": "Privacy"
+    },
+    {
+      "t": "p",
+      "i": 2,
+      "c": "What the hosted parts of Mobdev keep, in plain words."
+    }
+  ],
+  "f9e060045e91271d": [
+    {
+      "t": "h2",
+      "i": 1,
+      "c": "The Mac app"
+    },
+    {
+      "t": "p",
+      "i": 2,
+      "c": "The app has no account and no telemetry. Screens, text recognition and settings stay on your Mac. What your agent sends to its model is up to the agent."
+    }
+  ],
+  "a3422f1f23e701a6": [
+    {
+      "t": "h2",
+      "i": 1,
+      "c": "Your account"
+    },
+    {
+      "t": "p",
+      "i": 2,
+      "c": "Sign-in is handled by WorkOS. We store your WorkOS user ID and email address, the names and SHA-256 hashes of your access tokens, and when each was last used."
+    }
+  ],
+  "d83c5e1257521523": [
+    {
+      "t": "h2",
+      "i": 1,
+      "c": "The relay"
+    },
+    {
+      "t": "p",
+      "i": 2,
+      "c": "The relay records which Macs are connected: a name you choose, when it connected and disconnected, and an ID derived from your Mac’s key. For each Mac it also keeps the iPhones and iPads it last reported: their name, model, iOS version, a device ID and whether they are ready. Agent requests and responses, including screenshots, only pass through memory and are never written to disk or logs. Cloudflare, which runs the relay, may keep standard request metadata such as IP addresses for security."
+    }
+  ],
+  "bd63323eb07e6f93": [
+    {
+      "t": "h2",
+      "i": 1,
+      "c": "Plans and payments"
+    },
+    {
+      "t": "p",
+      "i": 2,
+      "c": "Autumn keeps track of your plan and usage, and Stripe handles payments. Autumn receives your user ID and email address and, per Mac connection, how many requests the relay forwarded and how long the Mac was busy with them, never their content. Card details go straight to Stripe; we never see them."
+    }
+  ],
+  "b0b04f8b93ac5474": [
+    {
+      "t": "h2",
+      "i": 1,
+      "c": "Deleting your data"
+    },
+    {
+      "t": "p",
+      "i": 2,
+      "c": "Revoking an access token deletes it. “Delete account” in the dashboard removes your account, tokens and Mac records at once, disconnects your Macs and deletes your record at Autumn. A paid plan has to be cancelled first. Stripe keeps invoices as long as tax law requires."
+    },
+    {
+      "t": "p",
+      "i": 3,
+      "c": "If you used the hosted relay that month, we keep one thing until your monthly allowance renews: a SHA-256 hash of your WorkOS user ID with how many requests and active seconds you used. If you sign up again before then, that usage counts toward your new account, so deleting and re-creating an account does not reset the free allowance. After the renewal we delete it."
+    }
+  ],
+  "367405fcf2a7f52d": [
+    {
+      "t": "h1",
+      "i": 1,
+      "c": "Sign out of Mobdev?"
+    },
+    {
+      "t": "p",
+      "i": 2,
+      "c": "Your Macs stay connected. Sign in again any time to manage them."
+    }
+  ],
+  "19c8dd34645f26b9": "Billing could not be reached, so nothing was deleted. Try again in a moment.",
+  "b939e274857882b3": "Your billing record could not be deleted, so nothing was deleted. Try again in a moment.",
+  "a213e4c483c81496": "Cancel {plan} under “Manage billing” first, then delete your account.",
+  "b1046773885d301e": "You can have at most {count} access tokens.",
+  "b5f2554e55012b9a": "Not signed in.",
+  "a41f2c2b05c508f2": "Billing is not set up.",
+  "6be714f0b883563e": "Billing could not be reached, so no token was created. Try again in a moment."
+}

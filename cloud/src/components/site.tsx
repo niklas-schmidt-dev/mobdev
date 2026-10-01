@@ -1,5 +1,7 @@
-import { Link } from "@tanstack/react-router";
+import { Link, useLocation } from "@tanstack/react-router";
+import { T, useGT, useLocaleSelector } from "gt-tanstack-start";
 import { useState, type ReactNode } from "react";
+import { LOCALES, localizePath, type Locale } from "../lib/locales";
 import { GITHUB_URL } from "../lib/releases";
 
 export function Logo({ className = "size-7" }: { className?: string }) {
@@ -9,29 +11,30 @@ export function Logo({ className = "size-7" }: { className?: string }) {
 }
 
 export function SiteHeader() {
+  const gt = useGT();
   const link = "rounded-md px-2 py-1 text-[13px] text-ink/80 transition-colors hover:text-ink sm:px-3";
   return (
     <header className="nav-glass sticky top-0 z-40 border-b border-black/[0.06] dark:border-white/10">
-      <nav className="mx-auto flex h-12 max-w-5xl items-center px-4 sm:px-5" aria-label="Main">
+      <nav className="mx-auto flex h-12 max-w-5xl items-center px-4 sm:px-5" aria-label={gt("Main")}>
         <Link to="/" className="flex items-center gap-2 text-[15px] font-semibold tracking-tight">
           <Logo className="size-6" />
           Mobdev
         </Link>
         <div className="ml-auto flex items-center">
           <Link to="/docs" className={link} activeProps={{ className: "text-ink" }}>
-            Docs
+            <T>Docs</T>
           </Link>
-          <a href="/#pricing" className={`${link} hidden sm:block`}>
-            Pricing
-          </a>
+          <Link to="/" hash="pricing" className={`${link} hidden sm:block`}>
+            <T>Pricing</T>
+          </Link>
           <Link to="/dashboard" className={link}>
-            Account
+            <T>Account</T>
           </Link>
           <a
             href="/download"
             className="ml-1.5 rounded-full bg-blue px-3 py-1 text-[13px] font-medium text-white transition-colors hover:bg-blue-hover sm:ml-2 sm:px-3.5"
           >
-            Download
+            <T>Download</T>
           </a>
         </div>
       </nav>
@@ -48,44 +51,93 @@ export function SiteFooter() {
         <div className="grid grid-cols-2 gap-8 border-b border-line pb-8 sm:grid-cols-4">
           <div className="col-span-2 flex items-start gap-2.5">
             <Logo className="size-6" />
-            <p className="max-w-xs text-[12px] leading-relaxed text-muted">
-              Mobdev is the mobile development toolkit for you and your AI agent: iPhones, simulators and Android
-              in one Mac app. Free and open source under the MIT license.
-            </p>
+            <T>
+              <p className="max-w-xs text-[12px] leading-relaxed text-muted">
+                Mobdev is the mobile development toolkit for you and your AI agent: iPhones, simulators and Android
+                in one Mac app. Free and open source under the MIT license.
+              </p>
+            </T>
           </div>
           <div>
-            <p className={heading}>Product</p>
+            <p className={heading}>
+              <T>Product</T>
+            </p>
             <Link to="/" className={item}>
-              Overview
+              <T>Overview</T>
             </Link>
             <Link to="/docs" className={item}>
-              Docs
+              <T>Docs</T>
             </Link>
-            <a href="/#pricing" className={item}>
-              Pricing
-            </a>
-            <a href="/#next" className={item}>
-              Coming next
-            </a>
+            <Link to="/" hash="pricing" className={item}>
+              <T>Pricing</T>
+            </Link>
+            <Link to="/" hash="next" className={item}>
+              <T>Coming next</T>
+            </Link>
             <a href={GITHUB_URL} className={item}>
               GitHub
             </a>
           </div>
           <div>
-            <p className={heading}>Account</p>
+            <p className={heading}>
+              <T>Account</T>
+            </p>
             <Link to="/dashboard" className={item}>
-              Dashboard
+              <T>Dashboard</T>
             </Link>
             <Link to="/privacy" className={item}>
-              Privacy
+              <T>Privacy</T>
             </Link>
           </div>
         </div>
-        <p className="pt-6 text-[12px] text-faint">
-          Not affiliated with Apple, TapKit or MobAI. iPhone and macOS are trademarks of Apple Inc.
-        </p>
+        <div className="flex flex-col-reverse gap-3 pt-6 text-[12px] sm:flex-row sm:items-center sm:justify-between">
+          <T>
+            <p className="text-faint">
+              Not affiliated with Apple, TapKit or MobAI. iPhone and macOS are trademarks of Apple Inc.
+            </p>
+          </T>
+          <LanguageSwitcher />
+        </div>
       </div>
     </footer>
+  );
+}
+
+/** Each language under its own name, in that language. */
+const languageNames: Record<Locale, string> = { en: "English", de: "Deutsch" };
+
+/**
+ * Links to this page in the other language. Choosing one remembers it in General Translation's
+ * cookie, so start.ts stops sending this visitor to the language their browser asks for.
+ */
+function LanguageSwitcher() {
+  const gt = useGT();
+  const { locale, setLocale } = useLocaleSelector();
+  const pathname = useLocation({ select: (location) => location.pathname });
+  return (
+    <nav aria-label={gt("Language")} className="flex gap-3">
+      {LOCALES.map((to) =>
+        to === locale ? (
+          <span key={to} aria-current="page" className="text-ink">
+            {languageNames[to]}
+          </span>
+        ) : (
+          <a
+            key={to}
+            href={localizePath(pathname, to)}
+            hrefLang={to}
+            lang={to}
+            onClick={(event) => {
+              event.preventDefault();
+              setLocale(to);
+            }}
+            className="text-muted transition-colors hover:text-ink"
+          >
+            {languageNames[to]}
+          </a>
+        ),
+      )}
+    </nav>
   );
 }
 
@@ -105,7 +157,8 @@ export const buttonSecondary =
   "inline-flex items-center justify-center rounded-full border border-tint px-6 py-3 text-[17px] font-medium text-tint transition-colors hover:border-blue hover:bg-blue hover:text-white";
 export const moreLink = "text-[17px] text-link hover:underline underline-offset-4";
 
-export function CopyButton({ text, label = "Copy" }: { text: string; label?: string }) {
+export function CopyButton({ text, label }: { text: string; label?: string }) {
+  const gt = useGT();
   const [copied, setCopied] = useState(false);
   return (
     <button
@@ -117,7 +170,7 @@ export function CopyButton({ text, label = "Copy" }: { text: string; label?: str
       }}
       className="shrink-0 rounded-full bg-white/80 px-3 py-1 text-[13px] font-medium text-link shadow-sm ring-1 ring-black/5 transition-colors hover:bg-white dark:bg-white/10 dark:shadow-none dark:ring-white/10 dark:hover:bg-white/15"
     >
-      <span aria-live="polite">{copied ? "Copied" : label}</span>
+      <span aria-live="polite">{copied ? gt("Copied") : (label ?? gt("Copy"))}</span>
     </button>
   );
 }

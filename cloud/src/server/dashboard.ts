@@ -1,8 +1,10 @@
 import { createServerFn } from "@tanstack/react-start";
 import { getAuth } from "@workos/authkit-tanstack-react-start";
 import { env } from "cloudflare:workers";
+import { getGT } from "gt-tanstack-start";
 import { carryOverUsage, removeAccount } from "../../shared/accounts";
 import { Autumn, currentSubscription, type Customer } from "../../shared/autumn";
+import { UserError } from "../../shared/errors";
 import { FEATURES, FREE_PLAN, PLANS, PRO_PLAN, planById, type Plan } from "../../shared/plans";
 import { hasRelayPlan } from "../../relay/src/billing";
 import { authConfigured } from "./auth-config";
@@ -25,9 +27,31 @@ interface RelayAdmin {
 
 const relay = () => env.RELAY as unknown as RelayAdmin;
 
+// Errors a server function throws for the dashboard to show are in the language of the request,
+// which General Translation resolves from its cookie; errors only logged stay English.
+
+/** An error from shared/, which only speaks English, in the language of the request. */
+async function translated(error: unknown): Promise<unknown> {
+  if (!(error instanceof UserError)) return error;
+  const gt = await getGT();
+  switch (error.reason) {
+    case "billing-unreachable":
+      return new Error(gt("Billing could not be reached, so nothing was deleted. Try again in a moment."));
+    case "billing-record":
+      return new Error(gt("Your billing record could not be deleted, so nothing was deleted. Try again in a moment."));
+    case "paid-plan":
+      return new Error(gt("Cancel {plan} under “Manage billing” first, then delete your account.", { plan: String(error.value) }));
+    case "token-limit":
+      return new Error(gt("You can have at most {count} access tokens.", { count: Number(error.value) }));
+  }
+}
+
 async function requireUser() {
   const { user } = await getAuth();
-  if (!user) throw new Error("Not signed in.");
+  if (!user) {
+    const gt = await getGT();
+    throw new Error(gt("Not signed in."));
+  }
   return user;
 }
 
@@ -163,8 +187,9 @@ export const loadDashboard = createServerFn({ method: "GET" }).handler(async ():
 /** Starts the upgrade to Pro. Returns Stripe Checkout's URL, or null if nothing was left to pay. */
 export const upgradePlan = createServerFn({ method: "POST" }).handler(async () => {
   const user = await requireUser();
+  const gt = await getGT();
   const client = autumn();
-  if (!client) throw new Error("Billing is not set up.");
+  if (!client) throw new Error(gt("Billing is not set up."));
   await client.customer(user.id, user.email);
   return { url: await client.attach(user.id, PRO_PLAN.id, `${siteOrigin()}/dashboard?upgraded=1`) };
 });
@@ -172,8 +197,9 @@ export const upgradePlan = createServerFn({ method: "POST" }).handler(async () =
 /** Stripe's billing portal: invoices, payment method, cancelling. */
 export const openBillingPortal = createServerFn({ method: "POST" }).handler(async () => {
   const user = await requireUser();
+  const gt = await getGT();
   const client = autumn();
-  if (!client) throw new Error("Billing is not set up.");
+  if (!client) throw new Error(gt("Billing is not set up."));
   return { url: await client.portal(user.id, `${siteOrigin()}/dashboard`) };
 });
 
@@ -181,6 +207,7 @@ export const createToken = createServerFn({ method: "POST" })
   .validator((data: { name: string }) => ({ name: String(data?.name ?? "").slice(0, 60) }))
   .handler(async ({ data }) => {
     const user = await requireUser();
+    const gt = await getGT();
     await upsertAccount(env.DB, user.id, user.email);
     const client = autumn();
     if (client) {
@@ -189,10 +216,12 @@ export const createToken = createServerFn({ method: "POST" })
         await carryOverUsage(env.DB, client, user);
       } catch (error) {
         console.warn("could not carry over the usage of a deleted account", error);
-        throw new Error("Billing could not be reached, so no token was created. Try again in a moment.");
+        throw new Error(gt("Billing could not be reached, so no token was created. Try again in a moment."));
       }
     }
-    const { row, token } = await createAccessToken(env.DB, user.id, data.name);
+    const { row, token } = await createAccessToken(env.DB, user.id, data.name).catch(async (error: unknown) => {
+      throw await translated(error);
+    });
     return { id: row.id, name: row.name, token };
   });
 
@@ -218,6 +247,8 @@ export const forgetMac = createServerFn({ method: "POST" })
 /** Deletes the account everywhere; see removeAccount for the order. Signing out is up to the page. */
 export const deleteAccount = createServerFn({ method: "POST" }).handler(async () => {
   const user = await requireUser();
-  await removeAccount(env.DB, autumn(), user, disconnect);
+  await removeAccount(env.DB, autumn(), user, disconnect).catch(async (error: unknown) => {
+    throw await translated(error);
+  });
   return { ok: true };
 });

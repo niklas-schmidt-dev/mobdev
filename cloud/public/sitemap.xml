@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The public pages in English and German, as pageHead() in src/lib/meta.ts links them. -->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">
+  <url>
+    <loc>https://mobdev.sh/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://mobdev.sh/"/>
+    <xhtml:link rel="alternate" hreflang="de" href="https://mobdev.sh/de"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://mobdev.sh/"/>
+  </url>
+  <url>
+    <loc>https://mobdev.sh/de</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://mobdev.sh/"/>
+    <xhtml:link rel="alternate" hreflang="de" href="https://mobdev.sh/de"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://mobdev.sh/"/>
+  </url>
+  <url>
+    <loc>https://mobdev.sh/docs</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://mobdev.sh/docs"/>
+    <xhtml:link rel="alternate" hreflang="de" href="https://mobdev.sh/de/docs"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://mobdev.sh/docs"/>
+  </url>
+  <url>
+    <loc>https://mobdev.sh/de/docs</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://mobdev.sh/docs"/>
+    <xhtml:link rel="alternate" hreflang="de" href="https://mobdev.sh/de/docs"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://mobdev.sh/docs"/>
+  </url>
+  <url>
+    <loc>https://mobdev.sh/privacy</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://mobdev.sh/privacy"/>
+    <xhtml:link rel="alternate" hreflang="de" href="https://mobdev.sh/de/privacy"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://mobdev.sh/privacy"/>
+  </url>
+  <url>
+    <loc>https://mobdev.sh/de/privacy</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://mobdev.sh/privacy"/>
+    <xhtml:link rel="alternate" hreflang="de" href="https://mobdev.sh/de/privacy"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://mobdev.sh/privacy"/>
+  </url>
+</urlset>

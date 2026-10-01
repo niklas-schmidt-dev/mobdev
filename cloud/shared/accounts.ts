@@ -1,5 +1,6 @@
 import { AutumnError, currentSubscription, type Autumn, type Customer } from "./autumn";
 import { deleteAccessToken, listAccessTokens } from "./db";
+import { UserError } from "./errors";
 import { sha256Hex } from "./keys";
 import { FEATURES, PLANS, planById, type Plan } from "./plans";
 
@@ -84,10 +85,19 @@ export async function removeAccount(
       customer = await autumn.customer(user.id, user.email);
     } catch (error) {
       console.warn("could not read the Autumn customer", error);
-      throw new Error("Billing could not be reached, so nothing was deleted. Try again in a moment.");
+      throw new UserError(
+        "billing-unreachable",
+        "Billing could not be reached, so nothing was deleted. Try again in a moment.",
+      );
     }
     const running = runningPaidPlan(customer);
-    if (running) throw new Error(`Cancel ${running.name} under “Manage billing” first, then delete your account.`);
+    if (running) {
+      throw new UserError(
+        "paid-plan",
+        `Cancel ${running.name} under “Manage billing” first, then delete your account.`,
+        running.name,
+      );
+    }
     await keepUsage(db, user.id, customer);
     try {
       await autumn.deleteCustomer(user.id); // Stripe keeps its invoices; tax law requires them.
@@ -95,7 +105,10 @@ export async function removeAccount(
       // Not found: an earlier attempt deleted it.
       if (!(error instanceof AutumnError && error.status === 404)) {
         console.warn("could not delete the Autumn customer", error);
-        throw new Error("Your billing record could not be deleted, so nothing was deleted. Try again in a moment.");
+        throw new UserError(
+          "billing-record",
+          "Your billing record could not be deleted, so nothing was deleted. Try again in a moment.",
+        );
       }
     }
     await db

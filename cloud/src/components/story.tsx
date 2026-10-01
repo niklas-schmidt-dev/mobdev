@@ -1,3 +1,4 @@
+import { T, msg, useMessages } from "gt-tanstack-start";
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import type { Stage, StoryState } from "../three/stage";
 import { buttonPrimary, moreLink } from "./site";
@@ -47,7 +48,10 @@ function fade(p: number, [a, b, c, d]: readonly [number, number, number, number]
   return { amount: 1 - ramp(p, c, d), rising: false };
 }
 
-/** What the agent does, one line per tap, per phone. Tool names match the real tools. */
+/**
+ * What the agent does, one line per tap, per phone. Tool names match the real tools. Like the app's
+ * own activity list, these lines stay English in every language.
+ */
 const devices = ["iPhone", "iPhone 17 Pro", "Pixel 9"] as const;
 const script: readonly (readonly [string, string])[][] = [
   [
@@ -80,13 +84,15 @@ const earlierActivity: Activity[] = [
   { id: -3, tool: "install_app", detail: "app-debug.apk", device: "Pixel 9" },
 ];
 
+/** Names under the three phones. Product and tool names are not marked for translation; m() returns them unchanged. */
 const labels = [
-  { name: "iPhone", needs: "USB cable" },
+  { name: "iPhone", needs: msg("USB cable") },
   { name: "Simulator", needs: "Xcode" },
   { name: "Android", needs: "adb" },
 ];
 
 export function Story() {
+  const m = useMessages();
   const section = useRef<HTMLElement>(null);
   const host = useRef<HTMLDivElement>(null);
   /** Everything that fades with a chapter, keyed by chapter and part. */
@@ -268,43 +274,45 @@ export function Story() {
 
         {/* Chapter 1: the hero */}
         <div ref={chapter("hero")} className="absolute inset-x-0 top-[calc(48px+5svh)] px-5 text-center will-change-transform sm:top-[calc(48px+7svh)]">
-          <p className="rise text-[19px] font-semibold sm:text-[21px]" style={{ "--rise-delay": "80ms" } as CSSProperties}>
-            Mobdev for Mac
-          </p>
-          <h1
-            className="rise headline text-balance mx-auto mt-2 max-w-4xl text-[44px] sm:text-[min(80px,9svh)]"
-            style={{ "--rise-delay": "160ms" } as CSSProperties}
-          >
-            Mobile development.
-            <br />
-            All in one app.
-          </h1>
-          <p
-            className="rise text-balance mx-auto mt-5 max-w-2xl text-[17px] leading-[1.45] text-muted sm:text-[21px]"
-            style={{ "--rise-delay": "260ms" } as CSSProperties}
-          >
-            Let AI agents drive your phones, install and debug your builds and run smoke tests. On your iPhone, iOS
-            simulators and Android, from one native Mac app. Free and open source.
-          </p>
+          <T>
+            <p className="rise text-[19px] font-semibold sm:text-[21px]" style={{ "--rise-delay": "80ms" } as CSSProperties}>
+              Mobdev for Mac
+            </p>
+            <h1
+              className="rise headline text-balance mx-auto mt-2 max-w-4xl text-[44px] sm:text-[min(80px,9svh)]"
+              style={{ "--rise-delay": "160ms" } as CSSProperties}
+            >
+              Mobile development.
+              <br />
+              All in one app.
+            </h1>
+            <p
+              className="rise text-balance mx-auto mt-5 max-w-2xl text-[17px] leading-[1.45] text-muted sm:text-[21px]"
+              style={{ "--rise-delay": "260ms" } as CSSProperties}
+            >
+              Let AI agents drive your phones, install and debug your builds and run smoke tests. On your iPhone, iOS
+              simulators and Android, from one native Mac app. Free and open source.
+            </p>
+          </T>
           <div
             className="rise mt-7 flex flex-wrap items-center justify-center gap-x-7 gap-y-3"
             style={{ "--rise-delay": "360ms" } as CSSProperties}
           >
             <a href="/download" className={buttonPrimary}>
-              Download for Mac
+              <T>Download for Mac</T>
             </a>
             <a href="#toolkit" className={moreLink}>
-              See what’s inside ›
+              <T>See what’s inside ›</T>
             </a>
           </div>
           <p className="rise mt-4 text-[13px] text-faint" style={{ "--rise-delay": "440ms" } as CSSProperties}>
-            Free. Updates itself. Requires macOS 26.
+            <T>Free. Updates itself. Requires macOS 26.</T>
           </p>
         </div>
 
-        {/* Chapter 2: three kinds of device */}
+        {/* Chapter 2: three kinds of device. The title is only names, the same in every language. */}
         <StoryText refCallback={chapter("devices")} style={hidden} title={<>iPhone. Simulator.<br />Android.</>}>
-          Every device in one list, and every device takes the same 23 tools.
+          <T>Every device in one list, and every device takes the same 23 tools.</T>
         </StoryText>
         {labels.map((label, k) => (
           <div
@@ -316,13 +324,13 @@ export function Story() {
             className="pointer-events-none absolute left-0 top-0 mt-3 whitespace-nowrap text-center opacity-0"
           >
             <p className="text-[15px] font-semibold sm:text-[17px]">{label.name}</p>
-            <p className="text-[12px] text-muted sm:text-[13px]">{label.needs}</p>
+            <p className="text-[12px] text-muted sm:text-[13px]">{m(label.needs)}</p>
           </div>
         ))}
 
         {/* Chapter 3: agents at work */}
-        <StoryText refCallback={chapter("agent")} style={hidden} title={<>Your agent drives.</>}>
-          Claude Code, Codex, Cursor or any MCP client sees, taps and types on every phone. You watch it happen.
+        <StoryText refCallback={chapter("agent")} style={hidden} title={<T>Your agent drives.</T>}>
+          <T>Claude Code, Codex, Cursor or any MCP client sees, taps and types on every phone. You watch it happen.</T>
         </StoryText>
         <div
           ref={chapter("agent", "activity")}
@@ -351,12 +359,11 @@ export function Story() {
         ))}
 
         {/* Chapter 4: from anywhere */}
-        <StoryText refCallback={chapter("anywhere")} style={hidden} title={<>From anywhere.</>}>
-          Agents on other machines reach your Mac through a relay. Your Mac keeps one outgoing connection, so no port is
-          ever opened.{" "}
-          <a href="#desk" className="text-link hover:underline underline-offset-4">
-            Remote access ›
-          </a>
+        <StoryText refCallback={chapter("anywhere")} style={hidden} title={<T>From anywhere.</T>}>
+          <T>
+            Agents on other machines reach your Mac through a relay. Your Mac keeps one outgoing connection, so no port
+            is ever opened. <a href="#desk" className="text-link hover:underline underline-offset-4">Remote access ›</a>
+          </T>
         </StoryText>
       </div>
     </section>

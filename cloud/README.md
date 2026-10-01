@@ -125,6 +125,29 @@ bun run test        # relay worker, Durable Object, D1 and a fake Autumn in the 
 bun run build
 ```
 
+## Languages
+
+The website and dashboard are in English and German. English pages live at `/docs`, their German
+copies at `/de/docs`: the router maps `/de/…` onto the same routes (`src/router.tsx`). Request
+middleware (`src/start.ts`) sends a visitor on an English page to the German copy when
+[General Translation](https://generaltranslation.com/docs/react/tanstack-start) resolves German for
+them, from the language they last chose or visited (its `generaltranslation.locale` cookie), else
+from `Accept-Language`. Crawlers send neither, so search engines see each language under its own
+URL; `pageHead()` in `src/lib/meta.ts` links the two with `hreflang`, and `public/sitemap.xml`
+lists both.
+
+Text is marked with General Translation's `<T>`, `useGT()` and `msg()` and translated by hand,
+without its translation API:
+
+```sh
+bun run translations   # gt generate: updates src/_gt/en.json and adds new text to src/_gt/de.json in English
+```
+
+Then translate the new entries in `src/_gt/de.json`, keeping their structure. `test/i18n.test.ts`
+fails while an entry is still English or misses a link or variable of the source. Page titles and
+descriptions are in `src/lib/meta.ts`. Output that shows the English-only Mac app and its tools
+(tool names and results, the app mock) stays English.
+
 ## Deploy
 
 Live since 2026-09-29 in the Cloudflare account "Niklas Schmidt": D1 `mobdev`
