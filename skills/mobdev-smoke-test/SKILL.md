@@ -44,6 +44,10 @@ foreground, or `logs` reports that it exited or crashed.
 After each path, check `logs` with the last `cursor` for errors and warnings. When the app crashed,
 call `crash_reports` for it and read the newest report. Relaunch and continue with the next path.
 
+On simulators and Android, act with `tap_element` and check with `wait_for_element` where the app
+has accessibility identifiers. When a path passes, offer to save its steps as a flow file (see the
+`mobdev` skill), so the next smoke test, or CI with `Mobdev flow`, replays it without an agent.
+
 ## 4. Report
 
 Write `smoke/<date>/report.md` (or HTML if the user prefers):

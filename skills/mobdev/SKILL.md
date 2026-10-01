@@ -71,6 +71,19 @@ setup, and the same tools work, with these differences:
 - On Android, `press_key` with `escape` is Back, `type_text` types ASCII only, and `open_app` matches
   package names ("Settings" opens com.android.settings; `list_apps` with `all: true` lists them).
 - An app reopens where it was left. `stop_app` first when you need its first screen.
+- `ui_tree` lists the elements on screen with role, label, accessibility identifier and position.
+  Prefer `tap_element` (by `id` or `text`) and `wait_for_element` to OCR here: they find icon-only
+  buttons and fields, and `tap_element` waits up to 5 s for its element. They do not work on an
+  iPhone; use `tap_text` there.
+
+## Flows
+
+`run_flow` replays a saved list of tool calls (`path` to a JSON file, or `steps` inline) on one
+device and stops at the first failing step, saying which. Users record flows in the app with
+**Record**. To turn a session you just drove into a flow, write the calls that mattered as steps,
+for example `{"steps": [{"tap_element": {"id": "login"}}, {"type_text": {"text": "hi"}}, "home"]}`,
+preferring `tap_element` and `wait_for_element` over coordinates so it survives layout changes.
+`Mobdev flow <file> --device <id>` runs one without the app, in CI.
 
 ## Safety
 

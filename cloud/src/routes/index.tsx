@@ -17,7 +17,7 @@ const toolkit = [
   { icon: "devices", title: "Every device", body: "iPhone, Simulator and Android in one list.", href: "#devices" },
   { icon: "terminal", title: "Build and run", body: "Install builds, launch apps, open deep links.", href: "#build" },
   { icon: "bug", title: "Debug", body: "Logs and crash reports, straight to your agent.", href: "#build" },
-  { icon: "check", title: "Test", body: "Smoke tests and onboarding audits.", href: "#test" },
+  { icon: "check", title: "Test", body: "Recorded flows, CI runs and smoke tests.", href: "#test" },
   { icon: "search", title: "Research", body: "Competing apps and their paywalls, on a real iPhone.", href: "#test" },
   { icon: "pointer", title: "Live mirror", body: "Click, swipe and type from your Mac.", href: "#desk" },
   { icon: "globe", title: "Remote", body: "Every Mac and its phones, from anywhere.", href: "#desk" },
@@ -84,22 +84,24 @@ const skills = [
 ] as const;
 
 /** The roadmap in "Coming next". Keep the statuses honest; move shipped items into the page above. */
+type RoadmapStatus = "Next" | "Planned";
+
 const roadmap = [
   {
     icon: "tree",
-    status: "Next",
-    title: "UI element tree.",
-    body: "Tap elements by identifier instead of pixels, on simulators, Android and developer-mode iPhones.",
+    status: "Planned" as RoadmapStatus,
+    title: "UI tree on iPhones.",
+    body: "Tap elements by identifier on developer-mode iPhones too, as on simulators and Android today.",
   },
   {
     icon: "replay",
-    status: "Planned",
-    title: "Flows and CI.",
-    body: "Turn an agent session into a replayable test, run it in CI, keep a video of every run.",
+    status: "Planned" as RoadmapStatus,
+    title: "A video of every run.",
+    body: "Keep a recording of each flow run, in the app and in CI.",
   },
   {
     icon: "browser",
-    status: "Planned",
+    status: "Planned" as RoadmapStatus,
     title: "Live view in the browser.",
     body: "Watch and take over a phone from the dashboard, and share devices with your team.",
   },
@@ -204,7 +206,7 @@ function Home() {
           </h2>
           <p className="text-balance mt-6 max-w-2xl text-[19px] leading-[1.45] text-muted">
             Plug in an iPhone, boot a simulator or start an emulator, and it shows up in Mobdev. Every device takes the
-            same 23 tools, so one agent can test on all of them in one session.
+            same 27 tools, so one agent can test on all of them in one session.
           </p>
           <div className="mt-14 grid grid-cols-1 gap-5 md:grid-cols-3">
             {devices.map((device, index) => (
@@ -260,7 +262,7 @@ function Home() {
               </div>
             </div>
             <div className={`flex flex-col ${mistCard}`}>
-              <p className="headline text-[64px] text-ink">23</p>
+              <p className="headline text-[64px] text-ink">27</p>
               <p className="mt-auto text-[17px] leading-[1.47] text-muted">
                 tools, from <span className="text-ink">tap</span> and <span className="text-ink">tap_text</span> to{" "}
                 <span className="text-ink">install_app</span> and <span className="text-ink">logs</span>.
@@ -362,7 +364,28 @@ function Home() {
           <div className="mt-8 max-w-xl">
             <Code>npx skills add niklas-schmidt-dev/mobdev</Code>
           </div>
-          <div className="mt-14 grid grid-cols-1 gap-5 md:grid-cols-2">
+          <div className="mt-14 grid grid-cols-1 gap-5 md:grid-cols-3">
+            <div {...reveal()} className={`${mistCard} md:col-span-2`}>
+              <Icon name="replay" className="size-8 text-tint" />
+              <h3 className="mt-6 text-[24px] font-semibold tracking-tight">Record once. Replay anywhere.</h3>
+              <p className="mt-2 max-w-lg text-[17px] leading-[1.47] text-muted">
+                Click Record, then use the app yourself or let your agent work. Mobdev saves the steps as a flow and
+                replays it from the app, from your agent or in CI, and stops at the first step that fails.
+              </p>
+              <div className="mt-6">
+                <Code surface="white">{"Mobdev flow sign-in.json --device \"$UDID\""}</Code>
+              </div>
+            </div>
+            <div {...reveal(1)} className={mistCard}>
+              <Icon name="tree" className="size-8 text-tint" />
+              <h3 className="mt-6 text-[21px] font-semibold tracking-tight">Tap by identifier.</h3>
+              <p className="mt-2 text-[17px] leading-[1.47] text-muted">
+                On simulators and Android, agents read the UI tree and tap elements by their accessibility identifier.
+                Recorded clicks become identifiers too, so flows survive layout changes.
+              </p>
+            </div>
+          </div>
+          <div className="mt-5 grid grid-cols-1 gap-5 md:grid-cols-2">
             {skills.map((skill, index) => (
               <div key={skill.title} {...reveal(index % 2)} className={`flex flex-col ${mistCard}`}>
                 <Icon name={skill.icon} className="size-8 text-tint" />

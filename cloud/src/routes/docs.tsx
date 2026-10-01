@@ -18,6 +18,7 @@ const sections = [
   ["tools", "Tools"],
   ["emulators", "Simulators and Android"],
   ["developer", "Build, run and debug"],
+  ["flows", "Flows and CI"],
   ["skills", "Skills"],
   ["remote", "Remote access"],
   ["self-host", "Run your own relay"],
@@ -40,6 +41,10 @@ const tools = [
   ["find_text", "text", "Where a label is"],
   ["tap_text", "text, index", "Tap a visible label"],
   ["wait_for_text", "text, timeout, gone", "Wait for text to appear or disappear"],
+  ["ui_tree", "contains, all", "Elements from the accessibility tree (simulators and Android)"],
+  ["tap_element", "id, text, index, timeout", "Tap an element by identifier or label"],
+  ["wait_for_element", "id, text, timeout, gone", "Wait for an element to appear or disappear"],
+  ["run_flow", "path, steps", "Replay a flow; stops at the first failing step"],
 ];
 
 /** Need Developer Mode on the iPhone and Xcode on the Mac. */
@@ -212,6 +217,13 @@ function Docs() {
               <Code>
                 {"xcodebuild -scheme MyApp -destination 'generic/platform=iOS Simulator' \\\n  -derivedDataPath build build\n# install_app {\"device\": \"iPhone 17\", \"path\": \"…/Debug-iphonesimulator/MyApp.app\"}\n# install_app {\"device\": \"emulator-5554\", \"path\": \"…/app-debug.apk\"}"}
               </Code>
+              <p>
+                On both, <code className="rounded bg-mist px-1.5 py-0.5 text-[15px]">ui_tree</code> lists the elements on screen with their role, label and
+                accessibility identifier, and <code className="rounded bg-mist px-1.5 py-0.5 text-[15px]">tap_element</code> and{" "}
+                <code className="rounded bg-mist px-1.5 py-0.5 text-[15px]">wait_for_element</code> find them by identifier or label: steadier than OCR, and
+                they find buttons that show only an icon. An iPhone has no such tree without a test runner on the
+                phone, so there agents use <code className="rounded bg-mist px-1.5 py-0.5 text-[15px]">tap_text</code>.
+              </p>
               <p>Turn them off under Settings › General in the app if you only want iPhones.</p>
             </Section>
 
@@ -237,6 +249,28 @@ function Docs() {
                 Paths for <code className="rounded bg-mist px-1.5 py-0.5 text-[15px]">install_app</code> are on the Mac
                 that runs Mobdev, also through a relay. Mobdev never removes App Store or system apps.
               </p>
+            </Section>
+
+            <Section id="flows" title="Flows and CI">
+              <p>
+                A flow is a list of tool calls saved as JSON. Click <strong>Record</strong> in a device’s activity and
+                everything you or an agent do on it is collected; on simulators and Android, clicks on named elements
+                become <code className="rounded bg-mist px-1.5 py-0.5 text-[15px]">tap_element</code>, so the flow survives layout changes. Replay it with{" "}
+                <strong>Run Flow…</strong>, the <code className="rounded bg-mist px-1.5 py-0.5 text-[15px]">run_flow</code> tool or, without the app,{" "}
+                <code className="rounded bg-mist px-1.5 py-0.5 text-[15px]">Mobdev flow</code>. Every run stops at the first failing step and says which.
+              </p>
+              <Code>
+                {'{\n  "name": "Sign in",\n  "steps": [\n    {"launch_app": {"bundle_id": "com.example.MyApp", "restart": true}},\n    {"tap_element": {"id": "email"}},\n    {"type_text": {"text": "me@example.com", "submit": true}},\n    {"wait_for_element": {"text": "Welcome"}}\n  ]\n}'}
+              </Code>
+              <p>
+                <code className="rounded bg-mist px-1.5 py-0.5 text-[15px]">Mobdev flow</code> runs on booted simulators and Android devices, for scripts and CI. It
+                exits 0 when every step passed and 1 when one failed; <code className="rounded bg-mist px-1.5 py-0.5 text-[15px]">--artifacts</code> keeps the
+                activity, crash reports and a screenshot of the failure. In CI, prefer{" "}
+                <code className="rounded bg-mist px-1.5 py-0.5 text-[15px]">tap_element</code> to the OCR tools, which do not work on GitHub’s virtualized Macs.
+              </p>
+              <Code>
+                {"/Applications/Mobdev.app/Contents/MacOS/Mobdev flow sign-in.json \\\n  --device \"$UDID\" --artifacts flow-artifacts"}
+              </Code>
             </Section>
 
             <Section id="skills" title="Skills">

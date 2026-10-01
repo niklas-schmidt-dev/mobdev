@@ -4,13 +4,14 @@ Mobile development, all in one app. Free and open source.
 
 Mobdev is a small native Mac app that puts your iPhones, iOS simulators and Android devices in one
 list and gives you and your AI agent everything to work with them. Claude Code, Codex, Cursor or
-any MCP client get the same 23 tools on every device.
+any MCP client get the same 27 tools on every device.
 
 | | |
 |---|---|
-| AI control | Screenshots, taps, swipes, typing, opening apps, tapping visible text (on-device OCR) |
-| Build and run | Install builds, launch apps with arguments and environment, open deep links |
-| Debug | Logs and crash reports of the apps you launch |
+| AI control | Screenshots, taps, swipes, typing, opening apps, tapping visible text (on-device OCR); on simulators and Android also the UI tree, tapping by accessibility identifier |
+| Build and run | Install builds, launch apps with arguments and environment, open deep links, by agent or in the app's Apps area |
+| Debug | Logs and crash reports of the apps you launch; Diagnose checks and fixes an iPhone's connection |
+| Flows | Record what you or an agent do, replay it from the app, an agent or CI (`Mobdev flow`) |
 | Test and research | [Skills](skills/README.md) for the dev loop, smoke tests, onboarding audits and competitor research |
 | Live mirror | Click, swipe and type on any device from the Mac |
 | Remote | Agents on other machines reach your devices through a hosted or self-hosted relay |
@@ -47,7 +48,8 @@ open build/Mobdev.app
 ```
 
 Then plug in the iPhone, pair it over Bluetooth and turn on AssistiveTouch with Snap to Item off.
-The app walks through it; details are in [`macos/README.md`](macos/README.md).
+The app walks through it; details are in [`macos/README.md`](macos/README.md). Without an iPhone,
+choose **Simulators and Android Only** on the welcome page.
 
 Remote access is optional. Create an access token at [mobdev.sh](https://mobdev.sh/dashboard) and
 click “Open in Mobdev”, or run [your own relay](relay/README.md).
