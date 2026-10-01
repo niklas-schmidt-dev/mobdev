@@ -1,7 +1,10 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
+import type { CSSProperties } from "react";
 import { FREE_PLAN, PRO_PLAN, allowanceText } from "../../shared/plans";
 import { AppMock } from "../components/app-mock";
+import { LitText, Tilt, useReveal } from "../components/scroll-effects";
 import { Code, Icon, Page, buttonPrimary, buttonSecondary, moreLink } from "../components/site";
+import { Story } from "../components/story";
 import { GITHUB_URL } from "../lib/releases";
 
 export const Route = createFileRoute("/")({
@@ -141,6 +144,9 @@ const faqs = [
   ],
 ] as const;
 
+/** Marks an element to fade in as it scrolls into view; `order` staggers the items of a grid. */
+const reveal = (order = 0) => ({ "data-reveal": "", style: { "--reveal-delay": `${order * 70}ms` } as CSSProperties });
+
 /** A gray section; in dark mode it turns into the page with hairlines above and below. */
 const mistSection = "bg-mist dark:border-y dark:border-line dark:bg-page";
 /** A card on a white section, or a well inside a card. */
@@ -149,49 +155,31 @@ const mistCard = "rounded-3xl bg-mist p-8 dark:inset-ring dark:inset-ring-white/
 const whiteCard = "rounded-3xl bg-card p-8 dark:inset-ring dark:inset-ring-white/5";
 
 function Home() {
+  useReveal();
   return (
     <Page>
-      {/* Hero */}
-      <section className="px-5 pb-24 pt-20 text-center sm:pt-28">
-        <p className="text-[21px] font-semibold">Mobdev for Mac</p>
-        <h1 className="headline text-balance mx-auto mt-2 max-w-4xl text-[44px] sm:text-[80px]">
-          Mobile development.
-          <br />
-          All in one app.
-        </h1>
-        <p className="text-balance mx-auto mt-6 max-w-2xl text-[19px] leading-[1.45] text-muted sm:text-[21px]">
-          Let AI agents drive your phones, install and debug your builds, run smoke tests and research the App Store.
-          On your iPhone, iOS simulators and Android, from one native Mac app. Free and open source.
-        </p>
-        <div className="mt-9 flex flex-wrap items-center justify-center gap-x-7 gap-y-4">
-          <a href="/download" className={buttonPrimary}>
-            Download for Mac
-          </a>
-          <a href="#toolkit" className={moreLink}>
-            See what’s inside ›
-          </a>
-        </div>
-        <p className="mt-5 text-[13px] text-faint">Free. Updates itself. Requires macOS 26.</p>
-        <div className="mt-16 sm:mt-20">
-          <AppMock />
-        </div>
-      </section>
+      <Story />
 
       {/* The toolkit at a glance */}
       <section id="toolkit" className={`scroll-mt-12 px-5 py-24 sm:py-32 ${mistSection}`}>
         <div className="mx-auto max-w-5xl">
-          <h2 className="headline text-balance mx-auto max-w-3xl text-center text-[40px] sm:text-[56px]">
+          <h2 {...reveal()} className="headline text-balance mx-auto max-w-3xl text-center text-[40px] sm:text-[56px]">
             One app.
             <br />
             Every step.
           </h2>
-          <p className="text-balance mx-auto mt-6 max-w-2xl text-center text-[19px] leading-[1.45] text-muted">
+          <p {...reveal(1)} className="text-balance mx-auto mt-6 max-w-2xl text-center text-[19px] leading-[1.45] text-muted">
             Mobdev covers everything that happens on the device, for you and for your agent. Keep building the way you
             do; Mobdev takes it from there.
           </p>
-          <ul className="mt-14 grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-4">
-            {toolkit.map((item) => (
-              <li key={item.title}>
+          <div className="mt-14 sm:mt-20">
+            <Tilt>
+              <AppMock />
+            </Tilt>
+          </div>
+          <ul className="mt-14 grid grid-cols-2 gap-3 sm:mt-20 sm:gap-5 lg:grid-cols-4">
+            {toolkit.map((item, index) => (
+              <li key={item.title} {...reveal(index % 4)}>
                 <a
                   href={item.href}
                   className="flex h-full flex-col rounded-3xl bg-card p-5 transition-transform duration-200 hover:scale-[1.02] motion-reduce:hover:scale-100 sm:p-7 dark:inset-ring dark:inset-ring-white/5"
@@ -209,18 +197,18 @@ function Home() {
       {/* Devices */}
       <section id="devices" className="scroll-mt-12 px-5 py-24 sm:py-32">
         <div className="mx-auto max-w-5xl">
-          <h2 className="headline text-balance max-w-3xl text-[40px] sm:text-[56px]">
-            iPhone, Simulator, Android.
+          <h2 {...reveal()} className="headline text-balance max-w-3xl text-[40px] sm:text-[56px]">
+            Plug it in.
             <br />
-            One list.
+            It shows up.
           </h2>
           <p className="text-balance mt-6 max-w-2xl text-[19px] leading-[1.45] text-muted">
             Plug in an iPhone, boot a simulator or start an emulator, and it shows up in Mobdev. Every device takes the
             same 23 tools, so one agent can test on all of them in one session.
           </p>
           <div className="mt-14 grid grid-cols-1 gap-5 md:grid-cols-3">
-            {devices.map((device) => (
-              <div key={device.title} className={`flex flex-col ${mistCard}`}>
+            {devices.map((device, index) => (
+              <div key={device.title} {...reveal(index)} className={`flex flex-col ${mistCard}`}>
                 <Icon name={device.icon} className="size-8 text-tint" />
                 <h3 className="mt-6 text-[21px] font-semibold tracking-tight">{device.title}</h3>
                 <p className="mt-2 flex-1 text-[17px] leading-[1.47] text-muted">{device.body}</p>
@@ -235,16 +223,17 @@ function Home() {
 
       {/* Statement */}
       <section className="bg-black px-5 py-28 text-center text-white sm:py-40 dark:border-b dark:border-line">
-        <p className="headline text-balance mx-auto max-w-4xl text-[40px] sm:text-[64px]">
-          Every phone you own.
-          <br />
-          Every tool you need.
-          <br />
-          <span className="bg-gradient-to-r from-[#2997ff] via-[#a78bfa] to-[#ff7ab8] bg-clip-text text-transparent">
-            No per-device fees.
-          </span>
-        </p>
-        <p className="text-balance mx-auto mt-8 max-w-xl text-[19px] leading-[1.45] text-[#a1a1a6]">
+        <LitText
+          className="headline text-balance mx-auto max-w-4xl text-[40px] sm:text-[64px]"
+          parts={[
+            "Every phone you own.",
+            "\n",
+            "Every tool you need.",
+            "\n",
+            <span className="shine bg-clip-text text-transparent">No per-device fees.</span>,
+          ]}
+        />
+        <p {...reveal()} className="text-balance mx-auto mt-8 max-w-xl text-[19px] leading-[1.45] text-[#a1a1a6]">
           You bring the Mac and the phones. Mobdev brings the rest, free and open source.
         </p>
       </section>
@@ -252,8 +241,8 @@ function Home() {
       {/* AI control */}
       <section id="agents" className="scroll-mt-12 px-5 py-24 sm:py-32">
         <div className="mx-auto max-w-5xl">
-          <p className="text-[17px] font-semibold text-tint">AI control</p>
-          <h2 className="headline text-balance mt-2 max-w-3xl text-[40px] sm:text-[56px]">
+          <p {...reveal()} className="text-[17px] font-semibold text-tint">AI control</p>
+          <h2 {...reveal()} className="headline text-balance mt-2 max-w-3xl text-[40px] sm:text-[56px]">
             Hand every phone
             <br />
             to your agent.
@@ -305,8 +294,8 @@ function Home() {
       {/* Build, run, debug */}
       <section id="build" className={`scroll-mt-12 px-5 py-24 sm:py-32 ${mistSection}`}>
         <div className="mx-auto max-w-5xl">
-          <p className="text-[17px] font-semibold text-tint">Build, run and debug</p>
-          <h2 className="headline text-balance mt-2 max-w-3xl text-[40px] sm:text-[56px]">
+          <p {...reveal()} className="text-[17px] font-semibold text-tint">Build, run and debug</p>
+          <h2 {...reveal()} className="headline text-balance mt-2 max-w-3xl text-[40px] sm:text-[56px]">
             Install. Run. Debug.
             <br />
             On the device.
@@ -360,8 +349,8 @@ function Home() {
       {/* Test and research */}
       <section id="test" className="scroll-mt-12 px-5 py-24 sm:py-32">
         <div className="mx-auto max-w-5xl">
-          <p className="text-[17px] font-semibold text-tint">Test and research</p>
-          <h2 className="headline text-balance mt-2 max-w-3xl text-[40px] sm:text-[56px]">
+          <p {...reveal()} className="text-[17px] font-semibold text-tint">Test and research</p>
+          <h2 {...reveal()} className="headline text-balance mt-2 max-w-3xl text-[40px] sm:text-[56px]">
             Ask for a test.
             <br />
             Get a report.
@@ -374,8 +363,8 @@ function Home() {
             <Code>npx skills add niklas-schmidt-dev/mobdev</Code>
           </div>
           <div className="mt-14 grid grid-cols-1 gap-5 md:grid-cols-2">
-            {skills.map((skill) => (
-              <div key={skill.title} className={`flex flex-col ${mistCard}`}>
+            {skills.map((skill, index) => (
+              <div key={skill.title} {...reveal(index % 2)} className={`flex flex-col ${mistCard}`}>
                 <Icon name={skill.icon} className="size-8 text-tint" />
                 <h3 className="mt-6 text-[21px] font-semibold tracking-tight">{skill.title}</h3>
                 <p className="mt-2 flex-1 text-[17px] leading-[1.47] text-muted">{skill.body}</p>
@@ -391,7 +380,7 @@ function Home() {
       {/* At your desk, or anywhere */}
       <section id="desk" className={`scroll-mt-12 px-5 py-24 sm:py-32 ${mistSection}`}>
         <div className="mx-auto max-w-5xl">
-          <h2 className="headline text-balance max-w-3xl text-[40px] sm:text-[56px]">
+          <h2 {...reveal()} className="headline text-balance max-w-3xl text-[40px] sm:text-[56px]">
             At your desk.
             <br />
             Or anywhere.
@@ -433,13 +422,13 @@ function Home() {
       {/* Coming next */}
       <section id="next" className="scroll-mt-12 px-5 py-24 sm:py-32">
         <div className="mx-auto max-w-5xl">
-          <h2 className="headline text-balance mx-auto max-w-3xl text-center text-[40px] sm:text-[56px]">Coming next.</h2>
+          <h2 {...reveal()} className="headline text-balance mx-auto max-w-3xl text-center text-[40px] sm:text-[56px]">Coming next.</h2>
           <p className="text-balance mx-auto mt-6 max-w-2xl text-center text-[19px] leading-[1.45] text-muted">
             The toolkit keeps growing. Free, like everything else.
           </p>
           <ul className="mt-14 grid grid-cols-1 gap-5 md:grid-cols-3">
-            {roadmap.map((item) => (
-              <li key={item.title} className={mistCard}>
+            {roadmap.map((item, index) => (
+              <li key={item.title} {...reveal(index)} className={mistCard}>
                 <div className="flex items-start justify-between gap-4">
                   <Icon name={item.icon} className="size-8 text-tint" />
                   <span
@@ -464,7 +453,7 @@ function Home() {
       {/* Privacy */}
       <section className={`px-5 py-24 text-center sm:py-32 ${mistSection}`}>
         <Icon name="lock" className="mx-auto size-10 text-ink" />
-        <h2 className="headline text-balance mx-auto mt-6 max-w-3xl text-[40px] sm:text-[56px]">
+        <h2 {...reveal()} className="headline text-balance mx-auto mt-6 max-w-3xl text-[40px] sm:text-[56px]">
           Your screen stays on your Mac.
         </h2>
         <p className="text-balance mx-auto mt-6 max-w-2xl text-[19px] leading-[1.45] text-muted">
@@ -479,7 +468,7 @@ function Home() {
       {/* Pricing */}
       <section id="pricing" className="scroll-mt-12 px-5 py-24 sm:py-32">
         <div className="mx-auto max-w-5xl">
-          <h2 className="headline text-balance mx-auto max-w-3xl text-center text-[40px] sm:text-[56px]">
+          <h2 {...reveal()} className="headline text-balance mx-auto max-w-3xl text-center text-[40px] sm:text-[56px]">
             Free. For every phone
             <br />
             you own.
@@ -547,7 +536,7 @@ function Home() {
       {/* FAQ */}
       <section className={`px-5 py-24 sm:py-32 ${mistSection}`}>
         <div className="mx-auto max-w-3xl">
-          <h2 className="headline text-center text-[40px] sm:text-[56px]">Questions? Answers.</h2>
+          <h2 {...reveal()} className="headline text-center text-[40px] sm:text-[56px]">Questions? Answers.</h2>
           <div className="mt-12 divide-y divide-line border-y border-line">
             {faqs.map(([question, answer]) => (
               <details key={question} className="group">
@@ -569,7 +558,7 @@ function Home() {
 
       {/* Closing */}
       <section className="px-5 py-24 text-center sm:py-32">
-        <h2 className="headline text-balance mx-auto max-w-3xl text-[40px] sm:text-[56px]">
+        <h2 {...reveal()} className="headline text-balance mx-auto max-w-3xl text-[40px] sm:text-[56px]">
           Every phone.
           <br />
           One toolkit.
