@@ -181,6 +181,17 @@ public final class SimulatorDevice: Device, @unchecked Sendable {
         try await control.activate(app.bundleID)
         return "Opened \(app.name) (\(app.bundleID))."
     }
+
+    /// The frontmost app's accessibility elements, read off the cooperative threads since each
+    /// element is a round trip to the simulator.
+    public func uiTree() async throws -> [UIElement]? {
+        let kit = self.kit, id = self.id
+        return try await withCheckedThrowingContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                continuation.resume(with: Result { try kit.elements(id) })
+            }
+        }
+    }
 }
 
 /// Picks the app a name means: the exact name or bundle ID, then the one whose bundle ID ends in

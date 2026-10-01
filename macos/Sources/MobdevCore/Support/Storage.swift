@@ -94,6 +94,9 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var hostName = AppSettings.defaultHostName
     /// Lists booted iOS simulators and Android devices next to iPhones.
     public var emulatorsEnabled = true
+    /// Chosen on the welcome page: simulators and Android only, so the setup assistant does not
+    /// open by itself and nothing asks for camera or Bluetooth access until an iPhone is set up.
+    public var iPhoneSetupDeferred = false
 
     public init() {}
 
@@ -115,6 +118,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         relayAccessToken = try container.decodeIfPresent(String.self, forKey: .relayAccessToken) ?? ""
         hostName = try container.decodeIfPresent(String.self, forKey: .hostName) ?? defaults.hostName
         emulatorsEnabled = try container.decodeIfPresent(Bool.self, forKey: .emulatorsEnabled) ?? true
+        iPhoneSetupDeferred = try container.decodeIfPresent(Bool.self, forKey: .iPhoneSetupDeferred) ?? false
     }
 
     public static func load() -> AppSettings {

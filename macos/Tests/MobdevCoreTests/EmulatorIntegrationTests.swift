@@ -110,6 +110,22 @@ import Testing
         #expect(typed.contains("fixture: submitted 42 zyx@mobdev.dev"))
         cursor = try await session.cursor("dev.mobdev.fixture")
 
+        // The element tree names controls by their accessibility identifiers.
+        let tree = try await session.call("ui_tree")
+        #expect(tree.text.contains("Button \"Ping\" id=fixture.ping"), "\(tree.text)")
+        #expect(tree.text.contains("id=fixture.field"))
+        let pinged = try await session.call("tap_element", ["id": "fixture.ping"])
+        #expect(!pinged.isError)
+        _ = try await session.waitForLog("dev.mobdev.fixture", containing: "fixture: ping", after: cursor)
+        cursor = try await session.cursor("dev.mobdev.fixture")
+
+        // The same as a flow, which waits for what it taps.
+        let flow = try await session.call(
+            "run_flow", ["steps": [["tap_element": ["text": "Ping"]], ["wait_for_element": ["id": "fixture.field"]]]])
+        #expect(!flow.isError, "\(flow.text)")
+        _ = try await session.waitForLog("dev.mobdev.fixture", containing: "fixture: ping", after: cursor)
+        cursor = try await session.cursor("dev.mobdev.fixture")
+
         // Swiping the list reveals later rows.
         try await session.call(
             "swipe",
@@ -171,6 +187,8 @@ import Testing
         #expect(opened.text.contains("com.android.settings"))
         let visible = try await session.call("wait_for_text", ["text": "Network", "timeout": 10])
         #expect(!visible.isError)
+        let tree = try await session.call("ui_tree", ["contains": "network"])
+        #expect(tree.text.contains("\"Network & internet\" id=android:id/title"), "\(tree.text)")
         let scrolled = try await session.call("scroll", ["direction": "down", "amount": 8])
         #expect(!scrolled.isError)
         try await session.call("home")
@@ -211,7 +229,8 @@ import Testing
         try await session.call("stop_app", ["bundle_id": "com.android.settings"])
         try await session.call("open_app", ["name": "Settings"])
         _ = try await session.call("wait_for_text", ["text": "Network", "timeout": 10])
-        let search = try await session.call("tap_text", ["text": "Search Settings"])
+        // The search bar is a clickable layout without a label of its own, found by its resource id.
+        let search = try await session.call("tap_element", ["id": "search_action_bar"])
         #expect(!search.isError)
         // The search page takes over the screen; the main page's "Network" is gone once it is up.
         try await session.call("wait_for_text", ["text": "Network", "gone": true, "timeout": 10])

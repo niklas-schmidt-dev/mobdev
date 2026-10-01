@@ -399,6 +399,8 @@ struct DeviceInfoView: View {
                     StepRow(
                         title: "Re-pair", detail: "If taps stop working, forget this Mac on the iPhone and pair again.",
                         state: .info)
+                    Button("Diagnose…") { diagnosing = true }
+                        .help("Check screen, USB, Bluetooth and AssistiveTouch, with a fix for each")
                 }
                 if !state.isConnected {
                     Section {
@@ -410,8 +412,11 @@ struct DeviceInfoView: View {
             }
             .formStyle(.grouped)
             .scrollContentBackground(compact ? .hidden : .automatic)
+            .sheet(isPresented: $diagnosing) { DiagnosisView(id: id) }
         }
     }
+
+    @State private var diagnosing = false
 
     private func screenText(_ state: DeviceState) -> String {
         if case .connected(_, let width, let height) = state.status.screen, width > 0 { return "Connected · \(width) × \(height)" }
@@ -528,7 +533,7 @@ struct ActivityRow: View {
                 Text(entry.date, format: .dateTime.hour().minute().second())
                     .monospacedDigit()
                     .foregroundStyle(.secondary)
-                Text(entry.source == "relay" ? "Remote" : "This Mac")
+                Text(entry.source == "relay" ? "Remote" : entry.source == "app" ? "You" : "This Mac")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
         }
@@ -565,6 +570,10 @@ struct ToolIcon: View {
         case "read_screen": "text.viewfinder"
         case "find_text": "magnifyingglass"
         case "wait_for_text": "hourglass"
+        case "ui_tree": "list.bullet.indent"
+        case "tap_element": "hand.point.up.braille.fill"
+        case "wait_for_element": "hourglass.bottomhalf.filled"
+        case "run_flow": "play.rectangle.fill"
         case "list_devices": "iphone.gen3"
         case "list_apps": "apps.iphone"
         case "install_app": "arrow.down.app.fill"
@@ -581,10 +590,11 @@ struct ToolIcon: View {
     static func color(for tool: String) -> Color {
         switch tool {
         case "tap", "long_press", "swipe", "scroll": .blue
-        case "tap_text": .purple
+        case "tap_text", "tap_element": .purple
         case "type_text", "press_key": .indigo
         case "home", "open_app": .green
-        case "screenshot", "read_screen", "find_text", "wait_for_text": .orange
+        case "screenshot", "read_screen", "find_text", "wait_for_text", "ui_tree", "wait_for_element": .orange
+        case "run_flow": .pink
         case "install_app", "uninstall_app", "launch_app", "stop_app", "open_url": .teal
         case "list_apps", "logs", "crash_reports": .brown
         default: .gray

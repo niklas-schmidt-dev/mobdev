@@ -157,6 +157,20 @@ public final class DeviceTools: ToolCalling {
 
     public func phone(for device: String?) throws -> PhoneBackend { try resolve(device) }
 
+    /// The device's flow recorder, which the app starts and stops. Nil for an unknown device.
+    public func recorder(for device: String) -> FlowRecorder? {
+        guard let device = allDevices.first(where: { $0.id == device }) else { return nil }
+        return tools(for: device).recorder
+    }
+
+    /// Runs a flow on one device as `run_flow` does, reporting each step as it finishes.
+    public func run(
+        _ flow: Flow, on device: String?, source: String,
+        progress: (@Sendable (Int, Flow.Step, ToolOutput, TimeInterval) -> Void)? = nil
+    ) async throws -> FlowResult {
+        try await tools(for: resolve(device)).run(flow, source: source, progress: progress)
+    }
+
     /// iPhones first, then simulators, then Android devices.
     public var allDevices: [any Device] { hub.devices + (emulators?.devices ?? []) }
 

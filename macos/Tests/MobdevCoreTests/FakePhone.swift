@@ -23,18 +23,23 @@ final class FakePhone: PhoneBackend, @unchecked Sendable {
     /// What `checkPointer` finds; the last result also shows in `status()`.
     let pointerCheckResult: PointerBehavior?
     let pointer = Locked<PointerBehavior?>(nil)
+    /// What `uiTree` returns; nil like an iPhone.
+    let tree: [UIElement]?
 
     /// Text lines drawn at (x, y) in pixels from the top-left of a 1179×2556 screen.
     init(
         lines: [(String, CGFloat, CGFloat)], bluetoothConnected: Bool = true, layout: KeyboardLayout = .us,
-        apps: AppBackend? = nil, pointerCheckResult: PointerBehavior? = nil
+        apps: AppBackend? = nil, pointerCheckResult: PointerBehavior? = nil, tree: [UIElement]? = nil
     ) {
         image = Self.render(lines: lines, width: 1179, height: 2556)
         self.bluetoothConnected = bluetoothConnected
         self.layout = layout
         self.apps = apps
         self.pointerCheckResult = pointerCheckResult
+        self.tree = tree
     }
+
+    func uiTree() async throws -> [UIElement]? { tree }
 
     func status() -> PhoneStatus {
         PhoneStatus(

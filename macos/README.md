@@ -1,11 +1,12 @@
 # Mobdev for Mac
 
-Let an AI agent use a real iPhone from your Mac. Free, open source, about 2 MB, no account.
+The Mobdev app: your iPhones, iOS simulators and Android devices in one window, for you and your AI
+agent. Free, open source, about 2 MB, no account.
 
 Mobdev reads the iPhone screen over the USB cable and taps and types through Bluetooth, posing as a
-keyboard and pointer. Nothing is installed on the phone: no developer mode, no jailbreak, no
-simulator. Agents get an MCP server and a small HTTP API. An optional relay lets agents elsewhere
-reach the phone.
+keyboard and pointer. Nothing is installed on the phone: no developer mode, no jailbreak. Booted
+simulators and Android devices take the same tools. Agents get an MCP server and a small HTTP API.
+An optional relay lets agents elsewhere reach the devices.
 
 ```
               USB cable: screen frames (like QuickTime)
@@ -48,7 +49,8 @@ automatic updates. Both apps share the Mac's Bluetooth, so quit one before testi
 
 On first launch a setup assistant walks through these steps. It asks for camera and Bluetooth
 access on the page that explains them and checks each step off as soon as the Mac detects it. Open
-it again with **Mobdev › Set Up iPhone…**.
+it again with **Mobdev › Set Up iPhone…**. Without an iPhone, choose **Simulators and Android
+Only** on the welcome page: nothing asks for camera or Bluetooth access until you set one up.
 
 1. Plug it in, unlock it and tap **Trust**. If the Mac asks to allow the accessory, click **Allow**.
    The screen appears in Mobdev.
@@ -71,6 +73,15 @@ it again with **Mobdev › Set Up iPhone…**.
 The mirror in the app is live: click to tap, drag to swipe, scroll, and type while it has focus.
 ⌘V types the Mac clipboard on the phone. The inspector on the right shows what is still missing,
 Activity lists every agent action, and Settings (⌘,) holds the keyboard layout and API token.
+
+- **Apps** (in the inspector) lists the apps installed for development, or all of them. Drop an
+  `.app`, `.ipa` or `.apk` on it to install; launch, stop and remove apps; follow an app's console
+  live, open its crash reports and try deep links. It uses the same tools as agents, so it needs
+  Developer Mode and Xcode for an iPhone, and nothing for simulators and Android.
+- **Diagnose…** (under the setup steps and in the device info) checks the cable, the picture, the
+  iPhone's USB screen interface, macOS's screen capture helper, Bluetooth, AssistiveTouch and
+  Developer Mode, and offers the fix for each, such as restarting a stuck capture helper.
+- **Record** and **Run Flow…** (in the activity header) record and replay flows; see below.
 
 ## Connect an agent
 
@@ -127,6 +138,10 @@ only device, or the connected iPhone when simulators or Android devices run next
 | `find_text` | `text` | |
 | `tap_text` | `text`, `index` | Taps a visible label |
 | `wait_for_text` | `text`, `timeout`, `gone` | |
+| `ui_tree` | `contains`, `all` | Elements from the accessibility tree: role, label, identifier, value, position. Simulators and Android |
+| `tap_element` | `id`, `text`, `index`, `timeout` | Taps an element by identifier or label, waiting up to 5 s for it |
+| `wait_for_element` | `id`, `text`, `timeout`, `gone` | Like `wait_for_text`, from the tree |
+| `run_flow` | `path`, `steps` | Replays a flow and stops at the first failing step |
 | `list_apps` | `all` | Apps installed for development, or every app |
 | `install_app` | `path` | A build from a path on this Mac: `.app`/`.ipa` for iPhone, `.app` for simulators, `.apk` for Android |
 | `uninstall_app` | `bundle_id` | Only apps installed for development |
@@ -166,7 +181,7 @@ xcodebuild -scheme MyApp -destination 'generic/platform=iOS' -derivedDataPath bu
 ### Simulators and Android
 
 Booted iOS simulators and Android emulators and phones appear next to your iPhones, in the app and
-in `list_devices`, and take the same 23 tools. Nothing needs to be set up on them: no cable, no
+in `list_devices`, and take the same tools. Nothing needs to be set up on them: no cable, no
 Bluetooth, no Developer Mode. Turn them off in Settings › General if you only want iPhones.
 
 - **iOS Simulator** (needs Xcode): Mobdev reads the screen from the simulator's framebuffer and
@@ -181,6 +196,75 @@ Bluetooth, no Developer Mode. Turn them off in Settings › General if you only 
   `press_key` with `escape` is Back. `open_app` matches launchable package names ("Settings" opens
   `com.android.settings`). `launch_app` follows the app's logcat, `crash_reports` reads the crash
   buffer, `install_app` takes an `.apk`; `arguments` and `environment` are ignored.
+
+### UI tree
+
+On simulators and Android, `ui_tree` lists the elements on screen from the accessibility tree:
+role, label, identifier, value and position in screenshot pixels. `tap_element` and
+`wait_for_element` find an element by identifier (`accessibilityIdentifier`, or the resource id on
+Android, whole or its last part) or by label. That is steadier than OCR and finds buttons that show
+only an icon. Simulators are read through macOS's accessibility translation, as idb does; Android
+through `uiautomator dump`, which takes about two seconds. An iPhone offers no such tree without a
+test runner installed on it, so there the tools say to use `read_screen` and `tap_text`.
+
+### Flows and CI
+
+A flow is a list of tool calls saved as JSON, one step per line; a bare name is a tool without
+arguments:
+
+```json
+{
+  "name": "Sign in",
+  "steps": [
+    {"install_app": {"path": "build/Build/Products/Debug-iphonesimulator/MyApp.app"}},
+    {"launch_app": {"bundle_id": "com.example.MyApp", "restart": true}},
+    {"tap_element": {"id": "email"}},
+    {"type_text": {"text": "me@example.com", "submit": true}},
+    {"wait_for_element": {"text": "Welcome"}},
+    "home"
+  ]
+}
+```
+
+- **Record** in a device's activity collects every call an agent or you make on it, and clicks,
+  drags and keys in the app's window. On simulators and Android, a click on an element with a
+  unique identifier or label is saved as `tap_element`, so the flow survives layout changes;
+  anything else as `tap` at the same point. **Save…** writes the file.
+- **Run Flow…**, the `run_flow` tool (`path` to a file on the Mac, or `steps` inline) and
+  `Mobdev flow` replay it, stop at the first step that fails and say which. `tap_element` waits up
+  to 5 s for its element, so a flow rarely needs explicit waits.
+- `Mobdev flow` runs without the app, for scripts and CI, on booted simulators and Android devices:
+
+  ```sh
+  /Applications/Mobdev.app/Contents/MacOS/Mobdev flow sign-in.json --device <udid> --artifacts out
+  ```
+
+  It prints a line per step and exits 0 when every step passed, 1 when one failed and 2 when the
+  flow could not start. `--artifacts` keeps the activity log, copied crash reports and, after a
+  failure, `failure.png`. iPhones need the running app: call `run_flow` over MCP or the HTTP API.
+
+A GitHub Actions job on a macOS 26 runner with Xcode:
+
+```yaml
+- name: Boot a simulator
+  run: |
+    UDID=$(xcrun simctl create ci "iPhone 17")
+    xcrun simctl bootstatus "$UDID" -b
+    echo "UDID=$UDID" >> "$GITHUB_ENV"
+- name: Build
+  run: xcodebuild -scheme MyApp -destination "id=$UDID" -derivedDataPath build build
+- name: Run flows
+  run: |
+    curl -fsSL -o Mobdev.dmg https://github.com/niklas-schmidt-dev/mobdev/releases/latest/download/Mobdev.dmg
+    hdiutil attach -nobrowse -mountpoint /tmp/mobdev Mobdev.dmg
+    /tmp/mobdev/Mobdev.app/Contents/MacOS/Mobdev flow flows/sign-in.json --device "$UDID" --artifacts flow-artifacts
+- uses: actions/upload-artifact@v4
+  if: failure()
+  with: { name: flow-artifacts, path: flow-artifacts }
+```
+
+In CI, prefer `tap_element` and `wait_for_element` to the OCR tools: Vision text recognition does
+not return on GitHub's virtualized Macs, and Mobdev gives up on it after 90 seconds.
 
 ## HTTP API
 
@@ -244,6 +328,9 @@ the Mac.
   it, as it did for idb and AXe. Simulator screens show the main display only.
 - Android types ASCII text only (`input text`), and adb does not know app names, so `open_app`
   matches package names.
+- `ui_tree` reads the simulator through macOS's private accessibility translation; tested with
+  Xcode 27 on macOS 27. `Mobdev flow` is tested on a Mac, not yet on GitHub's hosted runners.
+- Recording does not capture the scroll wheel; drag to scroll while recording.
 
 ## Development
 

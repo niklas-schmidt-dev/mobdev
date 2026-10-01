@@ -214,6 +214,23 @@ public final class AndroidDevice: Device, @unchecked Sendable {
         return true
     }
 
+    /// uiautomator's dump of the window hierarchy, in about two seconds. Its bounds are pixels of
+    /// the current orientation, like the screenshot.
+    public func uiTree() async throws -> [UIElement]? {
+        let output = try await adb.shell(
+            id, "uiautomator dump /sdcard/mobdev-ui.xml >/dev/null && cat /sdcard/mobdev-ui.xml", timeout: 30)
+        guard let start = output.range(of: "<?xml") ?? output.range(of: "<hierarchy"), let size = size() else {
+            let reason = output.trimmingCharacters(in: .whitespacesAndNewlines)
+            throw DeveloperError(
+                "uiautomator could not read the screen\(reason.isEmpty ? "" : ": \(reason)"). Try again when the screen stops moving.")
+        }
+        guard
+            let elements = AndroidHierarchyParser.parse(
+                Data(output[start.lowerBound...].utf8), width: size.width, height: size.height)
+        else { throw DeveloperError("uiautomator returned a hierarchy Mobdev cannot read.") }
+        return elements
+    }
+
     /// adb does not know app names, so the name is matched against launchable packages: "Settings"
     /// opens com.android.settings, "Chrome" com.android.chrome.
     public func openApp(named name: String) async throws -> String? {

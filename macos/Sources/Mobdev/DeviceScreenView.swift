@@ -65,10 +65,23 @@ struct DeviceScreenView: View {
 }
 
 enum PanelTab: String, CaseIterable {
-    case activity, info
+    case activity, apps, info
 
-    var title: String { self == .activity ? "Activity" : "Info" }
-    var symbol: String { self == .activity ? "waveform.path.ecg" : "info.circle" }
+    var title: String {
+        switch self {
+        case .activity: "Activity"
+        case .apps: "Apps"
+        case .info: "Info"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .activity: "waveform.path.ecg"
+        case .apps: "square.grid.2x2"
+        case .info: "info.circle"
+        }
+    }
 }
 
 /// The inspector beside the phone, with icon tabs like Xcode's: activity and device info.
@@ -99,6 +112,7 @@ private struct DevicePanel: View {
             Divider().padding(.horizontal, 14)
             switch tab {
             case .activity: ActivityPane(id: id)
+            case .apps: AppsPane(id: id)
             case .info: DeviceInfoView(id: id, compact: true)
             }
         }
@@ -134,6 +148,7 @@ private struct ActivityPane: View {
                         .monospacedDigit()
                 }
                 Spacer()
+                FlowButtons(id: id)
                 Button("Clear", systemImage: "trash") {
                     model.clearActivity(device: id)
                     pager.reset()
@@ -146,6 +161,11 @@ private struct ActivityPane: View {
             .padding(.horizontal, 18)
             .padding(.top, 16)
             .padding(.bottom, 6)
+            if model.recording.contains(id) {
+                RecordingBar(id: id)
+                    .padding(.horizontal, 14)
+                    .padding(.bottom, 6)
+            }
             if entries.isEmpty {
                 Text("Every action an agent takes on this device appears here and stays after you quit.")
                     .font(.callout)
@@ -215,7 +235,16 @@ private struct PhoneStage: View {
                 PhoneMirrorView(
                     id: id, session: model.hardware(id)?.capture.session, input: model.hardware(id)?.input,
                     layout: model.settings.keyboardLayout, focused: $focused,
-                    onDrag: { model.checkPointerAfterDrag(id, at: $0) }
+                    onDrag: { model.checkPointerAfterDrag(id, at: $0) },
+                    onInput: { input in
+                        switch input {
+                        case .tap(let point): model.recordTap(id, at: point)
+                        case .swipe(let start, let end, let duration):
+                            model.recordSwipe(id, from: start, to: end, duration: duration)
+                        case .text(let text): model.recordText(id, text)
+                        case .key(let stroke): model.recordKey(id, stroke)
+                        }
+                    }
                 )
                 .frame(width: screen.width, height: screen.height)
                 .clipShape(.rect(cornerRadius: radius, style: .continuous))
@@ -423,11 +452,21 @@ struct SetupSteps: View {
                 Button("Use This Connection") { model.useBluetoothHost(host.id, for: id) }
             }
             StepRow(title: "AssistiveTouch", detail: assistiveTouchDetail, state: assistiveTouchState)
-            Button("Open Setup Assistant…") { model.showsOnboarding = true }
-                .buttonStyle(.glass)
+            HStack {
+                Button("Open Setup Assistant…") { model.showsOnboarding = true }
+                    .buttonStyle(.glass)
+                if model.state(id) != nil {
+                    Button("Diagnose…") { diagnosing = true }
+                        .buttonStyle(.glass)
+                        .help("Check screen, USB, Bluetooth and AssistiveTouch, with a fix for each")
+                }
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .sheet(isPresented: $diagnosing) { DiagnosisView(id: id) }
     }
+
+    @State private var diagnosing = false
 
     private var screenState: StepRow.State {
         switch status.screen {

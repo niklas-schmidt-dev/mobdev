@@ -69,6 +69,8 @@ public protocol PhoneBackend: Sendable {
     func openApp(named name: String) async throws -> String?
     /// Types text as a whole. False: the tools type it key by key with the keyboard layout.
     func typeText(_ text: String) async throws -> Bool
+    /// The elements on screen from the accessibility tree. Nil where there is none (an iPhone).
+    func uiTree() async throws -> [UIElement]?
 }
 
 extension PhoneBackend {
@@ -76,4 +78,5 @@ extension PhoneBackend {
     public func checkPointer(at point: NormalizedPoint) async throws -> PointerBehavior? { nil }
     public func openApp(named name: String) async throws -> String? { nil }
     public func typeText(_ text: String) async throws -> Bool { false }
+    public func uiTree() async throws -> [UIElement]? { nil }
 }

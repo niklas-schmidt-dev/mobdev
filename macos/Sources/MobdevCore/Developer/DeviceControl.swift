@@ -195,6 +195,20 @@ public final class DeviceControl: AppBackend, @unchecked Sendable {
 
     public var platform: AppPlatform { isSimulator ? .simulator : .iPhone }
 
+    /// Whether Developer Mode is on, from Xcode's device list: true, false, or nil when Xcode or the
+    /// device cannot tell (no Xcode, or never trusted in Xcode).
+    public func developerModeEnabled() async -> Bool? {
+        guard let result = try? await call(["list", "devices"], forDevice: false, timeout: 15) else { return nil }
+        let device = (result["devices"]?.arrayValue ?? []).first {
+            $0["hardwareProperties"]?["udid"]?.stringValue == udid
+        }
+        switch device?["deviceProperties"]?["developerModeStatus"]?.stringValue {
+        case "enabled": return true
+        case "disabled": return false
+        default: return nil
+        }
+    }
+
     public func activate(_ bundleID: String) async throws {
         _ = try await call(["device", "process", "launch"], arguments: [bundleID])
     }

@@ -26,6 +26,11 @@ if CommandLine.arguments.dropFirst().first == "devices" {
     exit(0)
 }
 
+// `Mobdev flow <file.json>` runs a flow on a simulator or Android device without the app, for CI.
+if CommandLine.arguments.dropFirst().first == "flow" {
+    FlowCommand.run(Array(CommandLine.arguments.dropFirst(2)))
+}
+
 if CommandLine.arguments.dropFirst().first == "--version" {
     print("Mobdev \(MCPHandler.serverVersion)")
     exit(0)

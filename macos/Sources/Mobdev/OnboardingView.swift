@@ -152,7 +152,13 @@ struct OnboardingView: View {
 
     private var footer: some View {
         HStack(spacing: 10) {
-            if step != .done {
+            if step == .welcome {
+                // Simulators and Android need no setup, and no camera or Bluetooth access.
+                Button("Simulators and Android Only") { model.useWithoutIPhone() }
+                    .buttonStyle(.glass)
+                    .controlSize(.large)
+                    .keyboardShortcut(.cancelAction)
+            } else if step != .done {
                 Button("Set Up Later") { model.finishOnboarding() }
                     .buttonStyle(.borderless)
                     .foregroundStyle(.secondary)
@@ -190,7 +196,13 @@ struct OnboardingView: View {
         let advance = { go(to: next(step)) }
         switch step {
         case .welcome:
-            return ("Get Started", true, advance)
+            return (
+                "Set Up iPhone", true,
+                {
+                    model.beginIPhoneSetup()
+                    advance()
+                }
+            )
         case .screen:
             if !model.screenStarted { return ("Allow Access", true, model.startScreen) }
             if model.setupScreen == .cameraDenied {
@@ -337,17 +349,21 @@ private struct WelcomePage: View {
             VStack(spacing: 10) {
                 Text("Welcome to \(MobdevPaths.appName)")
                     .font(.largeTitle.weight(.bold))
-                Text("Let AI agents see and use your iPhone.\nSetup takes about two minutes.")
+                Text("Mobile development, all in one app.\nSet up your iPhone in about two minutes.")
                     .font(.title3)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
             }
             VStack(alignment: .leading, spacing: 18) {
-                Feature(symbol: "rectangle.on.rectangle", title: "Sees the screen", detail: "Over the USB cable, like QuickTime.")
-                Feature(symbol: "hand.tap", title: "Taps and types", detail: "As a Bluetooth keyboard and pointer.")
+                Feature(
+                    symbol: "iphone.gen3", title: "Your iPhone",
+                    detail: "Screen over the USB cable, taps over Bluetooth. Nothing to install on it.")
+                Feature(
+                    symbol: "macbook.and.iphone", title: "Simulators and Android",
+                    detail: "Appear by themselves, with nothing to set up.")
                 Feature(
                     symbol: "lock.shield", title: "Stays on your Mac",
-                    detail: "Nothing to install on the iPhone. No account.")
+                    detail: "No account, no telemetry.")
             }
             Spacer(minLength: 12)
         }

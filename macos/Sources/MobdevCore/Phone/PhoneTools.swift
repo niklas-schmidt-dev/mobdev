@@ -50,6 +50,8 @@ public final class PhoneTools: Sendable {
     let phone: PhoneBackend
     private let activity: ActivityLog
     private let settleDelay: TimeInterval
+    /// Collects this device's calls while a flow is being recorded.
+    public let recorder = FlowRecorder()
 
     public init(phone: PhoneBackend, activity: ActivityLog, settleDelay: TimeInterval = 0.6) {
         self.phone = phone
@@ -73,7 +75,10 @@ public final class PhoneTools: Sendable {
         `crash_reports` close the loop for apps you build: install a build, run it, read its output. \
         Booted iOS simulators and Android emulators and phones (through adb) take the same tools with \
         nothing to set up; `list_devices` shows every device and `device` picks one. On Android, \
-        `press_key` escape is Back and `open_app` matches package names such as com.android.settings.
+        `press_key` escape is Back and `open_app` matches package names such as com.android.settings. \
+        On simulators and Android, `ui_tree` lists the elements on screen, and `tap_element` and \
+        `wait_for_element` find them by accessibility identifier or label: prefer them to OCR there. \
+        `run_flow` replays a saved list of tool calls and stops at the first failing step.
         """
 
     /// A tool's input schema. Tools with `screenshot` return a screenshot after acting.
@@ -193,7 +198,7 @@ public final class PhoneTools: Sendable {
                         "timeout": ["type": "number", "description": "Seconds, default 10, at most 60"],
                         "gone": ["type": "boolean"],
                     ], required: ["text"]), readOnly: true),
-        ] + appDefinitions
+        ] + treeDefinitions + appDefinitions + flowDefinitions
     }()
 
     public static func definition(named name: String) -> ToolDefinition? {
@@ -209,7 +214,7 @@ public final class PhoneTools: Sendable {
         // An agent waiting for "Ready." polls status; repeats show as one entry with a count.
         let collapsing = name == "status"
         do {
-            var output = try await run(name, args)
+            var output = try await name == "run_flow" ? runFlowTool(args, source: source) : run(name, args)
             let wantsScreenshot = args.bool("screenshot") ?? screenshotByDefault
             let offersScreenshot = definition.inputSchema["properties"]?["screenshot"] != nil && !definition.readOnly
             if wantsScreenshot, output.image == nil, offersScreenshot {
@@ -218,6 +223,7 @@ public final class PhoneTools: Sendable {
             }
             activity.record(
                 source: source, tool: name, summary: summary(name, args, output), failed: false, collapsing: collapsing)
+            if !output.isError { recorder.record(name, arguments?.objectValue ?? [:]) }
             return output
         } catch {
             let message = String(describing: error)
@@ -372,6 +378,7 @@ public final class PhoneTools: Sendable {
                 try await pause(0.5)
             }
         default:
+            if let output = try await runTreeTool(name, args) { return output }
             return try await runAppTool(name, args)
         }
     }
@@ -425,7 +432,7 @@ public final class PhoneTools: Sendable {
         return (frame, size)
     }
 
-    private func screenshotSize() throws -> (width: Int, height: Int) {
+    func screenshotSize() throws -> (width: Int, height: Int) {
         let status = phone.status()
         guard let frame = status.frameSize else {
             throw ToolFailure("The iPhone screen is not available. \(status.screen.summary).")
@@ -444,7 +451,7 @@ public final class PhoneTools: Sendable {
         return NormalizedPoint(x: x / Double(size.width), y: y / Double(size.height))
     }
 
-    private func requireTouch() throws {
+    func requireTouch() throws {
         let status = phone.status()
         guard status.inputReady else {
             if status.input == .bluetooth { throw HIDError.notConnected }
@@ -456,7 +463,7 @@ public final class PhoneTools: Sendable {
         coordinates(point, try screenshotSize())
     }
 
-    private func coordinates(_ point: NormalizedPoint, _ size: (width: Int, height: Int)) -> String {
+    func coordinates(_ point: NormalizedPoint, _ size: (width: Int, height: Int)) -> String {
         "(\(Int((point.x * Double(size.width)).rounded())), \(Int((point.y * Double(size.height)).rounded())))"
     }
 
@@ -482,12 +489,12 @@ public final class PhoneTools: Sendable {
         }
     }
 
-    private func pause(_ seconds: TimeInterval) async throws {
+    func pause(_ seconds: TimeInterval) async throws {
         try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
     }
 
     /// Also used for coordinates that failed validation, so it must not trap on huge values.
-    private func format(_ value: Double) -> String {
+    func format(_ value: Double) -> String {
         if value.rounded() == value, let integer = Int(exactly: value) { return String(integer) }
         return String(format: "%.1f", value)
     }

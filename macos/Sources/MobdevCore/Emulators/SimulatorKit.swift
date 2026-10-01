@@ -142,6 +142,12 @@ final class SimulatorKit: @unchecked Sendable {
         return devices.first { ($0.value(forKey: "UDID") as? NSUUID)?.uuidString == udid }
     }
 
+    /// The frontmost app's accessibility elements. Blocks for a few seconds.
+    func elements(_ udid: String) throws -> [UIElement] {
+        guard let device = device(udid) else { throw DeveloperError("The simulator \(udid) is not booted.") }
+        return try SimulatorAccessibility.shared.get().elements(of: device, udid: udid)
+    }
+
     // MARK: Screen
 
     /// The simulator's main display as an image, read from its framebuffer surface.

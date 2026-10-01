@@ -84,6 +84,8 @@ final class AppModel {
     let hub: DeviceHub
     /// Booted simulators and Android devices.
     let emulators: EmulatorHub
+    /// The tools agents call, which the app's own controls call too.
+    @ObservationIgnored let tools: DeviceTools
     @ObservationIgnored private let router: APIRouter
     @ObservationIgnored private let server: HTTPServer
     /// Where `Mobdev mcp` connects: a Unix socket in the private data directory.
@@ -109,6 +111,7 @@ final class AppModel {
         let emulators = EmulatorHub { signal.fire() }
         self.emulators = emulators
         let tools = DeviceTools(hub: hub, emulators: emulators)
+        self.tools = tools
         let portBox = self.portBox
         let router = APIRouter(tools: tools, token: { tokenBox.get() }, port: { portBox.get() })
         self.router = router
@@ -139,7 +142,7 @@ final class AppModel {
         try? settings.save()
         if DeviceHub.screenAccessDetermined { startScreen() }
         if DeviceHub.bluetoothAccessDetermined { startBluetooth() }
-        showsOnboarding = !screenStarted || !bluetoothStarted
+        showsOnboarding = (!screenStarted || !bluetoothStarted) && !settings.iPhoneSetupDeferred
         do {
             try await server.start()
             portBox.set(server.port)
@@ -379,11 +382,35 @@ final class AppModel {
         }
     }
 
-    /// Closes the setup assistant. Skipped steps start anyway, so macOS asks for what is missing.
+    /// Moves the pointer to the middle without clicking and reads how it reacts (AssistiveTouch).
+    func checkPointer(_ id: String) {
+        guard let device = hardware(id) else { return }
+        Task { _ = try? await device.checkPointer(at: NormalizedPoint(x: 0.5, y: 0.5)) }
+    }
+
+    /// Closes the setup assistant. Skipped steps start anyway, so macOS asks for what is missing,
+    /// unless the welcome page chose simulators and Android only.
     func finishOnboarding() {
         showsOnboarding = false
+        guard !settings.iPhoneSetupDeferred else { return }
         startScreen()
         startBluetooth()
+    }
+
+    /// "Set Up iPhone" on the welcome page: the iPhone steps follow, and their prompts are wanted.
+    func beginIPhoneSetup() {
+        guard settings.iPhoneSetupDeferred else { return }
+        settings.iPhoneSetupDeferred = false
+        save()
+    }
+
+    /// "Simulators and Android Only" on the welcome page: no camera or Bluetooth prompts, and the
+    /// assistant stays closed on later launches. Set Up iPhone… opens it again.
+    func useWithoutIPhone() {
+        settings.iPhoneSetupDeferred = true
+        save()
+        UserDefaults.standard.set(Pane.overview.rawValue, forKey: "selectedPane")
+        showsOnboarding = false
     }
 
     /// Moves the pointer to the middle of the iPhone without tapping. With AssistiveTouch on, iOS
@@ -529,7 +556,83 @@ final class AppModel {
 
     func home(_ id: String) {
         guard let device = device(id) else { return }
+        record(id, "home")
         enqueue(id) { try? await device.press(.home) }
+    }
+
+    /// Runs a tool on a device for the person at the Mac, through the same checks as an agent's
+    /// call. It appears in the activity as "You".
+    func run(_ tool: String, on id: String, _ arguments: [String: JSONValue] = [:]) async -> ToolOutput {
+        var arguments = arguments
+        arguments["device"] = .string(id)
+        do {
+            return try await tools.call(tool, arguments: .object(arguments), source: "app", screenshotByDefault: false)
+        } catch {
+            return ToolOutput(text: String(describing: error), isError: true)
+        }
+    }
+
+    // MARK: Flows
+
+    /// Devices recording a flow. The steps themselves live with the device's tools, which record
+    /// every call an agent or this app makes; clicks and keys in the window are added below.
+    private(set) var recording: Set<String> = []
+
+    func startRecording(_ id: String) {
+        guard let device = device(id), let recorder = tools.recorder(for: id) else { return }
+        // Simulators and Android say what is under a click, so it replays as tap_element.
+        var tree: (@Sendable () async throws -> [UIElement]?)?
+        if device.kind != .iPhone { tree = { try await device.uiTree() } }
+        recorder.start(tree: tree)
+        recording.insert(id)
+    }
+
+    /// Stops recording and returns the steps.
+    func stopRecording(_ id: String) -> [Flow.Step] {
+        recording.remove(id)
+        return tools.recorder(for: id)?.stop() ?? []
+    }
+
+    func recordedStepCount(_ id: String) -> Int { tools.recorder(for: id)?.stepCount ?? 0 }
+
+    private func record(_ id: String, _ tool: String, _ arguments: [String: JSONValue] = [:]) {
+        guard recording.contains(id) else { return }
+        tools.recorder(for: id)?.record(tool, arguments)
+    }
+
+    /// Input from the window, recorded as the tool call that replays it: the mirror of an iPhone
+    /// calls these itself, simulators and Android through `tap`, `swipe`, `type` and `pressKey`.
+    func recordTap(_ id: String, at point: NormalizedPoint) {
+        guard recording.contains(id), let pixels = pixels(point, on: id) else { return }
+        tools.recorder(for: id)?.recordTap(at: point, pixels: pixels)
+    }
+
+    func recordSwipe(_ id: String, from start: NormalizedPoint, to end: NormalizedPoint, duration: TimeInterval) {
+        guard let from = pixels(start, on: id), let to = pixels(end, on: id) else { return }
+        record(
+            id, "swipe",
+            [
+                "from_x": .number(Double(from.x)), "from_y": .number(Double(from.y)), "to_x": .number(Double(to.x)),
+                "to_y": .number(Double(to.y)), "duration": .number((duration * 20).rounded() / 20),
+            ])
+    }
+
+    func recordText(_ id: String, _ text: String) { record(id, "type_text", ["text": .string(text)]) }
+
+    /// Named keys (Return, Escape, arrows) only; characters arrive through `recordText`.
+    func recordKey(_ id: String, _ stroke: KeyStroke) {
+        guard let name = FlowRecorder.keyName(usage: stroke.usage) else { return }
+        let modifiers = ["ctrl", "shift", "alt", "cmd"].filter { stroke.modifiers & KeyboardLayout.modifierBits[$0]! != 0 }
+        var arguments: [String: JSONValue] = ["key": .string(name)]
+        if !modifiers.isEmpty { arguments["modifiers"] = .array(modifiers.map(JSONValue.string)) }
+        record(id, "press_key", arguments)
+    }
+
+    /// A point of the screen in screenshot pixels, as tools take it.
+    private func pixels(_ point: NormalizedPoint, on id: String) -> (x: Int, y: Int)? {
+        guard let frame = device(id)?.status().frameSize else { return nil }
+        let size = ScreenGeometry.screenshotSize(forFrameWidth: frame.width, height: frame.height)
+        return (Int((point.x * Double(size.width)).rounded()), Int((point.y * Double(size.height)).rounded()))
     }
 
     /// The last input queued for each device. Each key press and click becomes a task, and a
@@ -553,9 +656,15 @@ final class AppModel {
         let layout = device.kind == .iPhone ? settings.keyboardLayout : device.status().keyboardLayout
         guard let strokes = try? layout.strokes(typing: text) else {
             // Android types whole text; others need every character on the layout.
-            if device.kind == .android { enqueue(id) { _ = try? await device.typeText(text) } } else { NSSound.beep() }
+            guard device.kind == .android else {
+                NSSound.beep()
+                return
+            }
+            recordText(id, text)
+            enqueue(id) { _ = try? await device.typeText(text) }
             return
         }
+        recordText(id, text)
         enqueue(id) {
             if (try? await device.typeText(text)) == true { return }
             try? await device.type(strokes)
@@ -565,16 +674,20 @@ final class AppModel {
     /// A click or drag in a simulator's or Android device's screen.
     func tap(_ id: String, at point: NormalizedPoint) {
         guard let device = device(id) else { return }
+        recordTap(id, at: point)
         enqueue(id) { try? await device.tap(at: point, hold: 0.08) }
     }
 
     func swipe(_ id: String, from start: NormalizedPoint, to end: NormalizedPoint, duration: TimeInterval) {
         guard let device = device(id) else { return }
-        enqueue(id) { try? await device.swipe(from: start, to: end, duration: max(0.1, min(duration, 2))) }
+        let duration = max(0.1, min(duration, 2))
+        recordSwipe(id, from: start, to: end, duration: duration)
+        enqueue(id) { try? await device.swipe(from: start, to: end, duration: duration) }
     }
 
     func pressKey(_ stroke: KeyStroke, on id: String) {
         guard let device = device(id) else { return }
+        recordKey(id, stroke)
         enqueue(id) { try? await device.press(stroke) }
     }
 

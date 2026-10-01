@@ -1,0 +1,309 @@
+import Foundation
+
+/// A replayable list of tool calls for one device, saved as JSON:
+///
+///     {
+///       "name": "Sign in",
+///       "steps": [
+///         {"launch_app": {"bundle_id": "com.example.app", "restart": true}},
+///         {"tap_element": {"id": "email"}},
+///         {"type_text": {"text": "me@example.com", "submit": true}},
+///         {"wait_for_element": {"text": "Welcome"}},
+///         "home"
+///       ]
+///     }
+///
+/// Each step is one tool with its arguments, exactly as an agent calls it; a bare name has none.
+/// A plain array of steps is a flow too.
+public struct Flow: Sendable, Equatable {
+    public struct Step: Sendable, Equatable {
+        public var tool: String
+        public var arguments: [String: JSONValue]
+
+        public init(_ tool: String, _ arguments: [String: JSONValue] = [:]) {
+            self.tool = tool
+            self.arguments = arguments
+        }
+
+        var json: JSONValue { arguments.isEmpty ? .string(tool) : [tool: .object(arguments)] }
+        var summary: String { arguments.isEmpty ? tool : "\(tool) \(JSONValue.object(arguments).compactString)" }
+    }
+
+    public var name: String
+    public var steps: [Step]
+
+    public init(name: String, steps: [Step]) {
+        self.name = name
+        self.steps = steps
+    }
+
+    /// At most this many steps, so a mistaken file cannot keep a device busy for hours.
+    public static let maxSteps = 500
+
+    public static func parse(_ value: JSONValue, name fallback: String = "Flow") throws -> Flow {
+        let list: [JSONValue]
+        var name = fallback
+        switch value {
+        case .array(let items): list = items
+        case .object(let object):
+            guard let items = object["steps"]?.arrayValue else { throw ToolFailure("A flow needs a steps array.") }
+            list = items
+            if let given = object["name"]?.stringValue, !given.isEmpty { name = given }
+        default: throw ToolFailure("A flow is an object with steps, or an array of steps.")
+        }
+        guard list.count <= maxSteps else { throw ToolFailure("A flow has at most \(maxSteps) steps.") }
+        let steps = try list.enumerated().map { index, item -> Step in
+            switch item {
+            case .string(let tool): return Step(tool)
+            case .object(let object) where object.count == 1:
+                let (tool, arguments) = object.first!
+                switch arguments {
+                case .object(let arguments): return Step(tool, arguments)
+                case .null: return Step(tool)
+                default: throw ToolFailure("Step \(index + 1): the arguments of \(tool) must be an object.")
+                }
+            default:
+                throw ToolFailure(
+                    "Step \(index + 1) must be a tool name or an object with one tool, like {\"tap_element\": {\"id\": \"save\"}}.")
+            }
+        }
+        return Flow(name: name, steps: steps)
+    }
+
+    public static func load(_ url: URL) throws -> Flow {
+        let data: Data
+        do {
+            data = try Data(contentsOf: url)
+        } catch {
+            throw ToolFailure("Could not read \(url.path): \(error.localizedDescription)")
+        }
+        guard let value = try? JSONValue.parse(data) else { throw ToolFailure("\(url.lastPathComponent) is not JSON.") }
+        return try parse(value, name: url.deletingPathExtension().lastPathComponent)
+    }
+
+    /// One step per line, so a flow reads and diffs well.
+    public func encoded() -> Data {
+        let lines = steps.map { "    " + $0.json.compactString }
+        let text = "{\n  \"name\": \(JSONValue.string(name).compactString),\n  \"steps\": [\n"
+            + lines.joined(separator: ",\n") + (lines.isEmpty ? "" : "\n") + "  ]\n}\n"
+        return Data(text.utf8)
+    }
+}
+
+// MARK: - Running
+
+extension PhoneTools {
+    static let flowDefinitions: [ToolDefinition] = [
+        ToolDefinition(
+            name: "run_flow", title: "Run flow",
+            description:
+                "Replay a flow: a list of tool calls saved as JSON, e.g. recorded in the Mobdev app or written by hand ({\"steps\": [{\"tap_element\": {\"id\": \"login\"}}, {\"type_text\": {\"text\": \"hi\"}}, \"home\"]}). Stops at the first step that fails and says which. Pass path (a .json file on this Mac) or steps.",
+            inputSchema: schema([
+                "path": ["type": "string", "description": "A flow file on the Mac that runs Mobdev"],
+                "steps": [
+                    "type": "array", "description": "The steps inline, each a tool name or {\"tool\": {arguments}}",
+                ],
+            ]),
+            readOnly: false)
+    ]
+
+    /// Tools a flow may not call: another flow, and nothing that picks a different device.
+    static let flowExcluded: Set<String> = ["run_flow", "list_devices"]
+
+    func runFlowTool(_ args: Arguments, source: String) async throws -> ToolOutput {
+        let flow: Flow
+        if args.has("path") {
+            let path = (try args.string("path") as NSString).expandingTildeInPath
+            flow = try Flow.load(URL(fileURLWithPath: path))
+        } else if let steps = args.value["steps"], !steps.isNull {
+            flow = try Flow.parse(steps)
+        } else {
+            throw ToolFailure("Pass path or steps.")
+        }
+        let result = await run(flow, source: source)
+        return ToolOutput(text: result.text, data: result.json, isError: !result.passed)
+    }
+
+    /// Runs every step through `call`, so each shows in the device's activity and records like any
+    /// other call. Stops at the first failure.
+    public func run(
+        _ flow: Flow, source: String, progress: (@Sendable (Int, Flow.Step, ToolOutput, TimeInterval) -> Void)? = nil
+    ) async -> FlowResult {
+        let started = Date()
+        var results: [FlowResult.StepResult] = []
+        for (index, step) in flow.steps.enumerated() {
+            let stepStarted = Date()
+            var output: ToolOutput
+            if Self.flowExcluded.contains(step.tool) || step.arguments["device"] != nil {
+                output = ToolOutput(
+                    text: "\(step.tool) cannot run inside a flow; a flow runs on one device, without device arguments.",
+                    isError: true)
+            } else {
+                var arguments = step.arguments
+                arguments["screenshot"] = false
+                do {
+                    output = try await call(step.tool, arguments: .object(arguments), source: source, screenshotByDefault: false)
+                } catch {
+                    output = ToolOutput(text: String(describing: error), isError: true)
+                }
+            }
+            let seconds = Date().timeIntervalSince(stepStarted)
+            results.append(.init(step: step, text: output.text, passed: !output.isError, seconds: seconds))
+            progress?(index, step, output, seconds)
+            if output.isError { break }
+        }
+        return FlowResult(flow: flow, steps: results, seconds: Date().timeIntervalSince(started))
+    }
+}
+
+public struct FlowResult: Sendable {
+    public struct StepResult: Sendable {
+        public var step: Flow.Step
+        public var text: String
+        public var passed: Bool
+        public var seconds: TimeInterval
+    }
+
+    public var flow: Flow
+    public var steps: [StepResult]
+    public var seconds: TimeInterval
+
+    public var passed: Bool { steps.count == flow.steps.count && steps.allSatisfy(\.passed) }
+
+    public var text: String {
+        let total = flow.steps.count
+        let lines = steps.enumerated().map { index, result in
+            let mark = result.passed ? "✓" : "✗"
+            let first = result.text.split(separator: "\n", omittingEmptySubsequences: false).first.map(String.init) ?? ""
+            return "\(mark) \(index + 1). \(result.step.summary): \(result.passed ? first : result.text)"
+        }
+        let head =
+            passed
+            ? "Flow \"\(flow.name)\" passed: \(total) steps in \(String(format: "%.1f", seconds)) s."
+            : "Flow \"\(flow.name)\" failed at step \(steps.count) of \(total): \(steps.last?.step.summary ?? "no steps")."
+        return ([head] + lines).joined(separator: "\n")
+    }
+
+    var json: JSONValue {
+        [
+            "name": .string(flow.name), "passed": .bool(passed), "seconds": .number((seconds * 10).rounded() / 10),
+            "steps": .number(Double(flow.steps.count)),
+            "failed_step": passed ? .null : .number(Double(steps.count)),
+        ]
+    }
+}
+
+// MARK: - Recording
+
+/// Collects a device's steps while someone records a flow: every call made through the tools, by
+/// an agent or in the app, and clicks, drags and keys in the app's window. Clicks become
+/// tap_element when the tree read shortly before says what was under the pointer.
+public final class FlowRecorder: Sendable {
+    private struct State {
+        var steps: [Flow.Step] = []
+        /// The newest tree and when it was read; refreshed while recording.
+        var tree: [UIElement]?
+        var refresher: Task<Void, Never>?
+    }
+
+    private let state = Locked<State?>(nil)
+
+    public init() {}
+
+    public var isRecording: Bool { state.get() != nil }
+    public var stepCount: Int { state.get()?.steps.count ?? 0 }
+    var hasTree: Bool { state.get()?.tree != nil }
+
+    /// Starts recording. With `tree`, the elements on screen are read about every second and a
+    /// half so clicks can be named by element; nil devices (iPhones) record coordinates.
+    public func start(tree: (@Sendable () async throws -> [UIElement]?)? = nil) {
+        stop()
+        state.set(State())
+        if let tree {
+            let refresher = Task { [weak self] in
+                while !Task.isCancelled, self?.isRecording == true {
+                    let elements = try? await tree()
+                    self?.state.withLock { $0?.tree = elements }
+                    try? await Task.sleep(nanoseconds: 1_500_000_000)
+                }
+            }
+            state.withLock { $0?.refresher = refresher }
+        }
+    }
+
+    /// Stops recording and returns what was recorded.
+    @discardableResult
+    public func stop() -> [Flow.Step] {
+        let finished = state.withLock { current -> State? in
+            defer { current = nil }
+            return current
+        }
+        finished?.refresher?.cancel()
+        return finished?.steps ?? []
+    }
+
+    /// Calls that only look, and so replay nothing. Waits are kept: they are what a flow checks.
+    static let skipped: Set<String> = [
+        "status", "screenshot", "read_screen", "find_text", "ui_tree", "list_apps", "logs", "crash_reports",
+        "list_devices", "run_flow",
+    ]
+
+    /// A successful tool call. Consecutive typing merges into one step.
+    public func record(_ tool: String, _ arguments: [String: JSONValue]) {
+        guard !Self.skipped.contains(tool) else { return }
+        var arguments = arguments
+        arguments["screenshot"] = nil
+        arguments["device"] = nil
+        state.withLock { current in
+            guard current != nil else { return }
+            if tool == "type_text", let last = current!.steps.last, last.tool == "type_text",
+                last.arguments["submit"]?.boolValue != true,
+                let before = last.arguments["text"]?.stringValue, let added = arguments["text"]?.stringValue
+            {
+                var merged = arguments
+                merged["text"] = .string(before + added)
+                current!.steps[current!.steps.count - 1] = Flow.Step(tool, merged)
+            } else {
+                current!.steps.append(Flow.Step(tool, arguments))
+            }
+        }
+    }
+
+    /// A click in the app's window, at a point given as fractions of the screen and in screenshot
+    /// pixels. An element with a unique identifier or label under the point makes it tap_element.
+    public func recordTap(at point: NormalizedPoint, pixels: (x: Int, y: Int)) {
+        let tree = state.get()?.tree ?? []
+        if let element = Self.element(at: point, in: tree) {
+            record("tap_element", element)
+        } else {
+            record("tap", ["x": .number(Double(pixels.x)), "y": .number(Double(pixels.y))])
+        }
+    }
+
+    /// Arguments for tap_element naming the smallest tappable element under the point, when its
+    /// identifier (or else its label) picks it alone.
+    static func element(at point: NormalizedPoint, in tree: [UIElement]) -> [String: JSONValue]? {
+        let under = tree.filter { $0.tappable && $0.frame.contains(CGPoint(x: point.x, y: point.y)) }
+        guard let element = under.min(by: { $0.frame.width * $0.frame.height < $1.frame.width * $1.frame.height })
+        else { return nil }
+        if !element.identifier.isEmpty,
+            ElementQuery(id: element.identifier, text: nil).matches(in: tree).count == 1
+        {
+            return ["id": .string(element.identifier)]
+        }
+        if !element.label.isEmpty, ElementQuery(id: nil, text: element.label).matches(in: tree).count == 1 {
+            return ["text": .string(element.label)]
+        }
+        return nil
+    }
+
+    /// The name press_key knows for a key the app's window passes on.
+    public static func keyName(usage: UInt8) -> String? {
+        let preferred = [
+            "return", "escape", "backspace", "tab", "space", "right", "left", "down", "up", "forwarddelete",
+            "home", "end", "pageup", "pagedown",
+        ]
+        return preferred.first { KeyboardLayout.namedKeys[$0] == usage }
+            ?? KeyboardLayout.namedKeys.first { $0.value == usage }?.key
+    }
+}

@@ -13,6 +13,8 @@ struct PhoneMirrorView: NSViewRepresentable {
     let layout: KeyboardLayout
     @Binding var focused: Bool
     var onDrag: ((NormalizedPoint) -> Void)?
+    /// What the mirror sent, for a flow being recorded.
+    var onInput: ((MirrorInput) -> Void)?
 
     func makeNSView(context: Context) -> MirrorNSView {
         let view = MirrorNSView.view(for: id)
@@ -24,10 +26,18 @@ struct PhoneMirrorView: NSViewRepresentable {
         view.input = input
         view.keyboardLayout = layout
         view.onDrag = onDrag
+        view.onInput = onInput
         if view.previewLayer.session !== session {
             view.previewLayer.session = session
         }
     }
+}
+
+enum MirrorInput {
+    case tap(NormalizedPoint)
+    case swipe(from: NormalizedPoint, to: NormalizedPoint, duration: TimeInterval)
+    case text(String)
+    case key(KeyStroke)
 }
 
 final class MirrorNSView: NSView {
@@ -48,8 +58,10 @@ final class MirrorNSView: NSView {
     var keyboardLayout: KeyboardLayout = .us
     var onFocusChange: ((Bool) -> Void)?
     var onDrag: ((NormalizedPoint) -> Void)?
+    var onInput: ((MirrorInput) -> Void)?
     private var lastMove = Date.distantPast
     private var dragStart: NormalizedPoint?
+    private var dragStarted = Date()
     private var dragged = false
     private var scrollAccumulator: CGFloat = 0
 
@@ -97,6 +109,7 @@ final class MirrorNSView: NSView {
         window?.makeFirstResponder(self)
         let point = normalized(event)
         dragStart = point
+        dragStarted = Date()
         dragged = false
         input?.pointerDown(at: point)
     }
@@ -111,8 +124,14 @@ final class MirrorNSView: NSView {
     }
 
     override func mouseUp(with event: NSEvent) {
-        input?.pointerUp(at: normalized(event))
-        if dragged, let start = dragStart { onDrag?(start) }
+        let point = normalized(event)
+        input?.pointerUp(at: point)
+        if dragged, let start = dragStart {
+            onDrag?(start)
+            onInput?(.swipe(from: start, to: point, duration: Date().timeIntervalSince(dragStarted)))
+        } else if let start = dragStart {
+            onInput?(.tap(start))
+        }
         dragStart = nil
         dragged = false
     }
@@ -134,6 +153,7 @@ final class MirrorNSView: NSView {
             if let text = NSPasteboard.general.string(forType: .string),
                 let strokes = try? keyboardLayout.strokes(typing: text)
             {
+                onInput?(.text(text))
                 Task { try? await input.type(strokes) }
             } else {
                 NSSound.beep()
@@ -150,6 +170,12 @@ final class MirrorNSView: NSView {
         if flags.contains(.control) { modifiers |= KeyStroke.control }
         if flags.contains(.option) { modifiers |= KeyStroke.option }
         if flags.contains(.command) { modifiers |= KeyStroke.command }
-        input.pressLive(KeyStroke(usage, modifiers))
+        let stroke = KeyStroke(usage, modifiers)
+        if FlowRecorder.keyName(usage: usage) != nil || flags.contains(.command) || flags.contains(.control) {
+            onInput?(.key(stroke))
+        } else if let characters = event.characters, !characters.isEmpty {
+            onInput?(.text(characters))
+        }
+        input.pressLive(stroke)
     }
 }

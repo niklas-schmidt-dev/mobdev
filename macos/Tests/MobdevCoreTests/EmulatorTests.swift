@@ -207,6 +207,16 @@ final class FakeDevice: Device, @unchecked Sendable {
 }
 
 @Suite struct StuckCaptureTests {
+    /// Reads a connected iPhone's USB configuration. Opt-in: MOBDEV_TEST_USB_UDID=<udid>.
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["MOBDEV_TEST_USB_UDID"] != nil))
+    func usbProbeFindsTheIPhone() throws {
+        let udid = ProcessInfo.processInfo.environment["MOBDEV_TEST_USB_UDID"]!
+        let state = try #require(USBProbe.screenState(udid: udid))
+        print("USB configuration \(state.configuration), screen interface: \(state.hasScreenInterface)")
+        #expect(state.configuration > 0)
+        #expect(USBProbe.screenState(udid: "00000000-0000000000000000") == nil)
+    }
+
     /// macOS's screen capture helper can keep a stale iPhone: connected, but never a picture.
     @Test func noPictureIsConnectedButNotReadyAndSaysHowToFixIt() {
         let status = PhoneStatus(
