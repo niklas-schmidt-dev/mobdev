@@ -25,6 +25,10 @@ import Testing
 
         init(device: String, adb: ADB?) async throws {
             self.device = device
+            // Read simulator trees in a fresh process, as the app does, once `swift build` made Mobdev.
+            let mobdev = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+                .deletingLastPathComponent().appendingPathComponent(".build/debug/Mobdev")
+            if FileManager.default.isExecutableFile(atPath: mobdev.path) { setenv("MOBDEV_UI_TREE_HELPER", mobdev.path, 0) }
             emulators = EmulatorHub(adb: adb) {}
             tools = DeviceTools(hub: DeviceHub(keyboardLayout: .us) {}, emulators: emulators, settleDelay: 0)
             emulators.start()

@@ -250,7 +250,7 @@ final class FakeDevicectl: CommandRunning, @unchecked Sendable {
         let tools = tools()
         _ = try await call(tools, "launch_app", ["bundle_id": "dev.mobdev.fixture"])
         let logs = try await call(tools, "logs", ["bundle_id": "dev.mobdev.fixture"])
-        #expect(logs.text.contains("output capture ended (devicectl exited with status 1)"))
+        #expect(logs.text.contains("output capture ended (status 1)"))
     }
 
     @Test func launchFailureSaysWhatIsWrong() async throws {
@@ -393,7 +393,7 @@ final class FakeDevicectl: CommandRunning, @unchecked Sendable {
     func simulatorTools(reports: URL? = nil) -> PhoneTools {
         let control = DeviceControl(
             udid: udid, runner: runner, devicectl: URL(fileURLWithPath: "/usr/bin/true"), reportsFolder: folder,
-            simulator: true, localReports: reports ?? folder)
+            simulator: true, simctl: false, localReports: reports ?? folder)
         return PhoneTools(phone: FakePhone(lines: [], apps: control), activity: ActivityLog(), settleDelay: 0)
     }
 

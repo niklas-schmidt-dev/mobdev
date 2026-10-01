@@ -370,8 +370,11 @@ the Mac.
   characters without a key need the UI tree on: Mobdev Runner types them.
 - Portrait orientation is the tested case. Coordinates follow the current screenshot size.
 - The phone must stay unlocked. Mobdev cannot enter the passcode.
-- Simulator input uses Xcode's private SimulatorKit; tested with Xcode 27. A later Xcode can change
-  it, as it did for idb and AXe. Simulator screens show the main display only.
+- Simulator input uses Xcode's private SimulatorKit; tested with Xcode 27 and 26.6. A later Xcode
+  can change it, as it did for idb and AXe. Simulator screens show the main display only.
+- Before Xcode 27, `devicectl` does not know simulators, so their apps go through `simctl`. Then
+  iOS asks before `open_url` opens an app's own URL scheme ("Open in …?"); tap its Open button,
+  e.g. with `tap_element`.
 - Android types ASCII text only (`input text`), and adb does not know app names, so `open_app`
   matches package names.
 - `ui_tree` reads the simulator through macOS's private accessibility translation; tested with

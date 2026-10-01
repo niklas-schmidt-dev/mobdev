@@ -175,13 +175,15 @@ public final class DeviceControl: AppBackend, @unchecked Sendable {
     /// Where macOS writes simulator crash reports.
     private let localReports: URL
     private let executable: Locked<URL?>
+    /// Simulators go through `simctl` where `devicectl` does not know them.
+    private let usesSimctl: Bool
     /// The console of each app launched with log capture, by bundle ID.
     private let consoles = Locked<[String: (command: RunningCommand, launch: ConsoleLaunch)]>([:])
 
     /// `devicectl` is found through `xcode-select` unless given.
     public init(
         udid: String, runner: CommandRunning = ProcessRunner(), devicectl: URL? = nil, reportsFolder: URL,
-        simulator: Bool = false,
+        simulator: Bool = false, simctl: Bool? = nil,
         localReports: URL = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Logs/DiagnosticReports")
     ) {
@@ -189,11 +191,24 @@ public final class DeviceControl: AppBackend, @unchecked Sendable {
         self.runner = runner
         self.reportsFolder = reportsFolder
         isSimulator = simulator
+        usesSimctl = simulator && (simctl ?? !Self.devicectlDrivesSimulators)
         self.localReports = localReports
         executable = Locked(devicectl)
     }
 
     public var platform: AppPlatform { isSimulator ? .simulator : .iPhone }
+
+    /// Xcode 27's devicectl installs, lists and launches apps on simulators too; Xcode 26's says
+    /// "The specified device was not found" (GitHub's macos-26 runners, 2026-10-01), so simulators
+    /// use `simctl` there. MOBDEV_SIMULATOR_APPS=simctl forces it, e.g. to test it.
+    static let devicectlDrivesSimulators: Bool = {
+        if ProcessInfo.processInfo.environment["MOBDEV_SIMULATOR_APPS"] == "simctl" { return false }
+        let version = SimulatorKit.developerDirectory().deletingLastPathComponent().appendingPathComponent("version.plist")
+        guard let info = NSDictionary(contentsOf: version), let short = info["CFBundleShortVersionString"] as? String,
+            let major = short.split(separator: ".").first.flatMap({ Int($0) })
+        else { return true }
+        return major >= 27
+    }()
 
     /// Whether Developer Mode is on, from Xcode's device list: true, false, or nil when Xcode or the
     /// device cannot tell (no Xcode, or never trusted in Xcode).
@@ -210,12 +225,20 @@ public final class DeviceControl: AppBackend, @unchecked Sendable {
     }
 
     public func activate(_ bundleID: String) async throws {
+        if usesSimctl {
+            _ = try await simctl(["launch", udid, bundleID])
+            return
+        }
         _ = try await call(["device", "process", "launch"], arguments: [bundleID])
     }
 
     // MARK: Apps
 
     public func apps(all: Bool) async throws -> [InstalledApp] {
+        if usesSimctl {
+            return try await simctlApps().filter { all || $0.developer }
+                .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+        }
         let result = try await call(["device", "info", "apps"], options: all ? ["--include-all-apps"] : [])
         return (result["apps"]?.arrayValue ?? []).compactMap(InstalledApp.init)
             .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
@@ -227,6 +250,7 @@ public final class DeviceControl: AppBackend, @unchecked Sendable {
 
     /// Developer apps first: that list is short, and `--include-all-apps` ignores `--bundle-id`.
     private func app(_ bundleID: String, timeout: TimeInterval) async throws -> InstalledApp? {
+        if usesSimctl { return try await simctlApps().first { $0.bundleID == bundleID } }
         for options in [["--bundle-id", bundleID], ["--include-all-apps"]] {
             let result = try await call(["device", "info", "apps"], options: options, timeout: timeout)
             if let app = (result["apps"]?.arrayValue ?? []).compactMap(InstalledApp.init).first(where: {
@@ -239,6 +263,14 @@ public final class DeviceControl: AppBackend, @unchecked Sendable {
     }
 
     public func install(at path: URL) async throws -> InstalledApp {
+        if usesSimctl {
+            guard let info = NSDictionary(contentsOf: path.appendingPathComponent("Info.plist")),
+                let bundleID = info["CFBundleIdentifier"] as? String
+            else { throw DeveloperError("\(path.lastPathComponent) has no Info.plist with a bundle identifier.") }
+            _ = try await simctl(["install", udid, path.path], timeout: 60)
+            return (try? await app(bundleID, timeout: 10))
+                ?? InstalledApp(bundleID: bundleID, name: bundleID, version: "", build: "", developer: true, location: nil)
+        }
         // Leaves a typical install room within the relays' 90 s request timeout.
         let result = try await call(["device", "install", "app"], arguments: [path.path], timeout: 60)
         guard let bundleID = result["installedApplications"]?.arrayValue?.first?["bundleID"]?.stringValue else {
@@ -255,7 +287,11 @@ public final class DeviceControl: AppBackend, @unchecked Sendable {
                 "\(app.name) (\(bundleID)) was not installed for development. Mobdev only removes apps installed from Xcode or with install_app, never App Store or system apps.")
         }
         detach(bundleID)
-        _ = try await call(["device", "uninstall", "app"], arguments: [bundleID])
+        if usesSimctl {
+            _ = try await simctl(["uninstall", udid, bundleID])
+        } else {
+            _ = try await call(["device", "uninstall", "app"], arguments: [bundleID])
+        }
         logs.setStatus("uninstalled", for: bundleID)
         return app
     }
@@ -265,6 +301,7 @@ public final class DeviceControl: AppBackend, @unchecked Sendable {
     public func launch(_ bundleID: String, arguments: [String], environment: [String: String], restart: Bool)
         async throws -> LaunchOutcome
     {
+        if usesSimctl { return try await launchWithSimctl(bundleID, arguments: arguments, environment: environment, restart: restart) }
         let executable = try await devicectl()
         if !restart, let session = consoles.get()[bundleID], !session.launch.hasEnded {
             // A new console would capture nothing from a running app; keep the one that does.
@@ -382,7 +419,101 @@ public final class DeviceControl: AppBackend, @unchecked Sendable {
     }
 
     public func open(_ url: URL) async throws {
+        if usesSimctl {
+            _ = try await simctl(["openurl", udid, url.absoluteString])
+            return
+        }
         _ = try await call(["device", "process", "openURL"], arguments: [url.absoluteString])
+    }
+
+    // MARK: simctl
+
+    private static let xcrun = URL(fileURLWithPath: "/usr/bin/xcrun")
+
+    /// Runs `xcrun simctl` and returns what it printed; its first line explains a failure.
+    @discardableResult
+    private func simctl(_ arguments: [String], timeout: TimeInterval = 30) async throws -> String {
+        let result = try await runner.run(Self.xcrun, ["simctl"] + arguments, timeout: timeout)
+        guard result.status == 0 else {
+            let reason = result.output.split(separator: "\n").map(String.init)
+                .first { !$0.trimmingCharacters(in: .whitespaces).isEmpty } ?? "status \(result.status)"
+            throw DeveloperError("simctl \(arguments.first ?? "") failed: \(reason)")
+        }
+        return result.output
+    }
+
+    /// `simctl listapps` prints an old-style property list keyed by bundle ID.
+    private func simctlApps() async throws -> [InstalledApp] {
+        Self.simctlApps(from: try await simctl(["listapps", udid]))
+    }
+
+    static func simctlApps(from output: String) -> [InstalledApp] {
+        guard let data = output.data(using: .utf8),
+            let list = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any]
+        else { return [] }
+        return list.compactMap { bundleID, value -> InstalledApp? in
+            guard let info = value as? [String: Any] else { return nil }
+            let name = (info["CFBundleDisplayName"] as? String) ?? (info["CFBundleName"] as? String) ?? bundleID
+            return InstalledApp(
+                bundleID: bundleID, name: name, version: info["CFBundleShortVersionString"] as? String ?? "",
+                build: info["CFBundleVersion"] as? String ?? "", developer: info["ApplicationType"] as? String == "User",
+                location: info["Path"] as? String)
+        }
+    }
+
+    /// `simctl launch --console-pty` runs while the app does and passes on what it prints; it says
+    /// nothing when the launch worked, so the app counts as started with its first line or after
+    /// two seconds without a failure. Environment variables reach the app as SIMCTL_CHILD_<name>.
+    private func launchWithSimctl(
+        _ bundleID: String, arguments: [String], environment: [String: String], restart: Bool
+    ) async throws -> LaunchOutcome {
+        if !restart, let session = consoles.get()[bundleID], !session.launch.hasEnded {
+            try await simctl(["launch", udid, bundleID] + arguments)
+            return .broughtToFront
+        }
+        detach(bundleID)
+        let environment = ["OS_ACTIVITY_DT_MODE": "YES"].merging(environment) { $1 }
+        let variables = environment.sorted { $0.key < $1.key }.map { "SIMCTL_CHILD_\($0.key)=\($0.value)" }
+        // Into a pipe, simctl passes the app's output on in blocks, late; `script` gives it a terminal,
+        // so each line arrives as it is printed.
+        var command = variables + ["/usr/bin/script", "-q", "/dev/null", Self.xcrun.path, "simctl", "launch", "--console-pty"]
+        if restart { command.append("--terminate-running-process") }
+        command += [udid, bundleID] + arguments
+        let launch = ConsoleLaunch(app: bundleID, logs: logs, startsWithOutput: true)
+        // simctl does not say how the app ended; a fresh crash report of its executable does.
+        let started = Date()
+        let executable = (try? await app(bundleID, timeout: 10))?.location.flatMap { path in
+            NSDictionary(contentsOfFile: path + "/Info.plist")?["CFBundleExecutable"] as? String
+        }
+        let onExit: @Sendable (Int32) -> Void = { [weak self] status in
+            launch.exited(status)
+            guard let self, let executable, !launch.isDetached else { return }
+            // The report is written a few seconds after the crash.
+            for second in 1...15 {
+                DispatchQueue.global().asyncAfter(deadline: .now() + .seconds(second)) {
+                    guard !launch.isDetached, self.logs.status(for: bundleID)?.hasPrefix("crashed") != true,
+                        self.simulatorReports().contains(where: { $0.process == executable && ($0.date ?? .distantPast) >= started })
+                    else { return }
+                    self.logs.setStatus("crashed. Call crash_reports for the report.", for: bundleID)
+                }
+            }
+        }
+        let console = try runner.start(URL(fileURLWithPath: "/usr/bin/env"), command, onLine: launch.receive, onExit: onExit)
+        DispatchQueue.global().asyncAfter(deadline: .now() + 2) { launch.markStarted() }
+        guard await launch.started(timeout: 45) else {
+            launch.detach()
+            console.stop()
+            throw DeveloperError(launch.lastLines.isEmpty ? "The app did not start within 45 seconds." : launch.lastLines)
+        }
+        let replaced = consoles.withLock { consoles -> (command: RunningCommand, launch: ConsoleLaunch)? in
+            if launch.hasEnded { return nil }
+            let old = consoles[bundleID]
+            consoles[bundleID] = (console, launch)
+            return old
+        }
+        replaced?.launch.detach()
+        replaced?.command.stop()
+        return .launched
     }
 
     // MARK: Crash reports
@@ -539,14 +670,26 @@ private final class ConsoleLaunch: Sendable {
 
     let app: String
     let logs: AppLogs
+    /// simctl prints no launch line: its first line is already the app's.
+    let startsWithOutput: Bool
     private let state = Locked(State())
 
-    init(app: String, logs: AppLogs) {
+    init(app: String, logs: AppLogs, startsWithOutput: Bool = false) {
         self.app = app
         self.logs = logs
+        self.startsWithOutput = startsWithOutput
+    }
+
+    /// For simctl: started unless it already ended.
+    func markStarted() {
+        let current = state.get()
+        guard current.started == nil, !current.ended, !current.detached else { return }
+        logs.setStatus("running", for: app)
+        resolve(true)
     }
 
     var hasEnded: Bool { state.get().ended }
+    var isDetached: Bool { state.get().detached }
     var failure: String? { DeviceControl.message(fromConsole: state.get().failure.joined(separator: "\n")) }
     var lastLines: String { state.get().failure.suffix(3).joined(separator: " ") }
 
@@ -580,6 +723,11 @@ private final class ConsoleLaunch: Sendable {
         let current = state.get()
         if current.detached { return }
         if current.started != true {
+            if startsWithOutput {
+                markStarted()
+                if !Self.isSimctlStart(line, app: app) { logs.append(app: app, text: line) }
+                return
+            }
             if line.hasPrefix("Launched application") || line.hasPrefix("Waiting for the application to terminate") {
                 logs.setStatus("running", for: app)
                 resolve(true)
@@ -606,10 +754,14 @@ private final class ConsoleLaunch: Sendable {
             resolve(false)
         } else if !current.detached, !current.reportedEnding {
             // Cable pulled or CoreDevice gave up: devicectl ended without saying how the app did.
-            logs.setStatus(
-                "output capture ended (devicectl exited with status \(status)); the app may still be running",
-                for: app)
+            logs.setStatus("output capture ended (status \(status)); the app may have exited or still be running", for: app)
         }
+    }
+
+    /// simctl's "dev.mobdev.fixture: 12345" once the app runs.
+    static func isSimctlStart(_ line: String, app: String) -> Bool {
+        guard line.hasPrefix(app + ": ") else { return false }
+        return !line.dropFirst(app.count + 2).isEmpty && line.dropFirst(app.count + 2).allSatisfy(\.isNumber)
     }
 
     /// "The app terminated with the exit code 3." → "exited with code 3";
