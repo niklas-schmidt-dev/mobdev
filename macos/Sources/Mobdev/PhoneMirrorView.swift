@@ -66,6 +66,8 @@ final class MirrorNSView: NSView {
     private var scrollAccumulator: CGFloat = 0
     /// A two-finger scroll on the trackpad, played on the iPhone as a touch that moves along.
     private var scrollTouch: (start: NormalizedPoint, current: NormalizedPoint, started: Date)?
+    /// Whether that touch is down on the iPhone yet.
+    private var touchDown = false
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -158,13 +160,11 @@ final class MirrorNSView: NSView {
     /// momentum after the fingers lift is left to iOS.
     private func trackpadScroll(_ event: NSEvent) {
         guard let input, event.momentumPhase == [] else { return }
-        if event.phase.contains(.began) || scrollTouch == nil {
-            guard !event.phase.contains(.ended), !event.phase.contains(.cancelled) else { return }
+        // Fingers resting on the trackpad send "may begin", then "cancelled": that is no touch.
+        if event.phase.contains(.began) {
             let point = normalized(event)
             scrollTouch = (point, point, Date())
-            input.pointerDown(at: point)
-            lastMove = Date()
-            return
+            touchDown = false
         }
         guard var touch = scrollTouch else { return }
         // With natural scrolling the deltas follow the fingers; otherwise they are reversed.
@@ -175,9 +175,17 @@ final class MirrorNSView: NSView {
                 y: min(max(touch.current.y + direction * event.scrollingDeltaY / bounds.height, 0), 1))
         }
         scrollTouch = touch
+        // Down once the fingers have moved a little, so a short brush is not a tap.
+        if !touchDown, hypot(touch.current.x - touch.start.x, touch.current.y - touch.start.y) > 0.01 {
+            input.pointerDown(at: touch.start)
+            touchDown = true
+            lastMove = .distantPast
+        }
         if event.phase.contains(.ended) || event.phase.contains(.cancelled) {
-            input.pointerUp(at: touch.current)
             scrollTouch = nil
+            guard touchDown else { return }
+            touchDown = false
+            input.pointerUp(at: touch.current)
             if hypot(touch.current.x - touch.start.x, touch.current.y - touch.start.y) > 0.02 {
                 onDrag?(touch.start)
                 onInput?(.swipe(from: touch.start, to: touch.current, duration: Date().timeIntervalSince(touch.started)))
@@ -185,7 +193,7 @@ final class MirrorNSView: NSView {
             return
         }
         // BLE carries a report every 15-30 ms; more would only queue up.
-        guard Date().timeIntervalSince(lastMove) > 0.025 else { return }
+        guard touchDown, Date().timeIntervalSince(lastMove) > 0.025 else { return }
         lastMove = Date()
         input.pointerMove(to: touch.current)
     }
