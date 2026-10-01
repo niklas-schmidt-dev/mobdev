@@ -125,6 +125,7 @@ public enum FlowCommand {
         }
         guard let device else {
             output(lastError.isEmpty ? "No booted simulator or Android device." : lastError)
+            if let reason = SimulatorKit.unavailableReason { output("Simulators are not available: \(reason)") }
             return 2
         }
 

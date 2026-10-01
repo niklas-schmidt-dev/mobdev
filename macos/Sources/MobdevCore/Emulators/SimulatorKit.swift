@@ -27,9 +27,13 @@ final class SimulatorKit: @unchecked Sendable {
             return try SimulatorKit()
         } catch {
             Log.info("simulators unavailable: \(error)")
+            unavailableReason = String(describing: error)
             return nil
         }
     }()
+
+    /// Why `shared` is nil, for messages such as `Mobdev flow`'s.
+    nonisolated(unsafe) static var unavailableReason: String?
 
     private typealias MouseMessage = @convention(c) (
         UnsafeMutablePointer<CGPoint>, UnsafeMutablePointer<CGPoint>?, UInt32, UInt, CGSize, UInt
@@ -54,8 +58,9 @@ final class SimulatorKit: @unchecked Sendable {
 
     private init() throws {
         let developer = Self.developerDirectory()
-        let simulatorKit = developer.deletingLastPathComponent()
-            .appendingPathComponent("SharedFrameworks/SimulatorKit.framework/SimulatorKit").path
+        guard let simulatorKit = Self.simulatorKitBinary(developer: developer) else {
+            throw DeveloperError("This Xcode (\(developer.deletingLastPathComponent().deletingLastPathComponent().path)) has no SimulatorKit.")
+        }
         for path in ["/Library/Developer/PrivateFrameworks/CoreSimulator.framework/CoreSimulator", simulatorKit] {
             guard dlopen(path, RTLD_NOW) != nil else {
                 throw DeveloperError("Could not load \(path): \(String(cString: dlerror()))")
@@ -95,6 +100,29 @@ final class SimulatorKit: @unchecked Sendable {
         self.deviceSet = deviceSet
     }
 
+    /// SimulatorKit's binary: where the framework's bundle says, else its usual places. On GitHub's
+    /// macOS 26 runner, Xcode 26.6 had the framework without a binary at the top of it (2026-10-01).
+    static func simulatorKitBinary(developer: URL) -> String? {
+        let xcode = developer.deletingLastPathComponent()
+        let frameworks = [
+            xcode.appendingPathComponent("SharedFrameworks/SimulatorKit.framework"),
+            developer.appendingPathComponent("Library/PrivateFrameworks/SimulatorKit.framework"),
+            URL(fileURLWithPath: "/Library/Developer/PrivateFrameworks/SimulatorKit.framework"),
+        ]
+        for framework in frameworks {
+            let candidates: [String?] = [
+                Bundle(url: framework)?.executableURL?.path,
+                framework.appendingPathComponent("SimulatorKit").path,
+                framework.appendingPathComponent("Versions/A/SimulatorKit").path,
+                framework.appendingPathComponent("Versions/Current/SimulatorKit").path,
+            ]
+            if let found = candidates.compactMap({ $0 }).first(where: { FileManager.default.fileExists(atPath: $0) }) {
+                return found
+            }
+        }
+        return nil
+    }
+
     /// `DEVELOPER_DIR`, else the Xcode chosen with `xcode-select`, else /Applications/Xcode.app.
     /// Command Line Tools have no simulators, so they fall back to Xcode too.
     static func developerDirectory() -> URL {
@@ -104,11 +132,7 @@ final class SimulatorKit: @unchecked Sendable {
             candidates.append(selected)
         }
         candidates.append("/Applications/Xcode.app/Contents/Developer")
-        let found = candidates.first { path in
-            FileManager.default.fileExists(
-                atPath: URL(fileURLWithPath: path).deletingLastPathComponent()
-                    .appendingPathComponent("SharedFrameworks/SimulatorKit.framework").path)
-        }
+        let found = candidates.first { simulatorKitBinary(developer: URL(fileURLWithPath: $0)) != nil }
         return URL(fileURLWithPath: found ?? candidates.last!)
     }
 

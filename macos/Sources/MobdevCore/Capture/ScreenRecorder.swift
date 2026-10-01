@@ -71,8 +71,11 @@ public final class ScreenRecorder: Sendable {
 
     /// Records `tail` seconds more, then finishes the file. Throws when there is no video: the
     /// device never showed a frame, or the file could not be written.
+    ///
+    /// Gives up after `timeout` seconds more: on GitHub's virtualized Macs the encoder never
+    /// finished (2026-10-01), and a flow must still end.
     @discardableResult
-    public func finish() async throws -> ScreenRecording {
+    public func finish(timeout: TimeInterval = 30) async throws -> ScreenRecording {
         try await withCheckedThrowingContinuation { continuation in
             let outcome = state.withLock { state -> Result<ScreenRecording, any Error>? in
                 if state.stopAt == nil { state.stopAt = Self.now + tail }
@@ -80,7 +83,20 @@ public final class ScreenRecorder: Sendable {
                 return state.outcome
             }
             wake.signal()
-            if let outcome { continuation.resume(with: outcome) }
+            if let outcome {
+                continuation.resume(with: outcome)
+                return
+            }
+            let state = self.state
+            DispatchQueue.global().asyncAfter(deadline: .now() + tail + timeout) {
+                let late = state.withLock { state -> [CheckedContinuation<ScreenRecording, any Error>] in
+                    guard state.outcome == nil else { return [] }
+                    state.outcome = .failure(ToolFailure("The video encoder did not finish in time."))
+                    defer { state.waiters = [] }
+                    return state.waiters
+                }
+                for waiter in late { waiter.resume(throwing: ToolFailure("The video encoder did not finish in time.")) }
+            }
         }
     }
 
@@ -130,7 +146,9 @@ public final class ScreenRecorder: Sendable {
         } else {
             outcome = .failure(ToolFailure("The device showed no screen to record."))
         }
-        let waiters = state.withLock { state in
+        let waiters = state.withLock { state -> [CheckedContinuation<ScreenRecording, any Error>] in
+            // After `finish` gave up, the late outcome is dropped.
+            guard state.outcome == nil else { return [] }
             state.outcome = outcome
             defer { state.waiters = [] }
             return state.waiters
@@ -221,7 +239,10 @@ private final class VideoWriter {
         writer.endSession(atSourceTime: end)
         let done = DispatchSemaphore(value: 0)
         writer.finishWriting { done.signal() }
-        done.wait()
+        guard done.wait(timeout: .now() + 20) == .success else {
+            writer.cancelWriting()
+            throw ToolFailure("The video encoder did not finish writing.")
+        }
         guard writer.status == .completed else {
             throw ToolFailure(
                 "Could not finish the video: \(writer.error?.localizedDescription ?? "unknown error")")

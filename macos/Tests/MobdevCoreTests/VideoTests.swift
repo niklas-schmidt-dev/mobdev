@@ -4,7 +4,10 @@ import Foundation
 import Testing
 @testable import MobdevCore
 
-@Suite struct VideoTests {
+/// H.264 encoding never finished on GitHub's virtualized Macs and stalled the whole test run
+/// (2026-10-01), so these run on real Macs only, like the text recognition tests.
+@Suite(.disabled(if: ProcessInfo.processInfo.environment["CI"] != nil, "Video encoding stalls on CI runners"))
+struct VideoTests {
     func temporaryVideo() -> URL {
         FileManager.default.temporaryDirectory.appendingPathComponent("mobdev-video-\(UUID().uuidString).mp4")
     }
