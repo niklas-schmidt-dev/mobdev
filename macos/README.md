@@ -71,6 +71,11 @@ Only** on the welcome page: nothing asks for camera or Bluetooth access until yo
    Keyboard on the iPhone (U.S. or German).
 5. Set **Auto-Lock** to Never while agents work. The phone must stay unlocked.
 
+iOS hides its on-screen keyboard while a Bluetooth keyboard is connected, with or without the
+cable. After five minutes without input Mobdev lets go of Bluetooth, so the iPhone shows its own
+keyboard again; the next tap or key from Mobdev connects again within a few seconds
+(`MOBDEV_BLUETOOTH_REST_SECONDS` changes the five minutes).
+
 The mirror in the app is live: click to tap, drag to swipe, scroll, and type while it has focus.
 ⌘V types the Mac clipboard on the phone. The inspector on the right shows what is still missing,
 Activity lists every agent action, and Settings (⌘,) holds the keyboard layout and API token.
