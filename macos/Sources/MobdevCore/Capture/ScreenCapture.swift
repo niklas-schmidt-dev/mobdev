@@ -12,11 +12,14 @@ public enum ScreenState: Sendable, Equatable {
     /// capture helper (iOSScreenCaptureAssistant) can keep a stale device after Apple's USB
     /// service restarts, for example after a macOS or Xcode update; restarting the helper fixes it.
     case noPicture(name: String)
+    /// Connected without a picture because the iPhone is locked. It keeps its USB screen interface
+    /// then, which a stuck helper leaves it without, so `HardwareDevice` tells the two apart.
+    case locked(name: String)
     case failed(String)
 
     public var isConnected: Bool {
         switch self {
-        case .connected, .noPicture: true
+        case .connected, .noPicture, .locked: true
         default: false
         }
     }
@@ -29,6 +32,7 @@ public enum ScreenState: Sendable, Equatable {
         case .connected(let name, let width, let height): "\(name), \(width)×\(height)"
         case .noPicture(let name):
             "\(name) is connected, but macOS delivers no picture. Its screen capture helper is stuck: click Restart Screen Capture in Mobdev, or run `sudo killall iOSScreenCaptureAssistant`"
+        case .locked(let name): "\(name) is locked. Unlock it to see its screen; Mobdev cannot enter the passcode"
         case .failed(let message): "Screen capture failed: \(message)"
         }
     }

@@ -16,6 +16,8 @@ public final class HardwareDevice: PhoneBackend, @unchecked Sendable {
     private let state: Locked<(info: DeviceInfo?, captureName: String, host: UUID?, input: HIDInput?)>
     private let control = Locked<DeviceControl?>(nil)
     private let pointer = Locked<PointerBehavior?>(nil)
+    /// The last look at the iPhone's USB interfaces, at most every two seconds.
+    private let usb = Locked<(checked: Date, state: USBScreenState?)>((.distantPast, nil))
     private let onChange: @Sendable () -> Void
 
     init(
@@ -59,7 +61,24 @@ public final class HardwareDevice: PhoneBackend, @unchecked Sendable {
     // MARK: PhoneBackend
 
     public func status() -> PhoneStatus {
-        PhoneStatus(screen: capture.state, bluetooth: bluetooth, keyboardLayout: layout.get(), pointer: pointer.get())
+        PhoneStatus(screen: screenState, bluetooth: bluetooth, keyboardLayout: layout.get(), pointer: pointer.get())
+    }
+
+    /// The capture's state, except that "no picture" from a locked iPhone says so. A locked iPhone
+    /// keeps its USB screen interface and sends nothing; a stuck capture helper leaves the iPhone
+    /// without that interface (seen 2026-09-30), and only then does restarting the helper help.
+    var screenState: ScreenState {
+        let state = capture.state
+        guard case .noPicture(let name) = state, let udid = info?.id else { return state }
+        let probe = usb.withLock { last -> USBScreenState? in
+            if Date().timeIntervalSince(last.checked) > 2 { last = (Date(), USBProbe.screenState(udid: udid)) }
+            return last.state
+        }
+        return Self.screenState(state, name: name, usb: probe)
+    }
+
+    static func screenState(_ state: ScreenState, name: String, usb: USBScreenState?) -> ScreenState {
+        usb?.hasScreenInterface == true ? .locked(name: name) : state
     }
 
     /// Connected once this device's host is; otherwise what Bluetooth as a whole is doing.
@@ -116,8 +135,17 @@ public final class HardwareDevice: PhoneBackend, @unchecked Sendable {
         guard let before = frame(), PointerCheck.isStill(parked, before, around: point) else { return nil }
         try await input.move(to: point)
         try await Task.sleep(for: .milliseconds(400))
-        guard let after = frame(), let behavior = PointerCheck.classify(before: before, after: after, at: point)
+        guard let after = frame(), var behavior = PointerCheck.classify(before: before, after: after, at: point)
         else { return nil }
+        if behavior == .snaps {
+            // More than a dot changed, which an item lighting up under the pointer also does.
+            let nudge = PointerCheck.nudge(for: point)
+            try await input.move(to: nudge)
+            try await Task.sleep(for: .milliseconds(400))
+            guard let nudged = frame(), let confirmed = PointerCheck.confirm(aimed: after, nudged: nudged, from: point, to: nudge)
+            else { return nil }
+            behavior = confirmed
+        }
         Log.info("pointer check on \(name): \(behavior.rawValue)")
         if pointer.withLock({ let changed = $0 != behavior; $0 = behavior; return changed }) { onChange() }
         return behavior

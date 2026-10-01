@@ -9,7 +9,9 @@ import Testing
     /// The middle of the row.
     let aimed = NormalizedPoint(x: 0.5, y: 1075.0 / 2556)
 
-    static func frame(dotAt dot: NormalizedPoint? = nil, outline: Bool = false, changedBlock: Bool = false) -> CGImage {
+    static func frame(
+        dotAt dot: NormalizedPoint? = nil, outline: Bool = false, changedBlock: Bool = false, lit: Bool = false
+    ) -> CGImage {
         let context = CGContext(
             data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
             space: CGColorSpace(name: CGColorSpace.sRGB)!,
@@ -19,7 +21,8 @@ import Testing
         context.scaleBy(x: 1, y: -1)
         context.setFillColor(gray: 0.08, alpha: 1)
         context.fill(CGRect(x: 0, y: 0, width: width, height: height))
-        context.setFillColor(gray: 0.16, alpha: 1)
+        // An item under a pointer that follows can light up, as home screen widgets do.
+        context.setFillColor(gray: lit ? 0.32 : 0.16, alpha: 1)
         context.fill(CGRect(x: 50, y: 1000, width: 1079, height: 150))
         if let dot {
             context.setFillColor(gray: 0.55, alpha: 1)
@@ -56,6 +59,25 @@ import Testing
         let before = Self.frame()
         let elsewhere = NormalizedPoint(x: 0.15, y: aimed.y)
         #expect(PointerCheck.classify(before: before, after: Self.frame(dotAt: elsewhere), at: aimed) == .snaps)
+    }
+
+    /// Seen on a home screen widget: the dot plus the widget lighting up looked like a snap at first.
+    @Test func anItemThatLightsUpUnderAFollowingPointerIsToldApartByASecondLook() {
+        let lit = Self.frame(dotAt: aimed, lit: true)
+        #expect(PointerCheck.classify(before: Self.frame(), after: lit, at: aimed) == .snaps)
+        let nudge = PointerCheck.nudge(for: aimed)
+        #expect(
+            PointerCheck.confirm(aimed: lit, nudged: Self.frame(dotAt: nudge, lit: true), from: aimed, to: nudge)
+                == .follows)
+    }
+
+    @Test func aSnappedOutlineStaysWhenThePointerMovesOn() {
+        let outline = Self.frame(outline: true)
+        let nudge = PointerCheck.nudge(for: aimed)
+        #expect(PointerCheck.confirm(aimed: outline, nudged: Self.frame(outline: true), from: aimed, to: nudge) == .snaps)
+        #expect(
+            PointerCheck.confirm(aimed: outline, nudged: Self.frame(outline: true, changedBlock: true), from: aimed, to: nudge)
+                == nil)
     }
 
     @Test func noChangeMeansThePointerIsHidden() {

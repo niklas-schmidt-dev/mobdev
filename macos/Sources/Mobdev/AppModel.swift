@@ -33,6 +33,7 @@ struct DeviceState: Identifiable, Equatable {
     var statusLine: String {
         if isEmulated { return isReady ? "Ready for agents" : "Starting" }
         if case .noPicture = status.screen { return "No picture from macOS" }
+        if case .locked = status.screen { return "Unlock the iPhone to see its screen" }
         // Found over USB, but no picture has arrived yet.
         if isConnected, status.frameSize == nil { return "Waiting for the screen" }
         return switch (status.screen, status.bluetooth) {
@@ -166,6 +167,7 @@ final class AppModel {
         Task { [weak self] in
             while let self {
                 await self.samplePictures()
+                self.checkPointersByThemselves()
                 try? await Task.sleep(for: .seconds(2))
             }
         }
@@ -382,10 +384,50 @@ final class AppModel {
         }
     }
 
+    /// Automatic checks per iPhone while it is ready: when the last one ran and how many have.
+    @ObservationIgnored private var automaticChecks: [String: (date: Date, count: Int)] = [:]
+
+    /// Finds out by itself whether AssistiveTouch is set up, so setup and `status` show it before
+    /// anyone swipes. The check moves the pointer without clicking and compares two frames.
+    /// - Unknown: checked once the iPhone is ready and nobody has used it through Mobdev for five
+    ///   seconds; a moving screen gives no answer, so it tries again after 20 s, five times.
+    /// - Hidden or snapping: checked again every 30 s, twenty times, so turning AssistiveTouch on or
+    ///   Snap to Item off on the iPhone shows up without a click.
+    /// - Following: never again until the iPhone is unplugged, locked or paired anew.
+    private func checkPointersByThemselves() {
+        for device in hub.devices {
+            let status = device.status()
+            guard status.isReady else {
+                automaticChecks[device.id] = nil
+                continue
+            }
+            let last = automaticChecks[device.id] ?? (.distantPast, 0)
+            let (interval, limit): (TimeInterval, Int) =
+                switch status.pointer {
+                case nil: (20, 5)
+                case .hidden?, .snaps?: (30, 20)
+                case .follows?: (0, 0)
+                }
+            guard last.count < limit, Date().timeIntervalSince(last.date) >= interval, !checkingPointer.contains(device.id)
+            else { continue }
+            if let newest = device.activity.all.first?.date, Date().timeIntervalSince(newest) < 5 { continue }
+            automaticChecks[device.id] = (Date(), last.count + 1)
+            checkingPointer.insert(device.id)
+            Task {
+                _ = try? await device.checkPointer(at: NormalizedPoint(x: 0.5, y: 0.5))
+                checkingPointer.remove(device.id)
+            }
+        }
+    }
+
     /// Moves the pointer to the middle without clicking and reads how it reacts (AssistiveTouch).
     func checkPointer(_ id: String) {
-        guard let device = hardware(id) else { return }
-        Task { _ = try? await device.checkPointer(at: NormalizedPoint(x: 0.5, y: 0.5)) }
+        guard let device = hardware(id), !checkingPointer.contains(id) else { return }
+        checkingPointer.insert(id)
+        Task {
+            _ = try? await device.checkPointer(at: NormalizedPoint(x: 0.5, y: 0.5))
+            checkingPointer.remove(id)
+        }
     }
 
     /// Closes the setup assistant. Skipped steps start anyway, so macOS asks for what is missing,

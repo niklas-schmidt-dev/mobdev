@@ -120,6 +120,17 @@ struct OnboardingView: View {
                     )
                     .font(.callout)
                     .foregroundStyle(.secondary)
+                    StatusPill(pointerStatus)
+                }
+                // While this page is open, check every few seconds, so the result follows the
+                // switches on the iPhone. The check moves the pointer without tapping.
+                .task {
+                    while !Task.isCancelled {
+                        if let device = model.primary, device.isReady, device.status.pointer != .follows {
+                            model.checkPointer(device.id)
+                        }
+                        try? await Task.sleep(for: .seconds(4))
+                    }
                 }
             }
         case .keyboard:
@@ -246,10 +257,22 @@ struct OnboardingView: View {
         }
     }
 
+    /// Checked by itself once the iPhone is ready: no click, two frames compared.
+    private var pointerStatus: StatusPill.Status? {
+        guard let device = model.primary, device.isReady else { return nil }
+        return switch device.status.pointer {
+        case .follows?: .done("AssistiveTouch works, and swipes do too")
+        case .snaps?: .problem("Snap to Item is on: turn it off, or swipes turn into taps")
+        case .hidden?: .problem("No pointer yet: turn on AssistiveTouch")
+        case nil: .waiting("Checking the pointer…")
+        }
+    }
+
     private var connectStatus: StatusPill.Status? {
         switch model.setupScreen {
         case .connected(let name, _, _): .done("\(name) connected")
         case .noPicture: .problem("No picture from macOS: use Restart Screen Capture on the device page")
+        case .locked(let name): .waiting("Unlock \(name)…")
         case .failed(let message): .problem(message)
         case .cameraDenied: .problem("Allow screen access first")
         case .starting where !model.screenStarted: .problem("Allow screen access first")

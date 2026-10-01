@@ -227,6 +227,23 @@ final class FakeDevice: Device, @unchecked Sendable {
         #expect(status.screen.summary.contains("Restart Screen Capture"))
         #expect(status.screen.summary.contains("sudo killall iOSScreenCaptureAssistant"))
     }
+
+    /// A locked iPhone also sends no picture, but keeps its USB screen interface (seen 2026-10-01);
+    /// restarting the helper would not help it, so it is told apart.
+    @Test func noPictureWithTheScreenInterfaceMeansLocked() {
+        let stuck = ScreenState.noPicture(name: "iPhone")
+        let locked = HardwareDevice.screenState(
+            stuck, name: "iPhone", usb: USBScreenState(configuration: 7, hasScreenInterface: true))
+        #expect(locked == .locked(name: "iPhone"))
+        #expect(locked.isConnected)
+        #expect(locked.summary.contains("Unlock"))
+        #expect(!locked.summary.contains("killall"))
+        #expect(
+            HardwareDevice.screenState(stuck, name: "iPhone", usb: USBScreenState(configuration: 6, hasScreenInterface: false))
+                == stuck)
+        #expect(HardwareDevice.screenState(stuck, name: "iPhone", usb: nil) == stuck)
+        #expect(!PhoneStatus(screen: locked, bluetooth: .connected(hosts: 1), keyboardLayout: .us).isReady)
+    }
 }
 
 @Suite struct SimulatorHelperTests {

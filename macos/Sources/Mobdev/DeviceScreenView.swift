@@ -321,6 +321,12 @@ private struct ConnectPhone: View {
                 Button("Restart Screen Capture…") { model.restartScreenCapture() }
                     .buttonStyle(.glassProminent)
             }
+        case .locked(let name):
+            ContentUnavailableView {
+                Label("Unlock Your iPhone", systemImage: "lock.iphone")
+            } description: {
+                Text("\(name) is connected but locked, so it shows no picture. Unlock it with Face ID or the passcode.")
+            }
         case .connected:
             // Connected over USB, but no picture yet. Mobdev starts the capture again by itself.
             ContentUnavailableView {
@@ -481,11 +487,12 @@ struct SetupSteps: View {
         case .connected(let name, let width, let height): width > 0 ? "\(name) · \(width) × \(height)" : name
         case .searching, .starting: "Connect with a USB data cable and tap Trust."
         case .noPicture: "Connected, but macOS's screen capture helper delivers no picture. Restart it below."
+        case .locked: "Connected but locked. Unlock the iPhone."
         default: status.screen.summary
         }
     }
 
-    /// From the last pointer check (an agent's swipe or a drag in the mirror); only a guide before that.
+    /// From the last pointer check, which Mobdev runs by itself once the iPhone is ready.
     private var assistiveTouchState: StepRow.State {
         switch status.pointer {
         case .follows: .done
@@ -501,7 +508,7 @@ struct SetupSteps: View {
             "Snap to Item is on, so swipes turn into taps. On the iPhone: Settings › Accessibility › Touch › AssistiveTouch, turn off Snap to Item."
         case .hidden: "The pointer did not appear. Turn on Settings › Accessibility › Touch › AssistiveTouch."
         case nil:
-            "Settings › Accessibility › Touch › AssistiveTouch: turn it on, turn off Snap to Item and keep Perform Touch Gestures on."
+            "Checking by itself once the iPhone is ready. Settings › Accessibility › Touch › AssistiveTouch: turn it on, turn off Snap to Item and keep Perform Touch Gestures on."
         }
     }
 

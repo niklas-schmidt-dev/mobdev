@@ -60,6 +60,34 @@ public enum PointerCheck {
         return nil
     }
 
+    /// Where the pointer moves for a second look: a little to the side, so it stays on the same item.
+    public static func nudge(for point: NormalizedPoint) -> NormalizedPoint {
+        NormalizedPoint(x: point.x <= 0.5 ? point.x + 0.04 : point.x - 0.04, y: point.y)
+    }
+
+    /// The second look, when `classify` saw more than a dot: iOS also lights up or lifts an item
+    /// under a pointer that follows, which looked like a snap outline on a home screen widget
+    /// (2026-10-01). The pointer then moves to `nudge` on the same item. One that follows leaves a
+    /// small trail between the two points while the item stays lit; one that snaps stays put, so
+    /// nothing changes. Nil when something else changed.
+    public static func confirm(
+        aimed: CGImage, nudged: CGImage, from point: NormalizedPoint, to nudge: NormalizedPoint
+    ) -> PointerBehavior? {
+        guard let changes = changes(aimed, nudged, around: point) else { return nil }
+        guard changes.count >= 4 else { return .snaps }
+        let width = Double(changes.size.width), height = Double(changes.size.height)
+        let box = changes.box
+        let dot = 0.07 * width
+        let span = abs(nudge.x - point.x) * width
+        let middleX = (point.x + nudge.x) / 2 * width, middleY = point.y * height
+        if Double(box.width) <= dot + span, Double(box.height) <= dot, abs(Double(box.midX) - middleX) <= dot,
+            abs(Double(box.midY) - middleY) <= dot
+        {
+            return .follows
+        }
+        return nil
+    }
+
     /// Whether nothing changed between two frames around `point`, so a comparison would only see the pointer.
     public static func isStill(_ first: CGImage, _ second: CGImage, around point: NormalizedPoint) -> Bool {
         (changes(first, second, around: point)?.count ?? .max) < 4

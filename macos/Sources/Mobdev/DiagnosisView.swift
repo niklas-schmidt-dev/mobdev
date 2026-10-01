@@ -69,6 +69,8 @@ struct DiagnosisView: View {
             row("Picture", .done, "\(width) × \(height) pixels arrive.")
         case .connected:
             row("Picture", .waiting, "Connected, waiting for the first picture. Wake and unlock the iPhone.")
+        case .locked:
+            row("Picture", .waiting, "The iPhone is locked, so it sends no picture. Unlock it.")
         case .noPicture:
             row("Picture", .attention, "No picture arrives: macOS's screen capture helper is stuck. This happens after macOS or Xcode updates.")
             Button("Restart Screen Capture…") { model.restartScreenCapture() }
@@ -121,7 +123,7 @@ struct DiagnosisView: View {
         case .hidden:
             row("AssistiveTouch", .attention, "The pointer did not appear. Turn on Settings › Accessibility › Touch › AssistiveTouch.")
         case nil:
-            row("AssistiveTouch", .info, "Not checked yet. The check moves the pointer without tapping.")
+            row("AssistiveTouch", .info, "Not checked yet. Mobdev checks by itself once the iPhone is ready; the check moves the pointer without tapping.")
             if state.isReady { Button("Check Pointer") { model.checkPointer(id) } }
         }
     }
