@@ -328,11 +328,13 @@ the Mac.
 
 ## Limits
 
-- One iPhone per Mac for now. Several can be captured, but a Bluetooth host is not yet matched to
-  a USB screen, so input goes to every paired phone.
+- Several iPhones on one Mac each get their own Bluetooth connection: matched by name, then by
+  model, and when that does not tell (two of the same model that both call themselves "iPhone"),
+  by moving each connection's pointer and looking which screen shows it, which needs AssistiveTouch.
+  This has not been tried with two iPhones at once yet.
 - Verified on hardware so far: screen capture from an iPhone over USB, Bluetooth pairing, the API,
-  OCR, MCP, the relay, and taps, swipes and the scroll wheel with AssistiveTouch on iOS 27. Typing
-  still needs a hands-on check.
+  OCR, MCP, the relay, taps, swipes and the scroll wheel with AssistiveTouch, and typing with the
+  German layout (letters, umlauts, ß and symbols), on iOS 27.
 - Typing supports the U.S. and German hardware layouts, including common accents. Emoji and other
   characters without a key cannot be typed.
 - Portrait orientation is the tested case. Coordinates follow the current screenshot size.

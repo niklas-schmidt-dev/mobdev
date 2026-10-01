@@ -228,6 +228,23 @@ final class FakeDevice: Device, @unchecked Sendable {
         #expect(status.screen.summary.contains("sudo killall iOSScreenCaptureAssistant"))
     }
 
+    /// Hosts told apart by their pointers: only a single clear answer assigns one.
+    @Test func aHostIsChosenOnlyWhenItsPointerAloneAppeared() {
+        let a = UUID(), b = UUID()
+        func owner(_ first: Bool?, _ second: Bool?) -> UUID? {
+            var results: [UUID: Bool?] = [:]
+            results[a] = .some(first)
+            results[b] = .some(second)
+            return DeviceHub.owner(from: results)
+        }
+        let one = owner(true, false), both = owner(true, true), neither = owner(false, false)
+        let unclear = owner(true, nil)
+        #expect(one == a)
+        #expect(both == nil)
+        #expect(neither == nil)
+        #expect(unclear == nil)
+    }
+
     /// A locked iPhone also sends no picture, but keeps its USB screen interface (seen 2026-10-01);
     /// restarting the helper would not help it, so it is told apart.
     @Test func noPictureWithTheScreenInterfaceMeansLocked() {

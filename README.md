@@ -95,8 +95,9 @@ installed apps can no longer be updated.
 ## Status
 
 Early release. Verified on hardware: USB screen capture, Bluetooth pairing, MCP, OCR and remote
-access through both relays, and taps, swipes and scrolling with AssistiveTouch on iOS 27. Typing on
-a phone still needs broader hands-on testing. One iPhone per Mac for now. Every tool is verified on
+access through both relays, taps, swipes and scrolling with AssistiveTouch, and typing with the
+German layout, on iOS 27. Several iPhones on one Mac each get their own Bluetooth connection, which
+has not been tried with two iPhones at once yet. Every tool is verified on
 an iOS 27 simulator (Xcode 27) and an Android 16 emulator; Android phones use the same adb path but
 have not been tried yet.
 

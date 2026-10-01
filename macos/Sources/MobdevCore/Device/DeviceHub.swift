@@ -151,6 +151,27 @@ public final class HardwareDevice: PhoneBackend, @unchecked Sendable {
         return behavior
     }
 
+    /// Whether the pointer of Bluetooth `host` appears on this device's screen when it moves to the
+    /// middle, without clicking. Nil when the screen does not tell: no picture, or it changed by
+    /// itself. A host that is another iPhone changes nothing here; AssistiveTouch off neither.
+    func showsPointer(of host: UUID) async -> Bool? {
+        let input = HIDInput(sink: HostSink(peripheral: peripheral, host: host))
+        let point = NormalizedPoint(x: 0.5, y: 0.5)
+        do {
+            try await input.move(to: PointerCheck.parking(for: point))
+            try await Task.sleep(for: .milliseconds(400))
+            guard let parked = frame() else { return nil }
+            try await Task.sleep(for: .milliseconds(150))
+            guard let before = frame(), PointerCheck.isStill(parked, before, around: point) else { return nil }
+            try await input.move(to: point)
+            try await Task.sleep(for: .milliseconds(400))
+            guard let after = frame() else { return nil }
+            return PointerCheck.classify(before: before, after: after, at: point).map { $0 != .hidden }
+        } catch {
+            return nil
+        }
+    }
+
     /// Developer tools through Xcode's devicectl, once the device's UDID is known. The same instance
     /// stays for the UDID so captured app output survives between calls.
     public var apps: AppBackend? {
@@ -185,6 +206,8 @@ public final class DeviceHub: @unchecked Sendable {
     // Only touched on `queue`.
     private var observers: [NSObjectProtocol] = []
     private var loadedKnown = false
+    /// When hosts were last told apart by their pointers, and whether that is running.
+    private let identifying = Locked<(running: Bool, last: Date)>((false, .distantPast))
 
     public init(keyboardLayout: KeyboardLayout, onChange: @escaping @Sendable () -> Void) {
         self.onChange = onChange
@@ -435,6 +458,47 @@ public final class DeviceHub: @unchecked Sendable {
         }
         if free.count == 1, waiting.count == 1 { take(free[0], waiting[0]) }
         saveKnownDevices()
+        if !free.isEmpty, !waiting.isEmpty { identifyByPointer(free: free, waiting: waiting) }
+    }
+
+    /// Names and models do not always tell which iPhone a host is: iOS sometimes calls itself just
+    /// "iPhone", and two of the same model look alike. Then each free host moves its pointer, and
+    /// the waiting device whose screen shows it gets that host. Nothing is clicked. It needs
+    /// AssistiveTouch, runs at most every 20 s, and only for devices that show a picture.
+    private func identifyByPointer(free: [BluetoothHost], waiting: [HardwareDevice]) {
+        let devices = waiting.filter { $0.status().frameSize != nil }
+        guard !devices.isEmpty else { return }
+        let start = identifying.withLock { state -> Bool in
+            guard !state.running, Date().timeIntervalSince(state.last) > 20 else { return false }
+            state = (true, Date())
+            return true
+        }
+        guard start else { return }
+        Task {
+            defer { identifying.withLock { $0.running = false } }
+            for device in devices {
+                var results: [UUID: Bool?] = [:]
+                for host in free { results[host.id] = await device.showsPointer(of: host.id) }
+                guard let owner = Self.owner(from: results) else { continue }
+                queue.async {
+                    let list = self.deviceList.get()
+                    guard device.host == nil, list.contains(where: { $0 === device }), !list.contains(where: { $0.host == owner }),
+                        self.peripheral.connectedHosts.contains(where: { $0.id == owner })
+                    else { return }
+                    device.assign(host: owner)
+                    Log.info("bluetooth host \(owner) drives \(device.name): its pointer appeared on that screen")
+                    self.saveKnownDevices()
+                    self.onChange()
+                }
+            }
+        }
+    }
+
+    /// The one host whose pointer appeared, when every other one clearly did not.
+    static func owner(from results: [UUID: Bool?]) -> UUID? {
+        let shown = results.filter { $0.value == true }.map(\.key)
+        guard shown.count == 1, results.values.allSatisfy({ $0 != nil }) else { return nil }
+        return shown[0]
     }
 
     /// For a device whose own Bluetooth host is away: the one connected host that belongs to no
