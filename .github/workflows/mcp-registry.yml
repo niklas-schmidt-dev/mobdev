@@ -1,0 +1,54 @@
+name: MCP Registry
+# Lists the newest Mac release in the official MCP Registry (registry.modelcontextprotocol.io) as
+# io.github.niklas-schmidt-dev/mobdev, from server.json with the release's version. Signs in with
+# the workflow's GitHub OIDC token, so no secret is needed. A version that is already listed is
+# left alone, because the registry never takes a version twice.
+on:
+  workflow_run:
+    workflows: ["Mac app"]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: mcp-registry
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: >-
+      github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success'
+      && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Version of the newest release
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)
+          echo "version=${TAG#mac-v}" >> "$GITHUB_OUTPUT"
+      - name: Listed already?
+        id: listed
+        run: |
+          NAME=$(jq -r .name server.json)
+          VERSION=${{ steps.release.outputs.version }}
+          LISTED=$(curl -fsS "https://registry.modelcontextprotocol.io/v0/servers?search=$NAME&version=$VERSION" \
+            | jq --arg name "$NAME" --arg version "$VERSION" \
+              '[.servers[]? | (.server // .) | select(.name == $name and .version == $version)] | length')
+          echo "Listed copies of $NAME $VERSION: $LISTED"
+          echo "listed=$LISTED" >> "$GITHUB_OUTPUT"
+      - name: Publish
+        if: steps.listed.outputs.listed == '0'
+        run: |
+          jq --arg version "${{ steps.release.outputs.version }}" '.version = $version' server.json > server.tmp
+          mv server.tmp server.json
+          curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_linux_amd64.tar.gz" \
+            | tar xz mcp-publisher
+          ./mcp-publisher login github-oidc
+          ./mcp-publisher publish
