@@ -144,6 +144,14 @@ final class SimulatorKit: @unchecked Sendable {
 
     /// The frontmost app's accessibility elements. Blocks for a few seconds.
     func elements(_ udid: String) throws -> [UIElement] {
+        if let helper = SimulatorAccessibility.helper { return try SimulatorAccessibility.elements(udid, helper: helper) }
+        return try elementsInProcess(udid)
+    }
+
+    /// Reads the tree in this process. The translator keeps what it first learned about an app
+    /// instance, so an app that restarted while this process runs can stay empty; `Mobdev` uses a
+    /// short-lived helper process instead (`SimulatorAccessibility.helper`).
+    func elementsInProcess(_ udid: String) throws -> [UIElement] {
         guard let device = device(udid) else { throw DeveloperError("The simulator \(udid) is not booted.") }
         return try SimulatorAccessibility.shared.get().elements(of: device, udid: udid)
     }

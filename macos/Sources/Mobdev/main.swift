@@ -26,6 +26,11 @@ if CommandLine.arguments.dropFirst().first == "devices" {
     exit(0)
 }
 
+// `Mobdev __ui-tree <udid>` reads a simulator's UI tree in a fresh process, for the app itself.
+if CommandLine.arguments.dropFirst().first == "__ui-tree", CommandLine.arguments.count == 3 {
+    SimulatorAccessibility.printTree(udid: CommandLine.arguments[2])
+}
+
 // `Mobdev flow <file.json>` runs a flow on a simulator or Android device without the app, for CI.
 if CommandLine.arguments.dropFirst().first == "flow" {
     FlowCommand.run(Array(CommandLine.arguments.dropFirst(2)))

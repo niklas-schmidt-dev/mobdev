@@ -5,7 +5,7 @@ import ObjectiveC
 /// The accessibility tree of a simulator's frontmost app, read the way idb and AXe read it:
 /// AccessibilityPlatformTranslation turns iOS accessibility into macOS elements and fetches each
 /// piece through a token delegate, which forwards the request to the simulator in CoreSimulator.
-final class SimulatorAccessibility: @unchecked Sendable {
+public final class SimulatorAccessibility: @unchecked Sendable {
     static let shared: Result<SimulatorAccessibility, any Error> = Result { try SimulatorAccessibility() }
 
     private typealias Frontmost = @convention(c) (AnyObject, Selector, UInt32, NSString) -> AnyObject?
@@ -38,8 +38,9 @@ final class SimulatorAccessibility: @unchecked Sendable {
     func elements(of device: NSObject, udid: String) throws -> [UIElement] {
         lock.lock()
         defer { lock.unlock() }
-        let token = udid as NSString
+        let token = UUID().uuidString as NSString
         bridge.register(device, token: token)
+        defer { bridge.unregister(token) }
         let selector = NSSelectorFromString("frontmostApplicationWithDisplayId:bridgeDelegateToken:")
         guard let method = class_getMethodImplementation(object_getClass(translator), selector),
             let translation = unsafeBitCast(method, to: Frontmost.self)(translator, selector, 0, token) as? NSObject
@@ -64,6 +65,65 @@ final class SimulatorAccessibility: @unchecked Sendable {
         }
         walk(root, depth: 0)
         return elements
+    }
+
+    // MARK: Helper process
+
+    /// The Mobdev executable, which reads a tree with `Mobdev __ui-tree <udid>` in a fresh process.
+    /// The translator keeps its first answer for an app instance: after an app restarted while
+    /// Mobdev ran, every read came back as an application without size or children, while a new
+    /// process read it at once (2026-10-01). A fresh process takes about 0.15 s. Nil in tests,
+    /// unless MOBDEV_UI_TREE_HELPER names the executable.
+    static let helper: URL? = {
+        if let custom = ProcessInfo.processInfo.environment["MOBDEV_UI_TREE_HELPER"], !custom.isEmpty {
+            return URL(fileURLWithPath: custom)
+        }
+        guard let executable = Bundle.main.executableURL, executable.lastPathComponent == "Mobdev" else { return nil }
+        return executable
+    }()
+
+    static func elements(_ udid: String, helper: URL) throws -> [UIElement] {
+        let (status, data) = try ProcessRunner().runBinary(helper, ["__ui-tree", udid], timeout: 30)
+        let value = try? JSONValue.parse(data)
+        guard status == 0, let items = value?.arrayValue else {
+            throw DeveloperError(value?["error"]?.stringValue ?? "Could not read the simulator's UI tree (exit \(status)).")
+        }
+        return items.compactMap(element(from:))
+    }
+
+    /// `Mobdev __ui-tree <udid>`: prints the frontmost app's elements as JSON and exits.
+    public static func printTree(udid: String) -> Never {
+        let output: JSONValue
+        var status: Int32 = 0
+        do {
+            guard let kit = SimulatorKit.shared else { throw DeveloperError("Simulators need Xcode.") }
+            output = .array(try kit.elementsInProcess(udid).map(json))
+        } catch {
+            output = ["error": .string(String(describing: error))]
+            status = 1
+        }
+        FileHandle.standardOutput.write(output.encoded())
+        exit(status)
+    }
+
+    static func json(_ element: UIElement) -> JSONValue {
+        [
+            "role": .string(element.role), "label": .string(element.label), "id": .string(element.identifier),
+            "value": .string(element.value), "enabled": .bool(element.enabled), "tappable": .bool(element.tappable),
+            "frame": [
+                .number(element.frame.minX), .number(element.frame.minY), .number(element.frame.width),
+                .number(element.frame.height),
+            ],
+        ]
+    }
+
+    static func element(from value: JSONValue) -> UIElement? {
+        guard let frame = value["frame"]?.arrayValue?.compactMap(\.doubleValue), frame.count == 4 else { return nil }
+        return UIElement(
+            role: value["role"]?.stringValue ?? "", label: value["label"]?.stringValue ?? "",
+            identifier: value["id"]?.stringValue ?? "", value: value["value"]?.stringValue ?? "",
+            frame: CGRect(x: frame[0], y: frame[1], width: frame[2], height: frame[3]),
+            enabled: value["enabled"]?.boolValue ?? true, tappable: value["tappable"]?.boolValue ?? false)
     }
 
     /// Roles someone taps, as the translation names them without their "AX" prefix.
@@ -108,6 +168,7 @@ private final class Bridge: NSObject, @unchecked Sendable {
     private let queue = DispatchQueue(label: "sh.mobdev.simulator-accessibility")
 
     func register(_ device: NSObject, token: NSString) { devices.withLock { $0[token] = device } }
+    func unregister(_ token: NSString) { devices.withLock { $0[token] = nil } }
 
     @objc(accessibilityTranslationDelegateBridgeCallbackWithToken:)
     func callback(token: NSString) -> Any {
