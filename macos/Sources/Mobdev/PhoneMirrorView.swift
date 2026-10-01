@@ -64,6 +64,8 @@ final class MirrorNSView: NSView {
     private var dragStarted = Date()
     private var dragged = false
     private var scrollAccumulator: CGFloat = 0
+    /// A two-finger scroll on the trackpad, played on the iPhone as a touch that moves along.
+    private var scrollTouch: (start: NormalizedPoint, current: NormalizedPoint, started: Date)?
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -137,6 +139,10 @@ final class MirrorNSView: NSView {
     }
 
     override func scrollWheel(with event: NSEvent) {
+        if event.hasPreciseScrollingDeltas, event.phase != [] || event.momentumPhase != [] {
+            trackpadScroll(event)
+            return
+        }
         // Positive ticks reveal content further down; on the Mac that is a negative delta.
         scrollAccumulator -= event.scrollingDeltaY * (event.hasPreciseScrollingDeltas ? 0.1 : 1)
         let ticks = Int(scrollAccumulator)
@@ -144,6 +150,44 @@ final class MirrorNSView: NSView {
         scrollAccumulator -= CGFloat(ticks)
         let point = normalized(event)
         Task { try? await input.scroll(at: point, ticks: ticks) }
+    }
+
+    /// Two fingers on the trackpad move a touch on the iPhone the same way and as far, sideways too,
+    /// and lifting them lets iOS fling the content as after a swipe. The wheel scrolled only up and
+    /// down, in small steps, which made sideways scrolling impossible (2026-10-01). The scroll's
+    /// momentum after the fingers lift is left to iOS.
+    private func trackpadScroll(_ event: NSEvent) {
+        guard let input, event.momentumPhase == [] else { return }
+        if event.phase.contains(.began) || scrollTouch == nil {
+            guard !event.phase.contains(.ended), !event.phase.contains(.cancelled) else { return }
+            let point = normalized(event)
+            scrollTouch = (point, point, Date())
+            input.pointerDown(at: point)
+            lastMove = Date()
+            return
+        }
+        guard var touch = scrollTouch else { return }
+        // With natural scrolling the deltas follow the fingers; otherwise they are reversed.
+        let direction: CGFloat = event.isDirectionInvertedFromDevice ? 1 : -1
+        if bounds.width > 0, bounds.height > 0 {
+            touch.current = NormalizedPoint(
+                x: min(max(touch.current.x + direction * event.scrollingDeltaX / bounds.width, 0), 1),
+                y: min(max(touch.current.y + direction * event.scrollingDeltaY / bounds.height, 0), 1))
+        }
+        scrollTouch = touch
+        if event.phase.contains(.ended) || event.phase.contains(.cancelled) {
+            input.pointerUp(at: touch.current)
+            scrollTouch = nil
+            if hypot(touch.current.x - touch.start.x, touch.current.y - touch.start.y) > 0.02 {
+                onDrag?(touch.start)
+                onInput?(.swipe(from: touch.start, to: touch.current, duration: Date().timeIntervalSince(touch.started)))
+            }
+            return
+        }
+        // BLE carries a report every 15-30 ms; more would only queue up.
+        guard Date().timeIntervalSince(lastMove) > 0.025 else { return }
+        lastMove = Date()
+        input.pointerMove(to: touch.current)
     }
 
     override func keyDown(with event: NSEvent) {

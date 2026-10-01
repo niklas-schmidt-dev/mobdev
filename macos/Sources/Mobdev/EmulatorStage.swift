@@ -10,6 +10,11 @@ struct EmulatorStage: View {
     let frameSize: CGSize
     @State private var image: CGImage?
     @State private var dragStarted: Date?
+    /// Where the pointer is over the screen, in its points, and the size it is shown at.
+    @State private var hover: (point: CGPoint, screen: CGSize)?
+    /// A two-finger scroll in progress: where it started and how far the fingers moved.
+    @State private var scroll: (start: CGPoint, moved: CGSize, started: Date, screen: CGSize)?
+    @State private var scrollMonitor: Any?
     @FocusState private var focused: Bool
     @Environment(\.appearsActive) private var appearsActive
 
@@ -31,6 +36,9 @@ struct EmulatorStage: View {
                     .clipShape(.rect(cornerRadius: radius, style: .continuous))
                     .contentShape(.rect)
                     .gesture(touch(in: screen))
+                    .onContinuousHover { phase in
+                        if case .active(let point) = phase { hover = (point, screen) } else { hover = nil }
+                    }
                     .focusable()
                     .focused($focused)
                     .focusEffectDisabled()
@@ -64,6 +72,44 @@ struct EmulatorStage: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .task(id: id) { await refresh() }
+        .onAppear {
+            scrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { event in
+                trackpadScroll(event) ? nil : event
+            }
+        }
+        .onDisappear {
+            if let scrollMonitor { NSEvent.removeMonitor(scrollMonitor) }
+            scrollMonitor = nil
+        }
+    }
+
+    /// Two fingers on the trackpad over the screen swipe the device the way they moved, sideways
+    /// too, once they lift. Simulators and adb take a swipe as one command, so it is not played
+    /// along live as on an iPhone. True when the event was used.
+    private func trackpadScroll(_ event: NSEvent) -> Bool {
+        guard event.hasPreciseScrollingDeltas else { return false }
+        if event.momentumPhase != [] { return scroll != nil || hover != nil }
+        if scroll == nil {
+            guard let hover, event.phase.contains(.began) || event.phase.contains(.changed) else { return false }
+            scroll = (hover.point, .zero, .now, hover.screen)
+        }
+        guard var current = scroll else { return false }
+        // With natural scrolling the deltas follow the fingers; otherwise they are reversed.
+        let direction: CGFloat = event.isDirectionInvertedFromDevice ? 1 : -1
+        current.moved.width += direction * event.scrollingDeltaX
+        current.moved.height += direction * event.scrollingDeltaY
+        scroll = current
+        guard event.phase.contains(.ended) || event.phase.contains(.cancelled) else { return true }
+        scroll = nil
+        let end = CGPoint(x: current.start.x + current.moved.width, y: current.start.y + current.moved.height)
+        guard hypot(current.moved.width, current.moved.height) >= 6 else { return true }
+        func normalized(_ point: CGPoint) -> NormalizedPoint {
+            NormalizedPoint(
+                x: min(max(point.x / current.screen.width, 0), 1), y: min(max(point.y / current.screen.height, 0), 1))
+        }
+        model.swipe(
+            id, from: normalized(current.start), to: normalized(end), duration: min(Date.now.timeIntervalSince(current.started), 0.5))
+        return true
     }
 
     @ViewBuilder private var picture: some View {
