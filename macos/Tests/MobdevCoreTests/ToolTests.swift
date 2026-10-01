@@ -215,7 +215,8 @@ extension Trait where Self == ConditionTrait {
         _ = try await tools.call("open_app", arguments: ["name": "Maps"], source: "test", screenshotByDefault: false)
         let events = phone.events.get()
         #expect(events.first == .button(.home))
-        #expect(events.contains(.button(.search)))
+        #expect(events.contains(.key(KeyStroke(0x2C, KeyStroke.command))))
+        #expect(!events.contains(.button(.search)))
         #expect(events.last == .key(KeyStroke(0x28)))
     }
 }

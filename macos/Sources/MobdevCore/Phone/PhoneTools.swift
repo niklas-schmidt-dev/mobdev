@@ -313,7 +313,9 @@ public final class PhoneTools: Sendable {
             let strokes = try layout.strokes(typing: name)
             try await phone.press(.home)
             try await pause(0.6)
-            try await phone.press(.search)
+            // ⌘Space, not the HID Search key: iOS 27.0.1 ignores the Search key, and the name
+            // was then typed into nothing (2026-10-01).
+            try await phone.press(try layout.stroke(forKey: "space", modifiers: ["cmd"]))
             try await pause(0.8)
             try await phone.type(strokes)
             try await pause(1.0)
