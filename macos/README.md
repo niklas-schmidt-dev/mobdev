@@ -4,8 +4,9 @@ The Mobdev app: your iPhones, iOS simulators and Android devices in one window, 
 agent. Free, open source, about 2 MB, no account.
 
 Mobdev reads the iPhone screen over the USB cable and taps and types through Bluetooth, posing as a
-keyboard and pointer. Nothing is installed on the phone: no developer mode, no jailbreak. Booted
-simulators and Android devices take the same tools. Agents get an MCP server and a small HTTP API.
+keyboard and pointer. Nothing is installed on the phone: no developer mode, no jailbreak. (Only the
+optional UI tree on iPhones runs a small UI test there.) Booted simulators and Android devices take the
+same tools. Agents get an MCP server and a small HTTP API.
 An optional relay lets agents elsewhere reach the devices.
 
 ```
@@ -138,7 +139,7 @@ only device, or the connected iPhone when simulators or Android devices run next
 | `find_text` | `text` | |
 | `tap_text` | `text`, `index` | Taps a visible label |
 | `wait_for_text` | `text`, `timeout`, `gone` | |
-| `ui_tree` | `contains`, `all` | Elements from the accessibility tree: role, label, identifier, value, position. Simulators and Android |
+| `ui_tree` | `contains`, `all` | Elements from the accessibility tree: role, label, identifier, value, position. Simulators, Android, and iPhones with the UI tree on |
 | `tap_element` | `id`, `text`, `index`, `timeout` | Taps an element by identifier or label, waiting up to 5 s for it |
 | `wait_for_element` | `id`, `text`, `timeout`, `gone` | Like `wait_for_text`, from the tree |
 | `run_flow` | `path`, `steps`, `video` | Replays a flow and stops at the first failing step; `video` saves a recording (.mp4) |
@@ -204,8 +205,33 @@ role, label, identifier, value and position in screenshot pixels. `tap_element` 
 `wait_for_element` find an element by identifier (`accessibilityIdentifier`, or the resource id on
 Android, whole or its last part) or by label. That is steadier than OCR and finds buttons that show
 only an icon. Simulators are read through macOS's accessibility translation, as idb does; Android
-through `uiautomator dump`, which takes about two seconds. An iPhone offers no such tree without a
-test runner installed on it, so there the tools say to use `read_screen` and `tap_text`.
+through `uiautomator dump`, which takes about two seconds. An iPhone needs the UI tree turned on
+(below); until then the tools say how, and `read_screen` and `tap_text` work instead.
+
+### UI tree on iPhones
+
+iOS shows an app's accessibility tree only to a UI test running on the phone. With **Developer Mode**
+on the iPhone and **Xcode** on the Mac, open the iPhone's info in Mobdev, pick a team under **UI
+Tree** and click **Turn On**. Mobdev builds Mobdev Runner, a small XCUITest (`Runner/`), signs it
+with your team and keeps it running on the iPhone, the way WebDriverAgent does. `ui_tree`,
+`tap_element` and `wait_for_element` then work as on simulators, and Record names clicked elements.
+
+- **Team**: Mobdev lists the teams of the Apple Development certificates in your keychain (the
+  certificate's organizational unit, not the ID in parentheses in its name) and picks the newest.
+  Xcode must be signed in to that team's Apple Account (Xcode's Settings) to make the provisioning
+  profile and register the iPhone. The runner's bundle ID is `dev.mobdev.runner.<team>`.
+- **First start**: the build takes a minute or two; later starts a few seconds. With a free Apple
+  Account, iOS asks you once to trust the developer: Settings › General › VPN & Device Management.
+  A failed start shows xcodebuild's reason and the usual fix under UI Tree, such as turning on
+  Settings › Developer › Enable UI Automation; **Try Again** builds again.
+- **While it runs**: Mobdev keeps `xcodebuild test-without-building` running and starts it again
+  when it ends, stops it when the iPhone is unplugged or Mobdev quits, and starts it when the iPhone
+  is back. The runner appears on the iPhone as MobdevRunner-Runner. Build, logs and the copy of the
+  project are in `~/Library/Application Support/dev.mobdev.mac/runner/<udid>`.
+- The runner answers HTTP on port 47270 on the iPhone's loopback interface only. Mobdev reaches it
+  through usbmuxd over the USB cable, and every request carries a token made for that start, so
+  other apps on the phone cannot use it. Taps still go through Bluetooth; text the keyboard layout
+  has no keys for, such as emoji, is typed by the runner.
 
 ### Flows and CI
 
@@ -336,7 +362,7 @@ the Mac.
   OCR, MCP, the relay, taps, swipes and the scroll wheel with AssistiveTouch, and typing with the
   German layout (letters, umlauts, ß and symbols), on iOS 27.
 - Typing supports the U.S. and German hardware layouts, including common accents. Emoji and other
-  characters without a key cannot be typed.
+  characters without a key need the UI tree on: Mobdev Runner types them.
 - Portrait orientation is the tested case. Coordinates follow the current screenshot size.
 - The phone must stay unlocked. Mobdev cannot enter the passcode.
 - Simulator input uses Xcode's private SimulatorKit; tested with Xcode 27. A later Xcode can change
@@ -346,6 +372,9 @@ the Mac.
 - `ui_tree` reads the simulator through macOS's private accessibility translation; tested with
   Xcode 27 on macOS 27. `Mobdev flow` is tested on a Mac, not yet on GitHub's hosted runners.
 - Recording does not capture the scroll wheel; drag to scroll while recording.
+- Mobdev Runner finds the app in front through XCTest's private API, as WebDriverAgent does; tested
+  with Xcode 27 on simulators. Its frames assume portrait. It is built with your Xcode, so a new
+  Xcode can break it until Mobdev catches up.
 
 ## Development
 
@@ -382,14 +411,30 @@ MOBDEV_TEST_ANDROID=emulator-5554 MOBDEV_TEST_ANDROID_APK=/path/to/any.apk swift
 The Android tests crash the Settings app with `am crash` and install, remove and reinstall the
 .apk; run the emulator with `-read-only` to throw those changes away.
 
+Mobdev Runner is tested against usbmuxd and runner answers from fakes. The opt-in `RunnerIntegration`
+test builds it for a simulator (no signing; the runner listens on the Mac's 127.0.0.1), drives Settings
+through `/tree`, `/tap` and `/type` and then `ui_tree`, `tap_element` and `wait_for_element`, and
+checks that stopping ends it. Two read-only checks help on an iPhone: one asks usbmuxd for its
+device list, the other reads the tree of a runner started by hand with
+`TEST_RUNNER_MOBDEV_RUNNER_TOKEN=<token> xcodebuild test-without-building …`, through usbmuxd:
+
+```sh
+UDID=$(xcrun simctl create "Mobdev Runner Test" "iPhone 17")
+MOBDEV_TEST_RUNNER_SIMULATOR=$UDID swift test --filter RunnerIntegration
+xcrun simctl delete "$UDID"
+MOBDEV_TEST_USBMUXD=<iPhone udid> swift test --filter usbmuxdListsTheConnectedIPhone
+MOBDEV_TEST_RUNNER_DEVICE=<iPhone udid> MOBDEV_TEST_RUNNER_TOKEN=<token> swift test --filter runnerOnAnIPhoneAnswersOverUSB
+```
+
 `MobdevCore` contains everything testable: HID reports and gestures (`HID/`), screen capture and
 text recognition (`Capture/`), tools (`Phone/`), `devicectl` for the developer tools
-(`Developer/`), simulators and Android (`Emulators/`), HTTP, MCP and the stdio bridge (`Server/`)
-and the relay client (`Relay/`). The `Mobdev` target is the SwiftUI app: a `NavigationSplitView` with
-Liquid Glass controls, an inspector for setup, a `Table` for activity and a Settings scene. Tests
-use a fake phone that renders real text, so OCR, `tap_text` and coordinates are exercised without
-hardware. `scripts/make-icon.swift` packages the Imagegen artwork from `../assets/branding/`
-on the macOS 26 icon grid; `--dev` selects the amber development variant. See
+(`Developer/`), simulators and Android (`Emulators/`), building Mobdev Runner and reaching it through
+usbmuxd (`Runner/`; its Xcode project is `Runner/` next to `Sources/`), HTTP, MCP and the stdio
+bridge (`Server/`) and the relay client (`Relay/`). The `Mobdev` target is the SwiftUI app: a
+`NavigationSplitView` with Liquid Glass controls, an inspector for setup, a `Table` for activity and
+a Settings scene. Tests use a fake phone that renders real text, so OCR, `tap_text` and coordinates
+are exercised without hardware. `scripts/make-icon.swift` packages the Imagegen artwork from
+`../assets/branding/` on the macOS 26 icon grid; `--dev` selects the amber development variant. See
 [`../assets/branding/README.md`](../assets/branding/README.md) to regenerate all branding exports.
 
 ## Credits

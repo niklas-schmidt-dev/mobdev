@@ -54,8 +54,8 @@ in the way, or the tap hit a neighbour. Do not repeat the same tap blindly.
 - `tap_text` says the text is not visible: OCR may split or merge labels. `read_screen` shows the
   exact text; pass a shorter part of it.
 - Typed text comes out wrong (y and z swapped, wrong symbols): the keyboard layout in Mobdev does not
-  match Settings > General > Keyboard > Hardware Keyboard on the iPhone. Tell the user. Emoji cannot
-  be typed.
+  match Settings > General > Keyboard > Hardware Keyboard on the iPhone. Tell the user. Emoji type
+  only with the UI tree on (below).
 - Taps do nothing: AssistiveTouch is off, or the phone locked itself. Suggest Auto-Lock: Never while
   agents work.
 - `swipe` fails because the pointer snaps to items, or a swipe opened something instead of
@@ -73,8 +73,10 @@ setup, and the same tools work, with these differences:
 - An app reopens where it was left. `stop_app` first when you need its first screen.
 - `ui_tree` lists the elements on screen with role, label, accessibility identifier and position.
   Prefer `tap_element` (by `id` or `text`) and `wait_for_element` to OCR here: they find icon-only
-  buttons and fields, and `tap_element` waits up to 5 s for its element. They do not work on an
-  iPhone; use `tap_text` there.
+  buttons and fields, and `tap_element` waits up to 5 s for its element.
+- On an iPhone they need the UI tree turned on in Mobdev (Developer Mode on the iPhone, Xcode on the
+  Mac): Mobdev then runs a small UI test there, Mobdev Runner. Without it `ui_tree` says how to turn
+  it on; use `tap_text` meanwhile, and do not ask the user to set it up unless the task needs it.
 
 ## Flows
 

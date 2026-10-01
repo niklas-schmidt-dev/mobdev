@@ -305,7 +305,7 @@
   "ddd038df170c14ab": "Where a label is",
   "eebc314143e05858": "Tap a visible label",
   "160bcf9c654c89a8": "Wait for text to appear or disappear",
-  "a88f757dd0db33a6": "Elements from the accessibility tree (simulators and Android)",
+  "d2cbdef90a410a0e": "Elements from the accessibility tree (simulators, Android, iPhones with the UI tree on)",
   "631ced74c82986c2": "Tap an element by identifier or label",
   "cde6ef43d109ddbf": "Wait for an element to appear or disappear",
   "319fcd5a8366dc5a": "Replay a flow; stops at the first failing step and can save a video",
@@ -576,7 +576,7 @@
       }
     ]
   },
-  "4050125e5786ac9c": {
+  "877ec71d21c9ee2f": {
     "t": "p",
     "i": 1,
     "c": [
@@ -598,7 +598,7 @@
         "i": 4,
         "c": "wait_for_element"
       },
-      " find them by identifier or label: steadier than OCR, and they find buttons that show only an icon. An iPhone has no such tree without a test runner on the phone, so there agents use ",
+      " find them by identifier or label: steadier than OCR, and they find buttons that show only an icon. On an iPhone they need the UI tree turned on (see Build, run and debug); until then agents use ",
       {
         "t": "code",
         "i": 5,
@@ -679,7 +679,49 @@
       " are on the Mac that runs Mobdev, also through a relay. Mobdev never removes App Store or system apps."
     ]
   },
-  "35f7e3fa41952f40": {
+  "a616d7572877102a": {
+    "t": "p",
+    "i": 1,
+    "c": [
+      {
+        "t": "strong",
+        "i": 2,
+        "c": "UI tree on iPhones."
+      },
+      " With Developer Mode and Xcode, open the iPhone’s info in Mobdev and turn on ",
+      {
+        "t": "strong",
+        "i": 3,
+        "c": "UI Tree"
+      },
+      ". Mobdev builds Mobdev Runner, a small UI test, with Xcode, signs it with your development team and keeps it running on the iPhone, as WebDriverAgent does. Then ",
+      {
+        "t": "code",
+        "i": 4,
+        "c": "ui_tree"
+      },
+      ", ",
+      {
+        "t": "code",
+        "i": 5,
+        "c": "tap_element"
+      },
+      " and ",
+      {
+        "t": "code",
+        "i": 6,
+        "c": "wait_for_element"
+      },
+      " work there as on simulators, and ",
+      {
+        "t": "code",
+        "i": 7,
+        "c": "type_text"
+      },
+      " also types emoji. The first build takes a minute or two. With a free Apple Account, trust the developer once under Settings › General › VPN & Device Management."
+    ]
+  },
+  "854dcb23fcb04f47": {
     "t": "p",
     "i": 1,
     "c": [
@@ -689,7 +731,7 @@
         "i": 2,
         "c": "Record"
       },
-      " in a device’s activity and everything you or an agent do on it is collected; on simulators and Android, clicks on named elements become ",
+      " in a device’s activity and everything you or an agent do on it is collected; on simulators, Android and iPhones with the UI tree, clicks on named elements become ",
       {
         "t": "code",
         "i": 3,
@@ -1034,14 +1076,12 @@
   "6d92b3ac946aa3bb": "Run it on my iPhone and find out why it crashes.",
   "7f8cb8174c6d288f": "Next",
   "8d8555364510a069": "Planned",
-  "ec843f776255abb5": "UI tree on iPhones.",
-  "6c69b1e9419c17c7": "Tap elements by identifier on developer-mode iPhones too, as on simulators and Android today.",
   "e60bd40be027415a": "Live view in the browser.",
   "0a73e54778118a8d": "Watch and take over a phone from the dashboard, and share devices with your team.",
   "abeb6ee67f73f8bd": "Does it replace Xcode or Android Studio?",
   "44ee2c19acafea77": "No. Keep building with Xcode, Android Studio, Gradle or XcodeBuildMCP. Mobdev takes over once there is a build: it installs it on a device, runs it, drives it and reads its logs and crash reports.",
   "e1e9ccdf882b927a": "Does the iPhone need developer mode or an app?",
-  "50802cc3d79c8d32": "No. Mobdev only uses the USB screen feed and a Bluetooth keyboard and pointer, which every iPhone supports. You turn on AssistiveTouch once. Only the optional tools for your own apps, such as installing builds and reading their logs, need Developer Mode and Xcode.",
+  "56fd0fef35e89316": "No. Mobdev only uses the USB screen feed and a Bluetooth keyboard and pointer, which every iPhone supports. You turn on AssistiveTouch once. Only the optional tools for your own apps, such as installing builds and reading their logs, and the UI tree need Developer Mode and Xcode.",
   "0d0c754624892508": "Does it work with the Simulator and Android?",
   "f1812a1824958fc5": "Yes. Booted iOS simulators and Android emulators and phones appear next to your iPhones and take the same tools, installing and reading logs included. Simulators need Xcode, Android needs adb from the Android SDK. Nothing is installed on them.",
   "234e7291b21b4445": "Do I need an AI agent?",
@@ -1285,7 +1325,7 @@
       "c": "Click Record, then use the app yourself or let your agent work. Mobdev saves the steps as a flow and replays it from the app, from your agent or in CI, and stops at the first step that fails. Every run keeps a video, so you can watch where it went wrong."
     }
   ],
-  "836fc2fd0246326a": [
+  "8e8d9d03e168d840": [
     {
       "t": "h3",
       "i": 1,
@@ -1294,7 +1334,7 @@
     {
       "t": "p",
       "i": 2,
-      "c": "On simulators and Android, agents read the UI tree and tap elements by their accessibility identifier. Recorded clicks become identifiers too, so flows survive layout changes."
+      "c": "On simulators, Android and Developer Mode iPhones, agents read the UI tree and tap elements by their accessibility identifier. Recorded clicks become identifiers too, so flows survive layout changes."
     }
   ],
   "a1bec16fb5d59c3f": {

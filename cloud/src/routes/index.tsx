@@ -131,12 +131,6 @@ const statusLabels: Record<RoadmapStatus, string> = { Next: msg("Next"), Planned
 
 const roadmap = [
   {
-    icon: "tree",
-    status: "Planned" as RoadmapStatus,
-    title: msg("UI tree on iPhones."),
-    body: msg("Tap elements by identifier on developer-mode iPhones too, as on simulators and Android today."),
-  },
-  {
     icon: "browser",
     status: "Planned" as RoadmapStatus,
     title: msg("Live view in the browser."),
@@ -154,7 +148,7 @@ const faqs = [
   [
     msg("Does the iPhone need developer mode or an app?"),
     msg(
-      "No. Mobdev only uses the USB screen feed and a Bluetooth keyboard and pointer, which every iPhone supports. You turn on AssistiveTouch once. Only the optional tools for your own apps, such as installing builds and reading their logs, need Developer Mode and Xcode.",
+      "No. Mobdev only uses the USB screen feed and a Bluetooth keyboard and pointer, which every iPhone supports. You turn on AssistiveTouch once. Only the optional tools for your own apps, such as installing builds and reading their logs, and the UI tree need Developer Mode and Xcode.",
     ),
   ],
   [
@@ -468,8 +462,8 @@ function Home() {
               <T>
                 <h3 className="mt-6 text-[21px] font-semibold tracking-tight">Tap by identifier.</h3>
                 <p className="mt-2 text-[17px] leading-[1.47] text-muted">
-                  On simulators and Android, agents read the UI tree and tap elements by their accessibility identifier.
-                  Recorded clicks become identifiers too, so flows survive layout changes.
+                  On simulators, Android and Developer Mode iPhones, agents read the UI tree and tap elements by their
+                  accessibility identifier. Recorded clicks become identifiers too, so flows survive layout changes.
                 </p>
               </T>
             </div>
@@ -551,7 +545,7 @@ function Home() {
               The toolkit keeps growing. Free, like everything else.
             </p>
           </T>
-          <ul className="mx-auto mt-14 grid max-w-3xl grid-cols-1 gap-5 md:grid-cols-2">
+          <ul className="mx-auto mt-14 grid max-w-md grid-cols-1 gap-5">
             {roadmap.map((item, index) => (
               <li key={item.title} {...reveal(index)} className={mistCard}>
                 <div className="flex items-start justify-between gap-4">

@@ -49,7 +49,7 @@ const tools = [
   ["find_text", "text", msg("Where a label is")],
   ["tap_text", "text, index", msg("Tap a visible label")],
   ["wait_for_text", "text, timeout, gone", msg("Wait for text to appear or disappear")],
-  ["ui_tree", "contains, all", msg("Elements from the accessibility tree (simulators and Android)")],
+  ["ui_tree", "contains, all", msg("Elements from the accessibility tree (simulators, Android, iPhones with the UI tree on)")],
   ["tap_element", "id, text, index, timeout", msg("Tap an element by identifier or label")],
   ["wait_for_element", "id, text, timeout, gone", msg("Wait for an element to appear or disappear")],
   ["run_flow", "path, steps, video", msg("Replay a flow; stops at the first failing step and can save a video")],
@@ -258,8 +258,9 @@ function Docs() {
                 <p>
                   On both, <code className={code}>ui_tree</code> lists the elements on screen with their role, label and
                   accessibility identifier, and <code className={code}>tap_element</code> and <code className={code}>wait_for_element</code> find
-                  them by identifier or label: steadier than OCR, and they find buttons that show only an icon. An iPhone has no such tree without a test runner on
-                  the phone, so there agents use <code className={code}>tap_text</code>.
+                  them by identifier or label: steadier than OCR, and they find buttons that show only an icon. On an
+                  iPhone they need the UI tree turned on (see Build, run and debug); until then agents
+                  use <code className={code}>tap_text</code>.
                 </p>
               </T>
               <T>
@@ -291,14 +292,26 @@ function Docs() {
                   Mobdev never removes App Store or system apps.
                 </p>
               </T>
+              <T>
+                <p>
+                  <strong>UI tree on iPhones.</strong> With Developer Mode and Xcode, open the iPhone’s info in Mobdev and
+                  turn on <strong>UI Tree</strong>. Mobdev builds Mobdev Runner, a small UI test, with Xcode, signs it
+                  with your development team and keeps it running on the iPhone, as WebDriverAgent does.
+                  Then <code className={code}>ui_tree</code>, <code className={code}>tap_element</code> and <code className={code}>wait_for_element</code> work
+                  there as on simulators, and <code className={code}>type_text</code> also types emoji. The first build
+                  takes a minute or two. With a free Apple Account, trust the developer once under Settings › General ›
+                  VPN &amp; Device Management.
+                </p>
+              </T>
             </Section>
 
             <Section id="flows">
               <T>
                 <p>
                   A flow is a list of tool calls saved as JSON. Click <strong>Record</strong> in a device’s activity and
-                  everything you or an agent do on it is collected; on simulators and Android, clicks on named elements
-                  become <code className={code}>tap_element</code>, so the flow survives layout changes. Replay it
+                  everything you or an agent do on it is collected; on simulators, Android and iPhones with the UI tree,
+                  clicks on named elements become <code className={code}>tap_element</code>, so the flow survives layout
+                  changes. Replay it
                   with <strong>Run Flow…</strong>, the <code className={code}>run_flow</code> tool or, without the
                   app, <code className={code}>Mobdev flow</code>. Every run stops at the first failing step and says
                   which. Run Flow… keeps a video of each run; <code className={code}>run_flow</code> saves one where

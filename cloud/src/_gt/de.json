@@ -305,7 +305,7 @@
   "ddd038df170c14ab": "Wo eine Beschriftung steht",
   "eebc314143e05858": "Auf eine sichtbare Beschriftung tippen",
   "160bcf9c654c89a8": "Warten, bis ein Text erscheint oder verschwindet",
-  "a88f757dd0db33a6": "Elemente aus dem Accessibility-Baum (Simulatoren und Android)",
+  "d2cbdef90a410a0e": "Elemente aus dem Accessibility-Baum (Simulatoren, Android, iPhones mit eingeschaltetem UI-Baum)",
   "631ced74c82986c2": "Auf ein Element per Identifier oder Label tippen",
   "cde6ef43d109ddbf": "Warten, bis ein Element erscheint oder verschwindet",
   "319fcd5a8366dc5a": "Einen Flow abspielen; stoppt beim ersten fehlgeschlagenen Schritt und kann ein Video speichern",
@@ -577,7 +577,7 @@
       }
     ]
   },
-  "4050125e5786ac9c": {
+  "877ec71d21c9ee2f": {
     "t": "p",
     "i": 1,
     "c": [
@@ -599,7 +599,7 @@
         "i": 4,
         "c": "wait_for_element"
       },
-      " finden sie über Identifier oder Label: zuverlässiger als die Texterkennung, und sie finden auch Buttons, die nur ein Symbol zeigen. Ein iPhone hat ohne Test-Runner auf dem Gerät keinen solchen Baum, deshalb nutzen Agenten dort ",
+      " finden sie über Identifier oder Label: zuverlässiger als die Texterkennung, und sie finden auch Buttons, die nur ein Symbol zeigen. Auf einem iPhone muss dafür der UI-Baum eingeschaltet sein (siehe Bauen, starten und debuggen); bis dahin nutzen Agenten dort ",
       {
         "t": "code",
         "i": 5,
@@ -680,7 +680,49 @@
       " beziehen sich auf den Mac, auf dem Mobdev läuft, auch über ein Relay. Mobdev entfernt nie Apps aus dem App Store oder System-Apps."
     ]
   },
-  "35f7e3fa41952f40": {
+  "a616d7572877102a": {
+    "t": "p",
+    "i": 1,
+    "c": [
+      {
+        "t": "strong",
+        "i": 2,
+        "c": "UI-Baum auf iPhones."
+      },
+      " Mit Entwicklermodus und Xcode öffnest du in Mobdev die Infos des iPhones und schaltest ",
+      {
+        "t": "strong",
+        "i": 3,
+        "c": "UI Tree"
+      },
+      " ein. Mobdev baut dann Mobdev Runner, einen kleinen UI-Test, mit Xcode, signiert ihn mit deinem Entwicklerteam und hält ihn auf dem iPhone am Laufen, so wie WebDriverAgent. Danach funktionieren ",
+      {
+        "t": "code",
+        "i": 4,
+        "c": "ui_tree"
+      },
+      ", ",
+      {
+        "t": "code",
+        "i": 5,
+        "c": "tap_element"
+      },
+      " und ",
+      {
+        "t": "code",
+        "i": 6,
+        "c": "wait_for_element"
+      },
+      " dort wie in Simulatoren, und ",
+      {
+        "t": "code",
+        "i": 7,
+        "c": "type_text"
+      },
+      " tippt auch Emoji. Der erste Build dauert ein bis zwei Minuten. Mit einem kostenlosen Apple Account vertraust du dem Entwickler einmal unter Einstellungen › Allgemein › VPN und Geräteverwaltung."
+    ]
+  },
+  "854dcb23fcb04f47": {
     "t": "p",
     "i": 1,
     "c": [
@@ -690,7 +732,7 @@
         "i": 2,
         "c": "Record"
       },
-      ", dann zeichnet Mobdev alle Aktionen auf dem Gerät auf, deine und die eines Agenten; auf Simulatoren und Android werden Klicks auf benannte Elemente zu ",
+      ", dann zeichnet Mobdev alle Aktionen auf dem Gerät auf, deine und die eines Agenten; auf Simulatoren, Android und iPhones mit UI-Baum werden Klicks auf benannte Elemente zu ",
       {
         "t": "code",
         "i": 3,
@@ -1036,14 +1078,12 @@
   "6d92b3ac946aa3bb": "Starte die App auf meinem iPhone und finde heraus, warum sie abstürzt.",
   "7f8cb8174c6d288f": "Demnächst",
   "8d8555364510a069": "Geplant",
-  "ec843f776255abb5": "UI-Baum auf iPhones.",
-  "6c69b1e9419c17c7": "Elemente per Identifier antippen, auch auf iPhones im Entwicklermodus, so wie heute schon in Simulatoren und auf Android.",
   "e60bd40be027415a": "Live-Ansicht im Browser.",
   "0a73e54778118a8d": "Ein Smartphone im Dashboard verfolgen und übernehmen, und Geräte mit deinem Team teilen.",
   "abeb6ee67f73f8bd": "Ersetzt Mobdev Xcode oder Android Studio?",
   "44ee2c19acafea77": "Nein. Bau weiter mit Xcode, Android Studio, Gradle oder XcodeBuildMCP. Mobdev übernimmt, sobald es einen Build gibt: Es installiert ihn auf einem Gerät, startet ihn, bedient ihn und liest seine Logs und Crash-Reports.",
   "e1e9ccdf882b927a": "Braucht das iPhone den Entwicklermodus oder eine App?",
-  "50802cc3d79c8d32": "Nein. Mobdev nutzt nur das Bildsignal über USB und eine Bluetooth-Tastatur samt Zeiger, die jedes iPhone unterstützt. Du schaltest einmal AssistiveTouch ein. Nur die optionalen Tools für deine eigenen Apps, etwa Builds installieren und ihre Logs lesen, brauchen den Entwicklermodus und Xcode.",
+  "56fd0fef35e89316": "Nein. Mobdev nutzt nur das Bildsignal über USB und eine Bluetooth-Tastatur samt Zeiger, die jedes iPhone unterstützt. Du schaltest einmal AssistiveTouch ein. Nur die optionalen Tools für deine eigenen Apps, etwa Builds installieren und ihre Logs lesen, und der UI-Baum brauchen den Entwicklermodus und Xcode.",
   "0d0c754624892508": "Funktioniert es mit dem Simulator und Android?",
   "f1812a1824958fc5": "Ja. Gestartete iOS-Simulatoren sowie Android-Emulatoren und -Smartphones erscheinen neben deinen iPhones und verstehen dieselben Tools, Installieren und Logs lesen eingeschlossen. Simulatoren brauchen Xcode, Android braucht adb aus dem Android SDK. Auf den Geräten wird nichts installiert.",
   "234e7291b21b4445": "Brauche ich einen KI-Agenten?",
@@ -1287,7 +1327,7 @@
       "c": "Klick auf „Record“ und bedien die App dann selbst oder lass deinen Agenten arbeiten. Mobdev speichert die Schritte als Flow, spielt ihn aus der App, über deinen Agenten oder in CI ab und stoppt beim ersten Schritt, der fehlschlägt. Von jedem Lauf bleibt ein Video, so siehst du, wo es schiefging."
     }
   ],
-  "836fc2fd0246326a": [
+  "8e8d9d03e168d840": [
     {
       "t": "h3",
       "i": 1,
@@ -1296,7 +1336,7 @@
     {
       "t": "p",
       "i": 2,
-      "c": "In Simulatoren und auf Android lesen Agenten den UI-Baum und tippen Elemente über ihren Accessibility-Identifier an. Auch aufgezeichnete Klicks werden zu Identifiern, so überstehen Flows Änderungen am Layout."
+      "c": "In Simulatoren, auf Android und auf iPhones im Entwicklermodus lesen Agenten den UI-Baum und tippen Elemente über ihren Accessibility-Identifier an. Auch aufgezeichnete Klicks werden zu Identifiern, so überstehen Flows Änderungen am Layout."
     }
   ],
   "a1bec16fb5d59c3f": {

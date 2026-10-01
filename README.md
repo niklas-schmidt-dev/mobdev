@@ -8,7 +8,7 @@ any MCP client get the same 27 tools on every device.
 
 | | |
 |---|---|
-| AI control | Screenshots, taps, swipes, typing, opening apps, tapping visible text (on-device OCR); on simulators and Android also the UI tree, tapping by accessibility identifier |
+| AI control | Screenshots, taps, swipes, typing, opening apps, tapping visible text (on-device OCR); the UI tree and tapping by accessibility identifier on simulators, Android and Developer Mode iPhones |
 | Build and run | Install builds, launch apps with arguments and environment, open deep links, by agent or in the app's Apps area |
 | Debug | Logs and crash reports of the apps you launch; Diagnose checks and fixes an iPhone's connection |
 | Flows | Record what you or an agent do, replay it from the app, an agent or CI (`Mobdev flow`) |
@@ -18,7 +18,7 @@ any MCP client get the same 27 tools on every device.
 
 The iPhone needs nothing installed. Mobdev reads its screen over the USB cable and taps and types
 through Bluetooth, posing as a keyboard and pointer: no developer mode, no jailbreak, and every app
-works. Turn on Developer Mode only to install and debug your own builds. Booted simulators need
+works. Turn on Developer Mode only to install and debug your own builds, or for the UI tree. Booted simulators need
 Xcode, Android emulators and phones need adb. Keep building with Xcode, Gradle or XcodeBuildMCP;
 Mobdev takes over once there is a build.
 
