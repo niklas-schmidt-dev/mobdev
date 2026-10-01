@@ -5,7 +5,7 @@ import UniformTypeIdentifiers
 
 /// Record and Run Flow… in the activity header. Recording collects what happens on the device,
 /// from agents and from you, and saves it as a flow file that run_flow, this button and
-/// `Mobdev flow` in CI play back.
+/// `Mobdev flow` in CI play back. Each Run Flow… keeps a video of the run (see `FlowVideos`).
 struct FlowButtons: View {
     @Environment(AppModel.self) private var model
     let id: String
@@ -45,9 +45,14 @@ struct FlowButtons: View {
 
     private func run(_ file: URL) async {
         running = true
-        let output = await model.run("run_flow", on: id, ["path": .string(file.path)])
+        var arguments: [String: JSONValue] = ["path": .string(file.path)]
+        let video = FlowVideos.newFile(for: file)
+        if let video { arguments["video"] = .string(video.path) }
+        let output = await model.run("run_flow", on: id, arguments)
         running = false
-        result = FlowRun(file: file, text: output.text, passed: !output.isError)
+        result = FlowRun(
+            file: file, text: output.text, passed: !output.isError,
+            video: video.flatMap { FileManager.default.fileExists(atPath: $0.path) ? $0 : nil })
     }
 }
 
@@ -56,6 +61,38 @@ struct FlowRun: Identifiable {
     let file: URL
     let text: String
     let passed: Bool
+    /// The run's video, when it could be recorded.
+    let video: URL?
+}
+
+/// Videos of the runs started with Run Flow…, in the app's folder. The newest 20 are kept.
+enum FlowVideos {
+    static var folder: URL { MobdevPaths.home.appendingPathComponent("flow-videos", isDirectory: true) }
+    static let kept = 20
+
+    /// A new file named after the flow and the time, like "sign-in 2026-10-01 at 14.03.22.mp4",
+    /// after removing older videos. Nil when the folder cannot be created.
+    static func newFile(for flow: URL) -> URL? {
+        let files = FileManager.default
+        guard (try? files.createDirectory(at: folder, withIntermediateDirectories: true)) != nil else { return nil }
+        let videos = ((try? files.contentsOfDirectory(at: folder, includingPropertiesForKeys: [.creationDateKey])) ?? [])
+            .filter { $0.pathExtension == "mp4" }
+            .map { ($0, (try? $0.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? .distantPast) }
+            .sorted { $0.1 > $1.1 }
+        for (old, _) in videos.dropFirst(kept - 1) { try? files.removeItem(at: old) }
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd 'at' HH.mm.ss"
+        let name = "\(flow.deletingPathExtension().lastPathComponent) \(formatter.string(from: Date())).mp4"
+        return folder.appendingPathComponent(name.replacingOccurrences(of: "/", with: "-"))
+    }
+
+    static func play(_ video: URL) {
+        if let player = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.QuickTimePlayerX") {
+            NSWorkspace.shared.open([video], withApplicationAt: player, configuration: NSWorkspace.OpenConfiguration())
+        } else {
+            NSWorkspace.shared.open(video)
+        }
+    }
 }
 
 /// Shown while recording, under the activity header.
@@ -128,6 +165,17 @@ private struct FlowResultSheet: View {
             .background(.quaternary.opacity(0.5), in: .rect(cornerRadius: 8))
             HStack {
                 Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([run.file]) }
+                    .help("Show the flow file in the Finder")
+                if let video = run.video {
+                    Menu("Show Video") {
+                        Button("Play in QuickTime Player") { FlowVideos.play(video) }
+                        Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([video]) }
+                    } primaryAction: {
+                        FlowVideos.play(video)
+                    }
+                    .fixedSize()
+                    .help("Watch a recording of this run")
+                }
                 Spacer()
                 Button("Run Again") { again() }
                 Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)

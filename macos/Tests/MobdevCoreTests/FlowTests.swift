@@ -153,6 +153,7 @@ import Testing
     @Test func commandLineOptions() throws {
         let options = try FlowCommand.parse(["login.json", "--device", "Pixel", "--artifacts", "out", "--wait", "5"])
         #expect(options == FlowCommand.Options(file: "login.json", device: "Pixel", artifacts: "out", wait: 5))
+        #expect(try FlowCommand.parse(["login.json", "--no-video"]).video == false)
         #expect(throws: (any Error).self) { try FlowCommand.parse([]) }
         #expect(throws: (any Error).self) { try FlowCommand.parse(["a.json", "b.json"]) }
         #expect(throws: (any Error).self) { try FlowCommand.parse(["a.json", "--device"]) }

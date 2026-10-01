@@ -105,11 +105,16 @@ extension PhoneTools {
         ToolDefinition(
             name: "run_flow", title: "Run flow",
             description:
-                "Replay a flow: a list of tool calls saved as JSON, e.g. recorded in the Mobdev app or written by hand ({\"steps\": [{\"tap_element\": {\"id\": \"login\"}}, {\"type_text\": {\"text\": \"hi\"}}, \"home\"]}). Stops at the first step that fails and says which. Pass path (a .json file on this Mac) or steps.",
+                "Replay a flow: a list of tool calls saved as JSON, e.g. recorded in the Mobdev app or written by hand ({\"steps\": [{\"tap_element\": {\"id\": \"login\"}}, {\"type_text\": {\"text\": \"hi\"}}, \"home\"]}). Stops at the first step that fails and says which. Pass path (a .json file on this Mac) or steps, and video to keep a recording of the run.",
             inputSchema: schema([
                 "path": ["type": "string", "description": "A flow file on the Mac that runs Mobdev"],
                 "steps": [
                     "type": "array", "description": "The steps inline, each a tool name or {\"tool\": {arguments}}",
+                ],
+                "video": [
+                    "type": "string",
+                    "description":
+                        "Where to save a video of the run on the Mac that runs Mobdev: an absolute path ending in .mp4, in an existing folder. A file there is replaced.",
                 ],
             ]),
             readOnly: false)
@@ -128,18 +133,25 @@ extension PhoneTools {
         } else {
             throw ToolFailure("Pass path or steps.")
         }
-        let result = await run(flow, source: source)
+        let video = try args.has("video") ? Flow.videoURL(try args.string("video")) : nil
+        let result = await Flow.recording(phone, to: video) { await run(flow, source: source) }
         return ToolOutput(text: result.text, data: result.json, isError: !result.passed)
     }
 
     /// Runs every step through `call`, so each shows in the device's activity and records like any
-    /// other call. Stops at the first failure.
+    /// other call. Stops at the first failure, and before the next step once the task is cancelled.
     public func run(
         _ flow: Flow, source: String, progress: (@Sendable (Int, Flow.Step, ToolOutput, TimeInterval) -> Void)? = nil
     ) async -> FlowResult {
         let started = Date()
         var results: [FlowResult.StepResult] = []
         for (index, step) in flow.steps.enumerated() {
+            if Task.isCancelled {
+                let output = ToolOutput(text: "Cancelled.", isError: true)
+                results.append(.init(step: step, text: output.text, passed: false, seconds: 0))
+                progress?(index, step, output, 0)
+                break
+            }
             let stepStarted = Date()
             var output: ToolOutput
             if Self.flowExcluded.contains(step.tool) || step.arguments["device"] != nil {
@@ -154,6 +166,8 @@ extension PhoneTools {
                 } catch {
                     output = ToolOutput(text: String(describing: error), isError: true)
                 }
+                // A wait interrupted by the cancellation says so, not "CancellationError()".
+                if output.isError, Task.isCancelled { output = ToolOutput(text: "Cancelled.", isError: true) }
             }
             let seconds = Date().timeIntervalSince(stepStarted)
             results.append(.init(step: step, text: output.text, passed: !output.isError, seconds: seconds))
@@ -161,6 +175,52 @@ extension PhoneTools {
             if output.isError { break }
         }
         return FlowResult(flow: flow, steps: results, seconds: Date().timeIntervalSince(started))
+    }
+}
+
+// MARK: - Video
+
+extension Flow {
+    /// The file `run_flow` writes its video to: an absolute .mp4 path in a folder that exists.
+    static func videoURL(_ path: String) throws -> URL {
+        let expanded = (path as NSString).expandingTildeInPath
+        guard expanded.hasPrefix("/") else {
+            throw ToolFailure("video must be an absolute path on the Mac, like /tmp/run.mp4.")
+        }
+        let url = URL(fileURLWithPath: expanded)
+        guard url.pathExtension.lowercased() == "mp4" else { throw ToolFailure("video must be a path ending in .mp4.") }
+        var isFolder: ObjCBool = false
+        let folder = url.deletingLastPathComponent().path
+        guard FileManager.default.fileExists(atPath: folder, isDirectory: &isFolder), isFolder.boolValue else {
+            throw ToolFailure("The folder \(folder) does not exist; create it first.")
+        }
+        guard !FileManager.default.fileExists(atPath: url.path, isDirectory: &isFolder) || !isFolder.boolValue else {
+            throw ToolFailure("\(url.path) is a folder.")
+        }
+        return url
+    }
+
+    /// Runs a flow while recording `phone`'s screen to `video`, and says in the result where the
+    /// video went. Without `video` it only runs the flow.
+    public static func recording(
+        _ phone: any PhoneBackend, to video: URL?, _ run: () async throws -> FlowResult
+    ) async rethrows -> FlowResult {
+        guard let video else { return try await run() }
+        let recorder = ScreenRecorder.start(to: video) { phone.frame() }
+        var result: FlowResult
+        do {
+            result = try await run()
+        } catch {
+            _ = try? await recorder.finish()
+            try? FileManager.default.removeItem(at: video)
+            throw error
+        }
+        do {
+            result.video = try await recorder.finish()
+        } catch {
+            result.videoProblem = String(describing: error)
+        }
+        return result
     }
 }
 
@@ -175,6 +235,10 @@ public struct FlowResult: Sendable {
     public var flow: Flow
     public var steps: [StepResult]
     public var seconds: TimeInterval
+    /// The run's video, when one was asked for and written.
+    public var video: ScreenRecording?
+    /// Why there is no video although one was asked for.
+    public var videoProblem: String?
 
     public var passed: Bool { steps.count == flow.steps.count && steps.allSatisfy(\.passed) }
 
@@ -189,7 +253,15 @@ public struct FlowResult: Sendable {
             passed
             ? "Flow \"\(flow.name)\" passed: \(total) steps in \(String(format: "%.1f", seconds)) s."
             : "Flow \"\(flow.name)\" failed at step \(steps.count) of \(total): \(steps.last?.step.summary ?? "no steps")."
-        return ([head] + lines).joined(separator: "\n")
+        return ([head] + lines + [videoLine].compactMap { $0 }).joined(separator: "\n")
+    }
+
+    /// "Video: /path/run.mp4 (12.3 s, 98 frames)", or why there is none.
+    public var videoLine: String? {
+        if let video {
+            return String(format: "Video: %@ (%.1f s, %d frames)", video.url.path, video.seconds, video.frames)
+        }
+        return videoProblem.map { "No video: \($0)" }
     }
 
     var json: JSONValue {
@@ -197,6 +269,7 @@ public struct FlowResult: Sendable {
             "name": .string(flow.name), "passed": .bool(passed), "seconds": .number((seconds * 10).rounded() / 10),
             "steps": .number(Double(flow.steps.count)),
             "failed_step": passed ? .null : .number(Double(steps.count)),
+            "video": video.map { JSONValue.string($0.url.path) } ?? .null,
         ]
     }
 }

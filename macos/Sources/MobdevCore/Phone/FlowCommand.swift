@@ -6,29 +6,46 @@ import Foundation
 /// the running app; there, call run_flow through MCP or the HTTP API.
 ///
 /// Prints one line per step and exits 0 when every step passed, 1 when one failed and 2 when the
-/// flow could not start. With --artifacts, the directory gets the activity log, copied crash
-/// reports and, after a failure, failure.png.
+/// flow could not start. With --artifacts, the directory gets a video of the run (run.mp4), the
+/// activity log, copied crash reports and, after a failure, failure.png. Ctrl-C or a cancelled CI
+/// job stops the flow (a wait ends at once, no further step starts) and still finishes the video.
 public enum FlowCommand {
     static let usage = """
-        Usage: Mobdev flow <file.json> [--device <id or name>] [--artifacts <dir>] [--wait <seconds>]
+        Usage: Mobdev flow <file.json> [--device <id or name>] [--artifacts <dir>] [--no-video] [--wait <seconds>]
 
         Runs a flow on a booted iOS simulator or Android emulator or phone, without the app.
           --device     the device from list_devices; needed when several are booted
-          --artifacts  where to keep the activity log, crash reports and failure.png
+          --artifacts  where to keep a video of the run (run.mp4), the activity log, crash
+                       reports and failure.png
+          --no-video   do not record run.mp4
           --wait       how long to wait for the device to appear, default 30
         """
 
     public static func run(_ arguments: [String]) -> Never {
-        Task {
+        let task = Task {
             exit(await execute(arguments, output: { FileHandle.standardOutput.write(Data(($0 + "\n").utf8)) }))
         }
-        dispatchMain()
+        // The first interrupt cancels the flow, which ends a wait at once and starts no further step,
+        // and the video is finished. A second one quits at once.
+        let signals = [SIGINT, SIGTERM].map { number in
+            signal(number, SIG_IGN)
+            let source = DispatchSource.makeSignalSource(signal: number, queue: .main)
+            source.setEventHandler {
+                if task.isCancelled { exit(130) }
+                FileHandle.standardError.write(Data("Stopping the flow…\n".utf8))
+                task.cancel()
+            }
+            source.resume()
+            return source
+        }
+        withExtendedLifetime(signals) { dispatchMain() }
     }
 
     struct Options: Equatable {
         var file: String
         var device: String?
         var artifacts: String?
+        var video = true
         var wait: TimeInterval = 30
     }
 
@@ -38,6 +55,7 @@ public enum FlowCommand {
         var rest = arguments[...]
         while let argument = rest.popFirst() {
             switch argument {
+            case "--no-video": options.video = false
             case "--device", "--artifacts", "--wait":
                 guard let value = rest.popFirst() else { throw ToolFailure("\(argument) needs a value.") }
                 if argument == "--device" { options.device = value }
@@ -101,7 +119,7 @@ public enum FlowCommand {
             } catch {
                 lastError = String(describing: error)
                 let ambiguous = options.device == nil && !emulators.devices.isEmpty
-                guard Date() < deadline, !ambiguous else { break }
+                guard Date() < deadline, !ambiguous, !Task.isCancelled else { break }
                 try? await Task.sleep(nanoseconds: 250_000_000)
             }
         }
@@ -111,19 +129,23 @@ public enum FlowCommand {
         }
 
         output("Running \"\(flow.name)\" (\(flow.steps.count) steps) on \(device.name) (\(device.id))")
+        let video = options.artifacts != nil && options.video ? home.appendingPathComponent("run.mp4") : nil
         let result: FlowResult
         do {
-            result = try await tools.run(flow, on: device.id, source: "cli") { index, step, stepOutput, seconds in
-                let mark = stepOutput.isError ? "✗" : "✓"
-                let text = stepOutput.isError
-                    ? stepOutput.text
-                    : (stepOutput.text.split(separator: "\n").first.map(String.init) ?? "")
-                output(String(format: "%@ %d. %@ (%.1f s): %@", mark, index + 1, step.summary, seconds, text))
+            result = try await Flow.recording(device, to: video) {
+                try await tools.run(flow, on: device.id, source: "cli") { index, step, stepOutput, seconds in
+                    let mark = stepOutput.isError ? "✗" : "✓"
+                    let text = stepOutput.isError
+                        ? stepOutput.text
+                        : (stepOutput.text.split(separator: "\n").first.map(String.init) ?? "")
+                    output(String(format: "%@ %d. %@ (%.1f s): %@", mark, index + 1, step.summary, seconds, text))
+                }
             }
         } catch {
             output(String(describing: error))
             return 2
         }
+        if let line = result.videoLine { output(line) }
         if result.passed {
             output(String(format: "Passed: %d steps in %.1f s.", flow.steps.count, result.seconds))
             return 0
