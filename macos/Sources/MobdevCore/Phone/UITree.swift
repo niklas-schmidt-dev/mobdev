@@ -66,7 +66,27 @@ struct ElementQuery: CustomStringConvertible {
             matches = exact.isEmpty ? elements.filter { Self.folded($0.label).contains(needle) } : exact
         }
         let tappable = matches.filter(\.tappable)
-        return tappable.isEmpty ? matches : tappable
+        return Self.onePerPlace(tappable.isEmpty ? matches : tappable)
+    }
+
+    /// iOS often wraps an element in another of the same size, and both match, as the Spotlight
+    /// pill on the iPhone's home screen did. Elements at the same place count once, the one with a
+    /// label first.
+    static func onePerPlace(_ elements: [UIElement]) -> [UIElement] {
+        var unique: [UIElement] = []
+        for element in elements {
+            let same = unique.firstIndex { other in
+                abs(other.frame.minX - element.frame.minX) < 0.002 && abs(other.frame.minY - element.frame.minY) < 0.002
+                    && abs(other.frame.width - element.frame.width) < 0.002
+                    && abs(other.frame.height - element.frame.height) < 0.002
+            }
+            if let same {
+                if unique[same].label.isEmpty, !element.label.isEmpty { unique[same] = element }
+            } else {
+                unique.append(element)
+            }
+        }
+        return unique
     }
 
     private static func folded(_ text: String) -> String {

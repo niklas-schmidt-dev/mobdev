@@ -120,6 +120,27 @@ import Testing
         #expect(noQuery.text == "Pass id or text.")
     }
 
+    /// Seen on the iPhone: the Spotlight pill and its wrapper share id and frame.
+    @Test func anElementAndItsWrapperAtTheSamePlaceCountOnce() async throws {
+        let frame = CGRect(x: 0.3, y: 0.8, width: 0.4, height: 0.04)
+        let fake = FakePhone(
+            lines: [],
+            tree: [
+                UIElement(role: "Other", label: "", identifier: "spotlight-pill", value: "", frame: frame, enabled: true, tappable: false),
+                UIElement(role: "Other", label: "Suchen", identifier: "spotlight-pill", value: "", frame: frame, enabled: true, tappable: false),
+                UIElement(
+                    role: "Other", label: "Suchen", identifier: "spotlight-pill", value: "",
+                    frame: frame.offsetBy(dx: 0, dy: 0.1), enabled: true, tappable: false),
+            ])
+        let tools = PhoneTools(phone: fake, activity: ActivityLog(), settleDelay: 0)
+        let twoPlaces = try await tools.call(
+            "tap_element", arguments: ["id": "spotlight-pill"], source: "test", screenshotByDefault: false)
+        #expect(twoPlaces.text.contains("2 elements match"))
+        let one = ElementQuery(id: "spotlight-pill", text: nil).matches(in: Array(fake.tree!.prefix(2)))
+        #expect(one.count == 1)
+        #expect(one.first?.label == "Suchen")
+    }
+
     @Test func iPhoneExplainsItHasNoTree() async throws {
         let tools = PhoneTools(phone: FakePhone(lines: []), activity: ActivityLog(), settleDelay: 0)
         let output = try await tools.call("ui_tree", arguments: nil, source: "test", screenshotByDefault: false)
