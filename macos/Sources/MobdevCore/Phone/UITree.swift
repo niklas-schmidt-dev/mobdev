@@ -81,7 +81,7 @@ extension PhoneTools {
         ToolDefinition(
             name: "ui_tree", title: "UI tree",
             description:
-                "The elements on screen from the app's accessibility tree: role, label, identifier, value and position in screenshot pixels. Works on simulators and Android; on an iPhone use read_screen. More reliable than OCR for buttons without text and for fields.",
+                "The elements on screen from the app's accessibility tree: role, label, identifier, value and position in screenshot pixels. Works on simulators and Android, and on iPhones once Mobdev Runner is turned on in the Mobdev app (Developer Mode and Xcode); otherwise use read_screen. More reliable than OCR for buttons without text and for fields.",
             inputSchema: schema(
                 [
                     "contains": ["type": "string", "description": "Only elements whose label, identifier or value contains this"],
@@ -103,7 +103,7 @@ extension PhoneTools {
         ToolDefinition(
             name: "wait_for_element", title: "Wait for element",
             description:
-                "Wait until an element with this identifier or label is on screen, or with gone until it is not. Like wait_for_text, from the UI tree instead of OCR: simulators and Android.",
+                "Wait until an element with this identifier or label is on screen, or with gone until it is not. Like wait_for_text, from the UI tree instead of OCR: simulators, Android and iPhones with Mobdev Runner.",
             inputSchema: schema(
                 [
                     "id": ["type": "string"],
@@ -184,7 +184,7 @@ extension PhoneTools {
         var unreadable: (any Error)?
         while true {
             do {
-                guard let elements = try await phone.uiTree() else { throw Self.noTree }
+                guard let elements = try await phone.uiTree() else { throw noTree }
                 unreadable = nil
                 if accepted(elements) { return elements }
             } catch let failure as ToolFailure {
@@ -200,11 +200,17 @@ extension PhoneTools {
         }
     }
 
-    private static let noTree = ToolFailure(
-        "This device has no UI tree: on an iPhone Mobdev reads the screen with read_screen and taps text with tap_text. ui_tree works on simulators and Android.")
+    /// Why there is no tree. An iPhone has one once Mobdev Runner runs on it.
+    private var noTree: ToolFailure {
+        guard phone.status().input == .bluetooth else {
+            return ToolFailure("This device has no UI tree. Use read_screen and tap_text instead.")
+        }
+        return ToolFailure(
+            "This iPhone has no UI tree yet. It needs Mobdev Runner, a small UI test that Mobdev builds with Xcode and runs on the iPhone: turn on Developer Mode on the iPhone (Settings › Privacy & Security), then in the Mobdev app open the iPhone's info and click Turn On under UI Tree. Until then use read_screen and tap_text.")
+    }
 
     private func tree() async throws -> [UIElement] {
-        guard let elements = try await phone.uiTree() else { throw Self.noTree }
+        guard let elements = try await phone.uiTree() else { throw noTree }
         return elements
     }
 

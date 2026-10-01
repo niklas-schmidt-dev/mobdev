@@ -22,6 +22,8 @@ struct DeviceState: Identifiable, Equatable {
     /// A connected Bluetooth host that may be this iPhone paired again, while its own is away.
     var replacementHost: BluetoothHost? = nil
     var kind: DeviceKind = .iPhone
+    /// Mobdev Runner on an iPhone, for the UI tree; nil until it was turned on once.
+    var runner: UIRunner.State? = nil
 
     var modelName: String { info?.modelName ?? kind.label }
     var isConnected: Bool { status.screen.isConnected }
@@ -128,6 +130,7 @@ final class AppModel {
         }
 
         signal.connect { [weak self] in Task { @MainActor in self?.refresh() } }
+        UIRunners.shared.onChange { signal.fire() }
         relaySignal.connect { [weak self] in
             Task { @MainActor in
                 guard let self else { return }
@@ -213,11 +216,13 @@ final class AppModel {
         if access != screenAccess { screenAccess = access }
         let hardware = hub.devices
         let emulated = emulators.devices
+        reconcileRunners(hardware)
         let states =
             hardware.map { device in
                 DeviceState(
                     id: device.id, name: device.name, info: device.info, status: device.status(), onUSB: device.isOnUSB,
-                    activityCount: device.activity.all.count, replacementHost: hub.replacementHost(for: device.id))
+                    activityCount: device.activity.all.count, replacementHost: hub.replacementHost(for: device.id),
+                    runner: device.runner?.state)
             }
             + emulated.map { device in
                 DeviceState(
@@ -462,6 +467,49 @@ final class AppModel {
         Task { try? await device.move(to: NormalizedPoint(x: 0.5, y: 0.5)) }
     }
 
+    // MARK: UI tree on iPhones
+
+    /// Turns the UI tree on or off for an iPhone, for good: Mobdev Runner then starts whenever the
+    /// iPhone is connected (see `reconcileRunners`).
+    func setUITree(_ on: Bool, for id: String) {
+        guard let udid = hardware(id)?.info?.id else { return }
+        settings.runnerDevices.removeAll { $0 == udid }
+        if on { settings.runnerDevices.append(udid) }
+        save()
+        if on { refresh() } else { UIRunners.shared.runner(for: udid)?.stop() }
+    }
+
+    /// Builds and starts Mobdev Runner again, after it failed.
+    func restartUITree(_ id: String) {
+        guard let udid = hardware(id)?.info?.id else { return }
+        UIRunners.shared.runner(for: udid)?.stop()
+        refresh()
+    }
+
+    /// The development team that signs Mobdev Runner. A runner already on starts again with it.
+    func setRunnerTeam(_ team: String) {
+        guard team != settings.runnerTeam else { return }
+        settings.runnerTeam = team
+        save()
+        for udid in settings.runnerDevices {
+            if let runner = UIRunners.shared.runner(for: udid), runner.state != .off { runner.start(team: team) }
+        }
+    }
+
+    /// Starts Mobdev Runner on the connected iPhones that have the UI tree on, and stops it on the
+    /// ones that left. One that failed stays so until Try Again or until it is plugged in again.
+    private func reconcileRunners(_ hardware: [HardwareDevice]) {
+        for device in hardware {
+            guard let udid = device.info?.id, settings.runnerDevices.contains(udid) else { continue }
+            let runner = UIRunners.shared.runner(for: udid, simulator: false)
+            if device.isOnUSB, runner.state == .off {
+                runner.start(team: settings.runnerTeam)
+            } else if !device.isOnUSB, runner.state != .off {
+                runner.stop()
+            }
+        }
+    }
+
     // MARK: Settings
 
     func setKeyboardLayout(_ layout: KeyboardLayout) {
@@ -622,10 +670,9 @@ final class AppModel {
 
     func startRecording(_ id: String) {
         guard let device = device(id), let recorder = tools.recorder(for: id) else { return }
-        // Simulators and Android say what is under a click, so it replays as tap_element.
-        var tree: (@Sendable () async throws -> [UIElement]?)?
-        if device.kind != .iPhone { tree = { try await device.uiTree() } }
-        recorder.start(tree: tree)
+        // Simulators, Android and iPhones with Mobdev Runner say what is under a click, so it
+        // replays as tap_element. Other iPhones have no tree and record the point.
+        recorder.start(tree: { try await device.uiTree() })
         recording.insert(id)
     }
 
@@ -697,8 +744,9 @@ final class AppModel {
         // Simulators say which layout they read keys with; iPhones use the one picked in Settings.
         let layout = device.kind == .iPhone ? settings.keyboardLayout : device.status().keyboardLayout
         guard let strokes = try? layout.strokes(typing: text) else {
-            // Android types whole text; others need every character on the layout.
-            guard device.kind == .android else {
+            // Android types whole text, and so does Mobdev Runner on an iPhone (emoji, for one); others
+            // need every character on the layout.
+            guard device.kind == .android || hardware(id)?.runner?.state == .running else {
                 NSSound.beep()
                 return
             }

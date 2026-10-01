@@ -382,6 +382,7 @@ struct DeviceInfoView: View {
                     LabeledContent("Screen (USB)") { Text(screenText(state)).foregroundStyle(.secondary) }
                     LabeledContent("Input (Bluetooth)") { Text(state.status.bluetooth.summary).foregroundStyle(.secondary) }
                 }
+                UITreeSection(state: state)
                 Section {
                     LabeledContent("Device ID") {
                         HStack {

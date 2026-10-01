@@ -23,6 +23,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Task { @MainActor in AppModel.shared.open(url) }
     }
 
+    /// Ends the UI tests Mobdev Runner keeps running on iPhones; xcodebuild would outlive the app.
+    func applicationWillTerminate(_ notification: Notification) {
+        UIRunners.shared.stopAll()
+    }
+
     /// Agents keep working from the menu bar after the window is closed.
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
 }

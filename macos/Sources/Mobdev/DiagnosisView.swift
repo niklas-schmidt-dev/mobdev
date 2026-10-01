@@ -131,11 +131,11 @@ struct DiagnosisView: View {
     @ViewBuilder private var developer: some View {
         switch developerMode {
         case .some(.some(true)):
-            row("Developer Mode", .done, "On: installing and debugging your own apps works.")
+            row("Developer Mode", .done, "On: installing and debugging your own apps and the UI tree work.")
         case .some(.some(false)):
-            row("Developer Mode", .info, "Off. Only needed to install and debug your own apps: Settings › Privacy & Security › Developer Mode.")
+            row("Developer Mode", .info, "Off. Only needed for your own apps and the UI tree: Settings › Privacy & Security › Developer Mode.")
         case .some(.none):
-            row("Developer Mode", .info, "Unknown: needs Xcode, and the iPhone connected to Xcode once. Only needed for your own apps.")
+            row("Developer Mode", .info, "Unknown: needs Xcode, and the iPhone connected to Xcode once. Only needed for your own apps and the UI tree.")
         case .none:
             row("Developer Mode", .info, "Checking…")
         }

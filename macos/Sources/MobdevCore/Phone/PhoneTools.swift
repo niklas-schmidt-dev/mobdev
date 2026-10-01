@@ -76,8 +76,9 @@ public final class PhoneTools: Sendable {
         Booted iOS simulators and Android emulators and phones (through adb) take the same tools with \
         nothing to set up; `list_devices` shows every device and `device` picks one. On Android, \
         `press_key` escape is Back and `open_app` matches package names such as com.android.settings. \
-        On simulators and Android, `ui_tree` lists the elements on screen, and `tap_element` and \
-        `wait_for_element` find them by accessibility identifier or label: prefer them to OCR there. \
+        On simulators, Android and iPhones with Mobdev Runner turned on, `ui_tree` lists the elements on \
+        screen, and `tap_element` and `wait_for_element` find them by accessibility identifier or label: \
+        prefer them to OCR there. \
         `run_flow` replays a saved list of tool calls and stops at the first failing step.
         """
 

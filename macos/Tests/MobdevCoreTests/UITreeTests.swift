@@ -125,5 +125,8 @@ import Testing
         let output = try await tools.call("ui_tree", arguments: nil, source: "test", screenshotByDefault: false)
         #expect(output.isError)
         #expect(output.text.contains("read_screen"))
+        // And how to get one: Mobdev Runner.
+        #expect(output.text.contains("Developer Mode"))
+        #expect(output.text.contains("Turn On under UI Tree"))
     }
 }

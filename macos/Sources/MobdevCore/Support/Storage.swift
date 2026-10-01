@@ -97,6 +97,10 @@ public struct AppSettings: Codable, Equatable, Sendable {
     /// Chosen on the welcome page: simulators and Android only, so the setup assistant does not
     /// open by itself and nothing asks for camera or Bluetooth access until an iPhone is set up.
     public var iPhoneSetupDeferred = false
+    /// The development team that signs Mobdev Runner on iPhones, e.g. "ABCDE12345".
+    public var runnerTeam = ""
+    /// UDIDs of the iPhones with the UI tree turned on: Mobdev Runner starts whenever one is connected.
+    public var runnerDevices: [String] = []
 
     public init() {}
 
@@ -119,6 +123,8 @@ public struct AppSettings: Codable, Equatable, Sendable {
         hostName = try container.decodeIfPresent(String.self, forKey: .hostName) ?? defaults.hostName
         emulatorsEnabled = try container.decodeIfPresent(Bool.self, forKey: .emulatorsEnabled) ?? true
         iPhoneSetupDeferred = try container.decodeIfPresent(Bool.self, forKey: .iPhoneSetupDeferred) ?? false
+        runnerTeam = (try? container.decodeIfPresent(String.self, forKey: .runnerTeam)) ?? ""
+        runnerDevices = (try? container.decodeIfPresent([String].self, forKey: .runnerDevices)) ?? []
     }
 
     public static func load() -> AppSettings {

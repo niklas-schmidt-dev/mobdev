@@ -48,6 +48,10 @@ plist "Set :CFBundleShortVersionString ${MOBDEV_VERSION:-0.1.0}"
 plist "Set :CFBundleVersion ${MOBDEV_BUILD:-1}"
 if [[ -n "${MOBDEV_UPDATE_FEED:-}" ]]; then plist "Add :SUFeedURL string $MOBDEV_UPDATE_FEED"; fi
 
+# Mobdev Runner's Xcode project (a few KB of sources), which the app builds with Xcode for the UI
+# tree on iPhones. Xcode's per-user state stays out.
+rsync -a --exclude xcuserdata --exclude project.xcworkspace --exclude .DS_Store --exclude .gitignore Runner/ "$APP/Contents/Resources/Runner/"
+
 # Sparkle, without what a non-sandboxed app does not need.
 SPARKLE="$APP/Contents/Frameworks/Sparkle.framework"
 ditto "$BIN_DIR/Sparkle.framework" "$SPARKLE"
