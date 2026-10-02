@@ -34,6 +34,16 @@ CORRECTIONS = {
         "An iPhone that is connected but shows no picture says it is waiting for the screen, and Mobdev restarts the capture by itself.",
 }
 
+# Notes for releases whose commits had no Release-Note line, keyed by version.
+MISSED = {
+    "0.2.27": [
+        ("fixed", "A swipe right after Bluetooth reconnected no longer taps wherever the pointer was: "
+            "Mobdev waits until the iPhone takes all of its input again."),
+        ("improved", "Less lag in the mirror: the iPhone's pointer no longer trails the mouse, and the "
+            "mouse over the mirror keeps Bluetooth awake, so the first click goes through at once."),
+    ],
+}
+
 
 def git(*args: str) -> str:
     return subprocess.run(["git", *args], capture_output=True, text=True, check=True).stdout
@@ -78,7 +88,7 @@ def main() -> None:
     current = notes(f"{tags[0]}..HEAD" if tags else "HEAD") or FALLBACK
     earlier = []
     for newer, older in zip(tags, tags[1:]):
-        entries = notes(f"{older}..{newer}")
+        entries = notes(f"{older}..{newer}") or MISSED.get(newer.removeprefix("mac-v"), [])
         if entries:
             earlier.append((newer.removeprefix("mac-v"), release_date(newer), entries))
         if len(earlier) == 3:
