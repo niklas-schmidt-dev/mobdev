@@ -7,9 +7,12 @@ import Foundation
 public final class HardwareDevice: PhoneBackend, @unchecked Sendable {
     /// The UDID when it was known when the device was first seen, else the capture ID. Never changes.
     public let id: String
-    /// The screen capture device's unique ID.
+    /// The unique ID of the screen capture device macOS names after this device.
     public let captureID: String
-    public let capture: ScreenCapture
+    /// The capture that delivers this device's picture: the one of `captureID`, unless macOS
+    /// crossed two devices' pictures (see `DeviceHub.uncrossScreens`).
+    public var capture: ScreenCapture { screen.get() }
+    private let screen: Locked<ScreenCapture>
     public let activity: ActivityLog
     private let peripheral: HIDPeripheral
     private let layout: Locked<KeyboardLayout>
@@ -29,7 +32,7 @@ public final class HardwareDevice: PhoneBackend, @unchecked Sendable {
         self.peripheral = peripheral
         self.layout = layout
         self.onChange = onChange
-        capture = ScreenCapture(onlyDeviceID: captureID) { _ in onChange() }
+        screen = Locked(ScreenCapture(onlyDeviceID: captureID) { _ in onChange() })
         activity = ActivityLog(limit: 1000, file: MobdevPaths.activityFile(device: id))
         state = Locked((info, captureName, host, host.map { HIDInput(sink: HostSink(peripheral: peripheral, host: $0)) }))
     }
@@ -47,6 +50,23 @@ public final class HardwareDevice: PhoneBackend, @unchecked Sendable {
     var summary: KnownDevice { KnownDevice(id: id, captureID: captureID, name: name, info: info, host: host) }
 
     func update(info: DeviceInfo) { state.withLock { $0.info = info } }
+
+    /// Whether the device is a tablet, and whether its picture is shaped like one: an iPad's screen
+    /// is about 3:4 (iPad mini 0.66), an iPhone's about 9:19.5 (iPhone SE 0.56). Nil until both are
+    /// known.
+    var screenShapes: (isTablet: Bool, showsTablet: Bool)? {
+        guard let info, case .connected(_, let width, let height) = capture.state, width > 0, height > 0 else {
+            return nil
+        }
+        return (info.formFactor == .iPad, Double(min(width, height)) / Double(max(width, height)) > 0.6)
+    }
+
+    /// Gives each device the other one's capture. Both sessions keep running.
+    static func exchangeCaptures(_ first: HardwareDevice, _ second: HardwareDevice) {
+        let capture = first.capture
+        first.screen.set(second.capture)
+        second.screen.set(capture)
+    }
 
     func assign(host: UUID?) {
         state.withLock { current in
@@ -68,7 +88,8 @@ public final class HardwareDevice: PhoneBackend, @unchecked Sendable {
     /// keeps its USB screen interface and sends nothing; a stuck capture helper leaves the iPhone
     /// without that interface (seen 2026-09-30), and only then does restarting the helper help.
     var screenState: ScreenState {
-        let state = capture.state
+        // In this device's name: the capture's is another device's after an exchange.
+        let state = capture.state.named(name)
         guard case .noPicture(let name) = state, let udid = info?.id else { return state }
         let probe = usb.withLock { last -> USBScreenState? in
             if Date().timeIntervalSince(last.checked) > 2 { last = (Date(), USBProbe.screenState(udid: udid)) }
@@ -345,6 +366,7 @@ public final class DeviceHub: @unchecked Sendable {
     private func watchForScreens() {
         queue.asyncAfter(deadline: .now() + 3) { [weak self] in
             guard let self else { return }
+            uncrossScreens()
             restWhenIdle()
             let list = deviceList.get()
             if list.contains(where: { $0.onUSB.get() && !$0.capture.state.isConnected }),
@@ -439,7 +461,32 @@ public final class DeviceHub: @unchecked Sendable {
         return device
     }
 
-    /// The capture device's UDID is its unique ID on current macOS; the name is the fallback.
+    /// macOS can deliver each of two devices' pictures through the other's capture device. Seen on
+    /// 2026-10-02 with macOS 27.0.1, an iPhone 14 Pro and an iPad Air 13-inch, after both captures
+    /// had started within 50 ms: the capture device named "iPad von Niklas Schmidt" delivered the
+    /// iPhone's 1180×2556 screen, and the other way round. Names and IDs do not tell, but the
+    /// pictures' shapes do. An iPad showing a phone's shape and an iPhone showing a tablet's exchange
+    /// captures; this runs every few seconds, so it also undoes itself if macOS untangles them. Two
+    /// iPhones or two iPads crossed this way look alike and stay crossed.
+    private func uncrossScreens() {
+        let list = deviceList.get()
+        let pairs = Self.crossedScreens(list.map(\.screenShapes))
+        for (tablet, phone) in pairs {
+            HardwareDevice.exchangeCaptures(list[tablet], list[phone])
+            Log.info("the pictures of \(list[tablet].name) and \(list[phone].name) arrived crossed; exchanged them")
+        }
+        if !pairs.isEmpty { onChange() }
+    }
+
+    /// Index pairs of a tablet showing a phone-shaped picture and a phone showing a tablet-shaped one.
+    static func crossedScreens(_ shapes: [(isTablet: Bool, showsTablet: Bool)?]) -> [(Int, Int)] {
+        let tablets = shapes.indices.filter { shapes[$0].map { $0.isTablet && !$0.showsTablet } ?? false }
+        let phones = shapes.indices.filter { shapes[$0].map { !$0.isTablet && $0.showsTablet } ?? false }
+        return Array(zip(tablets, phones))
+    }
+
+    /// The capture device's unique ID was the UDID on earlier macOS; on macOS 27 it is a GUID, so
+    /// the name decides.
     private static func info(for capture: CaptureDeviceInfo, in infos: [DeviceInfo]) -> DeviceInfo? {
         func normalized(_ id: String) -> String { id.uppercased().filter { $0.isLetter || $0.isNumber } }
         return infos.first { normalized($0.id) == normalized(capture.id) }

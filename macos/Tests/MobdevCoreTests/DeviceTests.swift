@@ -163,6 +163,25 @@ import Testing
         #expect(DeviceHub.matches(nil, in: [keys[2]]) == [0])
         #expect(DeviceHub.matches(" ", in: [keys[0], keys[2]]) == [0])
     }
+
+    /// An iPad showing an iPhone's picture and an iPhone showing an iPad's have them crossed.
+    @Test func crossedPicturesArePairedByShape() {
+        let ipadShowingPhone = (isTablet: true, showsTablet: false)
+        let phoneShowingIPad = (isTablet: false, showsTablet: true)
+        let phone = (isTablet: false, showsTablet: false)
+        let crossed = DeviceHub.crossedScreens([ipadShowingPhone, phone, nil, phoneShowingIPad])
+        #expect(crossed.map { [$0.0, $0.1] } == [[0, 3]])
+        // A mismatch without a counterpart has nothing to exchange with.
+        #expect(DeviceHub.crossedScreens([ipadShowingPhone, phone]).isEmpty)
+        #expect(DeviceHub.crossedScreens([phone, phone]).isEmpty)
+    }
+
+    @Test func aScreenStateTakesTheDevicesName() {
+        let state = ScreenState.connected(name: "iPad", width: 1180, height: 2556)
+        #expect(state.named("iPhone") == .connected(name: "iPhone", width: 1180, height: 2556))
+        #expect(ScreenState.locked(name: "iPad").named("iPhone") == .locked(name: "iPhone"))
+        #expect(ScreenState.searching.named("iPhone") == .searching)
+    }
 }
 
 @Suite struct DeviceToolsTests {

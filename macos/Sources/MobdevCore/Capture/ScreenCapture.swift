@@ -36,6 +36,16 @@ public enum ScreenState: Sendable, Equatable {
         case .failed(let message): "Screen capture failed: \(message)"
         }
     }
+
+    /// The same state for the device called `name`.
+    func named(_ name: String) -> ScreenState {
+        switch self {
+        case .connected(_, let width, let height): .connected(name: name, width: width, height: height)
+        case .noPicture: .noPicture(name: name)
+        case .locked: .locked(name: name)
+        default: self
+        }
+    }
 }
 
 public struct CaptureDeviceInfo: Sendable, Equatable, Identifiable {
