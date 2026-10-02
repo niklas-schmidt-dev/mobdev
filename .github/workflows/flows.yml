@@ -12,12 +12,16 @@ on:
     workflows: ["Mac app"]
     types: [completed]
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Run with this released version's DMG (e.g. 0.2.27) instead of building from source"
+        required: false
 
 permissions:
   contents: read
 
 concurrency:
-  group: flows-${{ github.event_name }}-${{ github.ref }}
+  group: flows-${{ github.event_name }}-${{ github.ref }}-${{ inputs.version }}
   cancel-in-progress: true
 
 jobs:
@@ -36,8 +40,14 @@ jobs:
           sudo xcode-select -s "$XCODE"
           xcodebuild -version
       - name: Get Mobdev
+        env:
+          VERSION: ${{ inputs.version }}
         run: |
-          if [ "$GITHUB_EVENT_NAME" = "workflow_run" ]; then
+          if [ -n "$VERSION" ]; then
+            curl -fsSL -o Mobdev.dmg "https://github.com/$GITHUB_REPOSITORY/releases/download/mac-v$VERSION/Mobdev.dmg"
+            hdiutil attach -nobrowse -mountpoint /tmp/mobdev Mobdev.dmg
+            echo "MOBDEV=/tmp/mobdev/Mobdev.app/Contents/MacOS/Mobdev" >> "$GITHUB_ENV"
+          elif [ "$GITHUB_EVENT_NAME" = "workflow_run" ]; then
             curl -fsSL -o Mobdev.dmg "https://github.com/$GITHUB_REPOSITORY/releases/latest/download/Mobdev.dmg"
             hdiutil attach -nobrowse -mountpoint /tmp/mobdev Mobdev.dmg
             echo "MOBDEV=/tmp/mobdev/Mobdev.app/Contents/MacOS/Mobdev" >> "$GITHUB_ENV"
