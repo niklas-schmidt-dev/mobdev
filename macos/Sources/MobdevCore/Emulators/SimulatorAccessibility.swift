@@ -41,10 +41,14 @@ public final class SimulatorAccessibility: @unchecked Sendable {
         let token = UUID().uuidString as NSString
         bridge.register(device, token: token)
         defer { bridge.unregister(token) }
+        let unanswered = DeveloperError("The simulator did not answer accessibility requests in time.")
         let selector = NSSelectorFromString("frontmostApplicationWithDisplayId:bridgeDelegateToken:")
         guard let method = class_getMethodImplementation(object_getClass(translator), selector),
             let translation = unsafeBitCast(method, to: Frontmost.self)(translator, selector, 0, token) as? NSObject
-        else { throw DeveloperError("The simulator did not say which app is in front.") }
+        else {
+            if bridge.wentUnanswered(token) { throw unanswered }
+            throw DeveloperError("The simulator did not say which app is in front.")
+        }
         translation.setValue(token, forKey: "bridgeDelegateToken")
         guard
             let root = translator.perform(NSSelectorFromString("macPlatformElementFromTranslation:"), with: translation)?
@@ -52,6 +56,7 @@ public final class SimulatorAccessibility: @unchecked Sendable {
         else { throw DeveloperError("The simulator's app has no accessibility element.") }
         // The application element covers the screen in points; every frame is relative to it.
         let screen = root.accessibilityFrame()
+        if bridge.wentUnanswered(token) { throw unanswered }
         guard screen.width > 0, screen.height > 0 else { throw DeveloperError("The simulator's app has no size yet.") }
         var elements: [UIElement] = []
         let deadline = Date().addingTimeInterval(20)
@@ -64,6 +69,7 @@ public final class SimulatorAccessibility: @unchecked Sendable {
             }
         }
         walk(root, depth: 0)
+        if bridge.wentUnanswered(token) { throw unanswered }
         return elements
     }
 
@@ -164,28 +170,39 @@ private final class Bridge: NSObject, @unchecked Sendable {
     ) -> Void
 
     private let devices = Locked<[NSString: NSObject]>([:])
+    /// Tokens with a request the simulator did not answer in time. Their later requests give up at
+    /// once: a tree takes hundreds of requests, and a busy simulator on a slow CI machine let each
+    /// wait its 5 s until the whole read was killed after 30 s (2026-10-02).
+    private let unanswered = Locked<Set<NSString>>([])
     /// Answers arrive here while the asking thread waits.
     private let queue = DispatchQueue(label: "sh.mobdev.simulator-accessibility")
 
     func register(_ device: NSObject, token: NSString) { devices.withLock { $0[token] = device } }
-    func unregister(_ token: NSString) { devices.withLock { $0[token] = nil } }
+
+    func unregister(_ token: NSString) {
+        devices.withLock { $0[token] = nil }
+        unanswered.withLock { _ = $0.remove(token) }
+    }
+
+    func wentUnanswered(_ token: NSString) -> Bool { unanswered.get().contains(token) }
 
     @objc(accessibilityTranslationDelegateBridgeCallbackWithToken:)
     func callback(token: NSString) -> Any {
         let device = devices.get()[token]
         let queue = self.queue
+        let unanswered = self.unanswered
         let answer: @convention(block) (AnyObject) -> AnyObject? = { request in
             let selector = NSSelectorFromString("sendAccessibilityRequestAsync:completionQueue:completionHandler:")
-            guard let device, let method = class_getMethodImplementation(object_getClass(device), selector) else {
-                return nil
-            }
+            guard let device, !unanswered.get().contains(token),
+                let method = class_getMethodImplementation(object_getClass(device), selector)
+            else { return nil }
             let done = DispatchSemaphore(value: 0)
             let response = Locked<AnyObject?>(nil)
             unsafeBitCast(method, to: Send.self)(device, selector, request, queue) { answer in
                 response.set(answer)
                 done.signal()
             }
-            _ = done.wait(timeout: .now() + 5)
+            if done.wait(timeout: .now() + 5) == .timedOut { unanswered.withLock { _ = $0.insert(token) } }
             return response.get()
         }
         return answer

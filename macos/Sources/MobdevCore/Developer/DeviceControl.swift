@@ -267,7 +267,9 @@ public final class DeviceControl: AppBackend, @unchecked Sendable {
             guard let info = NSDictionary(contentsOf: path.appendingPathComponent("Info.plist")),
                 let bundleID = info["CFBundleIdentifier"] as? String
             else { throw DeveloperError("\(path.lastPathComponent) has no Info.plist with a bundle identifier.") }
-            _ = try await simctl(["install", udid, path.path], timeout: 60)
+            // A freshly booted simulator on a GitHub runner took over 60 s once (2026-10-02); 75 s
+            // and the lookup below still fit the relays' 90 s request timeout.
+            _ = try await simctl(["install", udid, path.path], timeout: 75)
             return (try? await app(bundleID, timeout: 10))
                 ?? InstalledApp(bundleID: bundleID, name: bundleID, version: "", build: "", developer: true, location: nil)
         }
