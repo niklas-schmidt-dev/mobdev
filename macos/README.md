@@ -158,7 +158,10 @@ only device, or the connected iPhone when simulators or Android devices run next
 | `crash_reports` | `app`, `name`, `limit` | Lists reports; `name` reads one |
 
 Text recognition uses Apple's Vision framework on the Mac; no screen content leaves the machine
-unless your agent sends it to its model.
+unless your agent sends it to its model. Each recognition runs in a fresh process (`Mobdev __text`),
+and moves to the CPU when the Neural Engine fails. If it fails anyway, the text tools answer from the
+UI tree on simulators, Android and iPhones with Mobdev Runner and say so. Without a tree, they say
+that recognition failed and suggest `screenshot`.
 
 ### Developer tools
 

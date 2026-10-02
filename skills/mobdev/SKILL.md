@@ -53,6 +53,8 @@ in the way, or the tap hit a neighbour. Do not repeat the same tap blindly.
 
 - `tap_text` says the text is not visible: OCR may split or merge labels. `read_screen` shows the
   exact text; pass a shorter part of it.
+- A text tool says text recognition failed in macOS: look with `screenshot` and tap by coordinates.
+  Where there is a UI tree, the text tools read it instead and say so.
 - Typed text comes out wrong (y and z swapped, wrong symbols): the keyboard layout in Mobdev does not
   match Settings > General > Keyboard > Hardware Keyboard on the iPhone. Tell the user. Emoji type
   only with the UI tree on (below).
