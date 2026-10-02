@@ -88,6 +88,45 @@ final class MirrorNSView: NSView {
         CATransaction.commit()
     }
 
+    /// While the mouse is over the mirror, Bluetooth stays awake, so a click is not delayed.
+    private var awake: Timer?
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        addTrackingArea(
+            NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInActiveApp, .inVisibleRect], owner: self))
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        input?.stayAwake()
+        awake?.invalidate()
+        awake = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.keepAwake() }
+        }
+    }
+
+    override func mouseExited(with event: NSEvent) { stopKeepingAwake() }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window == nil { stopKeepingAwake() }
+    }
+
+    /// Only while the mouse is still over the mirror in the active app: leaving the app or hiding
+    /// the pane does not always send `mouseExited`.
+    private func keepAwake() {
+        guard NSApp.isActive, let window, window.isVisible, !isHiddenOrHasHiddenAncestor,
+            bounds.contains(convert(window.mouseLocationOutsideOfEventStream, from: nil))
+        else { return stopKeepingAwake() }
+        input?.stayAwake()
+    }
+
+    private func stopKeepingAwake() {
+        awake?.invalidate()
+        awake = nil
+    }
+
     override var acceptsFirstResponder: Bool { true }
     override var isFlipped: Bool { true }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }

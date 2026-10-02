@@ -65,9 +65,16 @@ public struct BluetoothHost: Sendable, Equatable, Identifiable {
 
 public enum HIDError: Error, CustomStringConvertible {
     case notConnected
+    /// Connected, but the iPhone has not subscribed to this report yet, so it would not arrive.
+    case notSubscribed(ReportID)
 
     public var description: String {
-        "No iPhone is paired over Bluetooth. On the iPhone open Settings > Bluetooth and tap “\(HIDPeripheral.macName)” under Other Devices."
+        switch self {
+        case .notConnected:
+            "No iPhone is paired over Bluetooth. On the iPhone open Settings > Bluetooth and tap “\(HIDPeripheral.macName)” under Other Devices."
+        case .notSubscribed(let id):
+            "The iPhone is still connecting over Bluetooth and does not take \(id.name) input yet. Try again in a few seconds."
+        }
     }
 }
 
@@ -90,6 +97,8 @@ public final class HIDPeripheral: NSObject, CBPeripheralManagerDelegate, CBCentr
     private let stateBox = Locked<BluetoothState>(.starting)
     private let hostCount = Locked(0)
     private let hostList = Locked<[BluetoothHost]>([])
+    /// The reports each listed iPhone subscribed to; a report to an iPhone that has not would get lost.
+    private let reportsByHost = Locked<[UUID: Set<ReportID>]>([:])
     /// Resting: the keyboard is not published, so iOS shows its own (see `rest()`).
     private let restingBox = Locked(false)
     private let lastInput = Locked(Date())
@@ -190,17 +199,26 @@ public final class HIDPeripheral: NSObject, CBPeripheralManagerDelegate, CBCentr
         }
     }
 
-    /// Input after a rest wakes the peripheral and waits up to 20 s for the iPhone to come back.
-    /// Called on the input's own queue, never on `queue`.
+    /// Input after a rest wakes the peripheral and waits up to 20 s for the iPhone to come back
+    /// with every report subscribed. An iPhone counts as connected after its first subscription,
+    /// and a swipe sent then lost its pointer reports while the clicks arrived: a tap where the
+    /// pointer last was. Called on the input's own queue, never on `queue`.
     private func comeBack(for host: UUID?) {
         if restingBox.get() {
             wakeDeadline.set(Date().addingTimeInterval(20))
             wake()
         }
         guard let deadline = wakeDeadline.get(), Date() < deadline else { return }
-        func back() -> Bool { host.map { id in hostList.get().contains { $0.id == id } } ?? (hostCount.get() > 0) }
+        func back() -> Bool { ReportID.allCases.allSatisfy { receives($0, host) } }
         while Date() < deadline, !back() { Thread.sleep(forTimeInterval: 0.1) }
         if back() { wakeDeadline.set(nil) }
+    }
+
+    /// Whether `host`, or any iPhone when nil, takes this report now.
+    private func receives(_ id: ReportID, _ host: UUID?) -> Bool {
+        let listed = hostList.get().map(\.id).filter { host == nil || $0 == host }
+        let reports = reportsByHost.get()
+        return listed.contains { reports[$0]?.contains(id) == true }
     }
 
     /// Republishes the GATT database now, so an iPhone that does not list the Mac looks again.
@@ -226,7 +244,9 @@ public final class HIDPeripheral: NSObject, CBPeripheralManagerDelegate, CBCentr
         try send(id, bytes, to: nil)
     }
 
-    /// Sends one input report to one host, or to every iPhone and iPad when `host` is nil.
+    /// Sends one input report to one host, or to every iPhone and iPad when `host` is nil. Throws
+    /// instead of dropping a report the iPhone would not get, so a press never goes out after its
+    /// pointer report got lost.
     public func send(_ id: ReportID, _ bytes: [UInt8], to host: UUID?) throws {
         lastInput.set(Date())
         comeBack(for: host)
@@ -235,6 +255,7 @@ public final class HIDPeripheral: NSObject, CBPeripheralManagerDelegate, CBCentr
         } else {
             guard hostCount.get() > 0 else { throw HIDError.notConnected }
         }
+        guard receives(id, host) else { throw HIDError.notSubscribed(id) }
         queue.async {
             guard let characteristic = self.inputs[id] else { return }
             let phones = self.hosts.values.filter {
@@ -242,8 +263,17 @@ public final class HIDPeripheral: NSObject, CBPeripheralManagerDelegate, CBCentr
                     && self.subscriptions[$0.central.identifier]?.contains(ObjectIdentifier(characteristic)) == true
             }
             guard !phones.isEmpty else { return }
+            let targets = phones.map(\.central)
+            // While the link cannot keep up, a newer pointer position replaces the one still
+            // waiting, so the pointer does not trail behind the mouse. Clicks and keys all arrive.
+            if id == .absolutePointer, let last = self.outbox.last, last.0 === characteristic,
+                last.2?.map(\.identifier) == targets.map(\.identifier)
+            {
+                self.outbox[self.outbox.count - 1].1 = Data(bytes)
+                return
+            }
             if self.outbox.count > 1024 { self.outbox.removeFirst(self.outbox.count - 1024) }
-            self.outbox.append((characteristic, Data(bytes), phones.map(\.central)))
+            self.outbox.append((characteristic, Data(bytes), targets))
             self.drain()
         }
     }
@@ -420,8 +450,11 @@ public final class HIDPeripheral: NSObject, CBPeripheralManagerDelegate, CBCentr
         if hosts[central.identifier] == nil {
             hosts[central.identifier] = Host(central: central)
             identify(central.identifier)
+            // The shortest connection interval the iPhone allows, so input arrives sooner.
+            peripheral.setDesiredConnectionLatency(.low, for: central)
         }
         guard let (id, input) = inputs.first(where: { $0.value === characteristic }) else { return }
+        Log.info("bluetooth: \(central.identifier) subscribed to \(id.name) reports")
         outbox.append((input, Data(count: id.length), [central]))
         drain()
         updateHostCount()
@@ -431,6 +464,9 @@ public final class HIDPeripheral: NSObject, CBPeripheralManagerDelegate, CBCentr
         _ peripheral: CBPeripheralManager, central: CBCentral, didUnsubscribeFrom characteristic: CBCharacteristic
     ) {
         subscriptions[central.identifier]?.remove(ObjectIdentifier(characteristic))
+        if let id = inputs.first(where: { $0.value === characteristic })?.key {
+            Log.info("bluetooth: \(central.identifier) unsubscribed from \(id.name) reports")
+        }
         updateHostCount()
     }
 
@@ -532,6 +568,10 @@ public final class HIDPeripheral: NSObject, CBPeripheralManagerDelegate, CBCentr
         let count = phones.count
         let list = phones.map { BluetoothHost(id: $0.key, name: $0.value.name, model: $0.value.model) }
             .sorted { $0.id.uuidString < $1.id.uuidString }
+        reportsByHost.set(
+            subscriptions.mapValues { subscribed in
+                Set(inputs.filter { subscribed.contains(ObjectIdentifier($0.value)) }.keys)
+            })
         let listChanged = hostList.withLock { current -> Bool in
             guard current != list else { return false }
             current = list

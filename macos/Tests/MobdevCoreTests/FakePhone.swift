@@ -107,9 +107,12 @@ final class FakePhone: PhoneBackend, @unchecked Sendable {
 final class RecordingSink: ReportSink, @unchecked Sendable {
     let reports = Locked<[(ReportID, [UInt8])]>([])
     var connected = true
+    /// Reports the iPhone has not subscribed to yet.
+    var unsubscribed: Set<ReportID> = []
 
     func send(_ id: ReportID, _ bytes: [UInt8]) throws {
         guard connected else { throw HIDError.notConnected }
+        guard !unsubscribed.contains(id) else { throw HIDError.notSubscribed(id) }
         reports.withLock { $0.append((id, bytes)) }
     }
 }

@@ -119,11 +119,36 @@ import Testing
         #expect(sink.reports.get()[0].1 == [0, 0, 0, 0])
     }
 
+    /// The mirror keeps the link awake while the mouse is over it, so its click needs no wake-up.
+    @Test func stayingAwakeSkipsTheWakeUpBeforeAClick() async throws {
+        let sink = RecordingSink()
+        let input = HIDInput(sink: sink, step: 0, wakeAfterIdle: 0.5)
+        input.stayAwake()
+        input.stayAwake()  // Within a second of the first: nothing more.
+        try await input.tap(at: NormalizedPoint(x: 0.5, y: 0.5), hold: 0)
+        #expect(sink.reports.get().map(\.0) == [.relativeMouse, .absolutePointer, .relativeMouse, .relativeMouse])
+    }
+
     @Test func failureReleasesButtons() async {
         let sink = RecordingSink()
         sink.connected = false
         let input = HIDInput(sink: sink, step: 0, wakeAfterIdle: nil)
         await #expect(throws: HIDError.self) { try await input.tap(at: NormalizedPoint(x: 0.5, y: 0.5)) }
+    }
+
+    /// An iPhone that has not subscribed to the pointer yet would get the press without the
+    /// pointer moving: a tap wherever the pointer was. Neither a swipe nor the mirror presses then.
+    @Test func noPressWithoutThePointer() async {
+        let sink = RecordingSink()
+        sink.unsubscribed = [.absolutePointer]
+        let input = HIDInput(sink: sink, step: 0.001, wakeAfterIdle: nil)
+        let start = NormalizedPoint(x: 0.5, y: 0.8), end = NormalizedPoint(x: 0.5, y: 0.2)
+        await #expect(throws: HIDError.self) { try await input.swipe(from: start, to: end, duration: 0.01) }
+        input.pointerDown(at: start)
+        input.pointerUp(at: end)
+        try? await input.move(to: end)  // Runs after the live calls on the same queue.
+        let presses = sink.reports.get().filter { $0.0 == .relativeMouse && $0.1.first == 1 }
+        #expect(presses.isEmpty)
     }
 
     /// Typing that nobody waits for any more (the relay timed out, the agent hung up) stops, and

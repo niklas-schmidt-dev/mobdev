@@ -17,6 +17,15 @@ public enum ReportID: UInt8, CaseIterable, Sendable {
         case .consumer: 2
         }
     }
+
+    var name: String {
+        switch self {
+        case .keyboard: "keyboard"
+        case .absolutePointer: "pointer"
+        case .relativeMouse: "click"
+        case .consumer: "Home button"
+        }
+    }
 }
 
 /// The HID report descriptor the iPhone reads when it pairs.

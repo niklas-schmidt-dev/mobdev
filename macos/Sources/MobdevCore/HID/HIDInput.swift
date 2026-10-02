@@ -122,7 +122,8 @@ public final class HIDInput: @unchecked Sendable {
         queue.async {
             try? self.wakeIfIdle()
             self.lastReport = Date()
-            try? self.pointer(point)
+            // Never press where the pointer did not go: that taps wherever it was.
+            guard (try? self.pointer(point)) != nil else { return }
             self.pause(self.step)
             try? self.button(down: true)
         }
@@ -140,6 +141,17 @@ public final class HIDInput: @unchecked Sendable {
             try? self.pointer(point)
             self.pause(self.step)
             try? self.button(down: false)
+            self.lastReport = Date()
+        }
+    }
+
+    /// Keeps the link from dozing while the mouse is over the mirror, with an empty mouse report
+    /// once a second, so the next click goes out at once instead of after `wakeIfIdle`'s pause.
+    /// It also wakes a resting peripheral before the click, and counts as use, so it does not rest.
+    public func stayAwake() {
+        queue.async {
+            guard Date().timeIntervalSince(self.lastReport) >= 1 else { return }
+            try? self.sink.send(.relativeMouse, HIDReportMap.relativeMouseReport(buttons: self.buttons))
             self.lastReport = Date()
         }
     }
