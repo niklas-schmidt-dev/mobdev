@@ -389,7 +389,8 @@ the Mac.
   matches package names.
 - `ui_tree` reads the simulator through macOS's private accessibility translation; tested with
   Xcode 27 on macOS 27 and with Xcode 26.6 on GitHub's macOS 26 runners, where the example flow
-  runs on every change. The first tap after an app starts was once lost on such a slow runner.
+  runs on every change. There the simulator can fall seconds behind typed text, and its app cannot
+  be read meanwhile; `tap_element` and `wait_for_element` wait up to 15 s past their timeout for it.
 - Recording does not capture the scroll wheel; drag to scroll while recording.
 - Mobdev Runner finds the app in front through XCTest's private API, as WebDriverAgent does; tested
   with Xcode 27 on simulators. Its frames assume portrait. It is built with your Xcode, so a new

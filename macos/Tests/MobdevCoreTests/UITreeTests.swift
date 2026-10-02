@@ -120,6 +120,21 @@ import Testing
         #expect(noQuery.text == "Pass id or text.")
     }
 
+    /// A tree that cannot be read yet is waited for past the timeout; a missing element is not.
+    @Test func anUnreadableTreeIsWaitedForPastTheTimeout() async throws {
+        let phone = try phone()
+        phone.unreadableReads.set(2)
+        let tools = PhoneTools(phone: phone, activity: ActivityLog(), settleDelay: 0)
+        let found = try await tools.call(
+            "wait_for_element", arguments: ["id": "search_bar", "timeout": 0], source: "test", screenshotByDefault: false)
+        #expect(!found.isError, "\(found.text)")
+        let started = Date()
+        let missing = try await tools.call(
+            "wait_for_element", arguments: ["text": "Battery", "timeout": 0], source: "test", screenshotByDefault: false)
+        #expect(missing.isError)
+        #expect(Date().timeIntervalSince(started) < 1)
+    }
+
     /// Seen on the iPhone: the Spotlight pill and its wrapper share id and frame.
     @Test func anElementAndItsWrapperAtTheSamePlaceCountOnce() async throws {
         let frame = CGRect(x: 0.3, y: 0.8, width: 0.4, height: 0.04)

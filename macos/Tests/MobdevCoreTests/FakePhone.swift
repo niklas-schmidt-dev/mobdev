@@ -26,6 +26,8 @@ final class FakePhone: PhoneBackend, @unchecked Sendable {
     let pointer = Locked<PointerBehavior?>(nil)
     /// What `uiTree` returns; nil like an iPhone.
     let tree: [UIElement]?
+    /// How many reads fail first, like a busy simulator's.
+    let unreadableReads = Locked(0)
 
     /// Text lines drawn at (x, y) in pixels from the top-left of a 1179×2556 screen.
     init(
@@ -40,7 +42,14 @@ final class FakePhone: PhoneBackend, @unchecked Sendable {
         self.tree = tree
     }
 
-    func uiTree() async throws -> [UIElement]? { tree }
+    func uiTree() async throws -> [UIElement]? {
+        let unreadable = unreadableReads.withLock { count -> Bool in
+            defer { count = max(0, count - 1) }
+            return count > 0
+        }
+        if unreadable { throw DeveloperError("The simulator's app has no size yet.") }
+        return tree
+    }
 
     func status() -> PhoneStatus {
         PhoneStatus(

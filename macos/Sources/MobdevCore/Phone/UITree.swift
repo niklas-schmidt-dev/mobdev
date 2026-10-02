@@ -196,11 +196,18 @@ extension PhoneTools {
         }
     }
 
+    /// How long past the timeout a tree that cannot be read is waited for. On GitHub's macOS runners
+    /// the simulator was still typing several seconds after `type_text` returned, and meanwhile its
+    /// app had no size, which failed the next `tap_element` after 5 s (2026-10-01 and -02).
+    static let unreadableGrace: TimeInterval = 15
+
     /// Reads the tree every half second until `accepted` holds, and returns that tree; nil when time
     /// runs out. A tree that cannot be read yet, as while an app launches, counts as not accepted;
-    /// its error is thrown if it never could be read. A device without a tree fails at once.
+    /// it is waited for up to `unreadableGrace` longer, and its error is thrown if it never could be
+    /// read. A device without a tree fails at once.
     private func poll(for timeout: TimeInterval, until accepted: ([UIElement]) -> Bool) async throws -> [UIElement]? {
         let deadline = Date().addingTimeInterval(timeout)
+        let lastChance = deadline.addingTimeInterval(Self.unreadableGrace)
         var unreadable: (any Error)?
         while true {
             do {
@@ -212,7 +219,8 @@ extension PhoneTools {
             } catch {
                 unreadable = error
             }
-            if Date() >= deadline {
+            let now = Date()
+            if now >= deadline, unreadable == nil || now >= lastChance {
                 if let unreadable { throw unreadable }
                 return nil
             }
