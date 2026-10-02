@@ -58,9 +58,7 @@ struct ActivityView: View {
                         }
                     }
                     if pager.hasMore(in: model, device: device) {
-                        // A new identity per page, so the row loads again if it is still in view.
-                        LoadMoreRow { await pager.loadMore(in: model, device: device) }
-                            .id(items.count)
+                        LoadMoreRow(page: pager.pagesLoaded) { await pager.loadMore(in: model, device: device) }
                     }
                 }
             }
@@ -114,8 +112,13 @@ struct ActivityDay<Item: Identifiable>: Identifiable {
     }
 }
 
-/// The last row of an activity list: loads the next page as soon as it scrolls into view.
+/// The last row of an activity list: loads the next page as soon as it scrolls into view, and
+/// again after each page while it stays in view. It keeps its identity: a row whose `.id` changed
+/// with every new entry made AppKit warn "reentrant operation in its NSTableView delegate. This
+/// warning will become an assert in the future" for each one.
 struct LoadMoreRow: View {
+    /// Pages loaded so far; a new value loads the next.
+    let page: Int
     let load: () async -> Void
 
     var body: some View {
@@ -127,6 +130,6 @@ struct LoadMoreRow: View {
         }
         .padding(.vertical, 8)
         .listRowSeparator(.hidden)
-        .task { await load() }
+        .task(id: page) { await load() }
     }
 }

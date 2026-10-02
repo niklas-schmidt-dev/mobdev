@@ -12,6 +12,8 @@ final class ActivityPager {
     private var older: [String: [ActivityLog.Entry]] = [:]
     private var exhausted = Set<String>()
     private(set) var isLoading = false
+    /// Counts finished loads, so the list's last row loads again while it is still in view.
+    private(set) var pagesLoaded = 0
 
     /// Everything loaded for the device, or for all devices, newest first.
     func items(in model: AppModel, device: String?) -> [ActivityItem] {
@@ -41,6 +43,7 @@ final class ActivityPager {
             if page.count < Self.pageSize { exhausted.insert(item.id) }
             older[item.id, default: []] += page
         }
+        pagesLoaded += 1
     }
 
     /// Forgets what was read, after a log is cleared.

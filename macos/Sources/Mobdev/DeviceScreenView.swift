@@ -184,9 +184,8 @@ private struct ActivityPane: View {
                         }
                     }
                     if pager.hasMore(in: model, device: id) {
-                        LoadMoreRow { await pager.loadMore(in: model, device: id) }
+                        LoadMoreRow(page: pager.pagesLoaded) { await pager.loadMore(in: model, device: id) }
                             .listRowBackground(Color.clear)
-                            .id(entries.count)
                     }
                 }
                 .listStyle(.plain)
