@@ -44,19 +44,21 @@ public final class HardwareDevice: PhoneBackend, @unchecked Sendable {
     /// Input for the live mirror; nil until a Bluetooth host is matched.
     public var input: HIDInput? { state.get().input }
     /// Plugged in, whether or not its screen can be captured (a locked iPhone has none).
-    public var isOnUSB: Bool { onUSB.get() }
-    let onUSB = Locked(false)
+    public var isOnUSB: Bool { onUSB.get() != nil }
+    /// Since when it is plugged in; nil while it is not.
+    let onUSB = Locked<Date?>(nil)
 
     var summary: KnownDevice { KnownDevice(id: id, captureID: captureID, name: name, info: info, host: host) }
 
     func update(info: DeviceInfo) { state.withLock { $0.info = info } }
 
     /// Whether the device is a tablet, and whether its picture is shaped like one: an iPad's screen
-    /// is about 3:4 (iPad mini 0.66), an iPhone's about 9:19.5 (iPhone SE 0.56). Nil until both are
-    /// known.
-    var screenShapes: (isTablet: Bool, showsTablet: Bool)? {
-        guard let info, case .connected(_, let width, let height) = capture.state, width > 0, height > 0 else {
-            return nil
+    /// is about 3:4 (iPad mini 0.66), an iPhone's about 9:19.5 (iPhone SE 0.56). `showsTablet` is
+    /// nil while there is no picture. Nil until the model is known.
+    var screenShapes: (isTablet: Bool, showsTablet: Bool?)? {
+        guard let info else { return nil }
+        guard case .connected(_, let width, let height) = capture.state, width > 0, height > 0 else {
+            return (info.formFactor == .iPad, nil)
         }
         return (info.formFactor == .iPad, Double(min(width, height)) / Double(max(width, height)) > 0.6)
     }
@@ -369,7 +371,7 @@ public final class DeviceHub: @unchecked Sendable {
             uncrossScreens()
             restWhenIdle()
             let list = deviceList.get()
-            if list.contains(where: { $0.onUSB.get() && !$0.capture.state.isConnected }),
+            if list.contains(where: { $0.isOnUSB && !$0.capture.state.isConnected }),
                 ScreenCapture.devices().contains(where: { capture in !list.contains { $0.captureID == capture.id } })
             {
                 scan()
@@ -382,11 +384,19 @@ public final class DeviceHub: @unchecked Sendable {
     static let restAfter: TimeInterval =
         ProcessInfo.processInfo.environment["MOBDEV_BLUETOOTH_REST_SECONDS"].flatMap(TimeInterval.init) ?? 300
 
+    /// How long after it was plugged in a device that has not paired keeps Bluetooth awake.
+    static var pairingWindow: TimeInterval { restAfter * 2 }
+
     /// Lets go of the iPhones after `restAfter` without input, so they show their own keyboard
-    /// again (see `HIDPeripheral.rest()`), and stays awake while a plugged-in iPhone still has to
-    /// pair, since resting also hides the Mac from its Bluetooth settings.
+    /// again (see `HIDPeripheral.rest()`). Resting also hides the Mac from Bluetooth settings, so it
+    /// stays awake while a device plugged in recently has yet to pair, but not for longer: an iPad
+    /// used only for its screen never pairs, and kept the iPhone's keyboard away for good
+    /// (2026-10-02). Show on iPhone Again wakes it for a device that takes longer.
     private func restWhenIdle() {
-        let pairing = deviceList.get().contains { $0.onUSB.get() && $0.host == nil }
+        let pairing = deviceList.get().contains { device in
+            guard device.host == nil, let since = device.onUSB.get() else { return false }
+            return Date().timeIntervalSince(since) < Self.pairingWindow
+        }
         if peripheral.isResting {
             if pairing { peripheral.wake() }
             return
@@ -432,15 +442,15 @@ public final class DeviceHub: @unchecked Sendable {
         for device in list {
             let present = infos.contains { $0.id == device.id || $0.id == device.info?.id }
                 || captures.contains { $0.id == device.captureID }
-            if device.onUSB.get() != present {
-                device.onUSB.set(present)
+            if device.isOnUSB != present {
+                device.onUSB.set(present ? Date() : nil)
                 changed = true
             }
         }
         // On USB but without a picture, usually because it is locked: list it, waiting for its screen.
         for info in infos where !list.contains(where: { $0.id == info.id || $0.info?.id == info.id }) {
             let device = makeDevice(id: info.id, captureID: info.id, captureName: info.name, info: info, host: nil)
-            device.onUSB.set(true)
+            device.onUSB.set(Date())
             list.append(device)
             Log.info("device \(info.name) on USB without a screen yet")
             changed = true
@@ -470,7 +480,7 @@ public final class DeviceHub: @unchecked Sendable {
     /// iPhones or two iPads crossed this way look alike and stay crossed.
     private func uncrossScreens() {
         let list = deviceList.get()
-        let pairs = Self.crossedScreens(list.map(\.screenShapes))
+        let pairs = Self.crossedScreens(list.map { $0.isOnUSB ? $0.screenShapes : nil })
         for (tablet, phone) in pairs {
             HardwareDevice.exchangeCaptures(list[tablet], list[phone])
             Log.info("the pictures of \(list[tablet].name) and \(list[phone].name) arrived crossed; exchanged them")
@@ -478,10 +488,14 @@ public final class DeviceHub: @unchecked Sendable {
         if !pairs.isEmpty { onChange() }
     }
 
-    /// Index pairs of a tablet showing a phone-shaped picture and a phone showing a tablet-shaped one.
-    static func crossedScreens(_ shapes: [(isTablet: Bool, showsTablet: Bool)?]) -> [(Int, Int)] {
-        let tablets = shapes.indices.filter { shapes[$0].map { $0.isTablet && !$0.showsTablet } ?? false }
-        let phones = shapes.indices.filter { shapes[$0].map { !$0.isTablet && $0.showsTablet } ?? false }
+    /// Index pairs of a tablet showing a phone-shaped picture and a phone showing a tablet-shaped
+    /// one. A sleeping iPad sends no picture, so the iPhone that got its capture shows none and
+    /// counts too when it is the only plugged-in phone without one (2026-10-02).
+    static func crossedScreens(_ shapes: [(isTablet: Bool, showsTablet: Bool?)?]) -> [(Int, Int)] {
+        let tablets = shapes.indices.filter { shapes[$0].map { $0.isTablet && $0.showsTablet == false } ?? false }
+        var phones = shapes.indices.filter { shapes[$0].map { !$0.isTablet && $0.showsTablet == true } ?? false }
+        let blank = shapes.indices.filter { shapes[$0].map { !$0.isTablet && $0.showsTablet == nil } ?? false }
+        if tablets.count > phones.count, blank.count == 1 { phones += blank }
         return Array(zip(tablets, phones))
     }
 

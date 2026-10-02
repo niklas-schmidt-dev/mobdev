@@ -166,14 +166,23 @@ import Testing
 
     /// An iPad showing an iPhone's picture and an iPhone showing an iPad's have them crossed.
     @Test func crossedPicturesArePairedByShape() {
-        let ipadShowingPhone = (isTablet: true, showsTablet: false)
-        let phoneShowingIPad = (isTablet: false, showsTablet: true)
-        let phone = (isTablet: false, showsTablet: false)
+        let ipadShowingPhone: (isTablet: Bool, showsTablet: Bool?) = (true, false)
+        let phoneShowingIPad: (isTablet: Bool, showsTablet: Bool?) = (false, true)
+        let phone: (isTablet: Bool, showsTablet: Bool?) = (false, false)
+        let blankPhone: (isTablet: Bool, showsTablet: Bool?) = (false, nil)
+        let blankIPad: (isTablet: Bool, showsTablet: Bool?) = (true, nil)
         let crossed = DeviceHub.crossedScreens([ipadShowingPhone, phone, nil, phoneShowingIPad])
         #expect(crossed.map { [$0.0, $0.1] } == [[0, 3]])
         // A mismatch without a counterpart has nothing to exchange with.
         #expect(DeviceHub.crossedScreens([ipadShowingPhone, phone]).isEmpty)
         #expect(DeviceHub.crossedScreens([phone, phone]).isEmpty)
+        // The iPhone that got a sleeping iPad's capture shows nothing.
+        #expect(DeviceHub.crossedScreens([ipadShowingPhone, blankPhone]).map { [$0.0, $0.1] } == [[0, 1]])
+        // With two such iPhones it is unclear which one; and a sleeping iPad crossed nothing.
+        #expect(DeviceHub.crossedScreens([ipadShowingPhone, blankPhone, blankPhone]).isEmpty)
+        #expect(DeviceHub.crossedScreens([blankIPad, blankPhone]).isEmpty)
+        // A phone showing an iPad comes before one without a picture.
+        #expect(DeviceHub.crossedScreens([blankPhone, ipadShowingPhone, phoneShowingIPad]).map { [$0.0, $0.1] } == [[1, 2]])
     }
 
     @Test func aScreenStateTakesTheDevicesName() {

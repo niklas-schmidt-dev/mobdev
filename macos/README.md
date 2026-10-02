@@ -74,7 +74,9 @@ Only** on the welcome page: nothing asks for camera or Bluetooth access until yo
 iOS hides its on-screen keyboard while a Bluetooth keyboard is connected, with or without the
 cable. After five minutes without input Mobdev lets go of Bluetooth, so the iPhone shows its own
 keyboard again; the next tap or key from Mobdev connects again within a few seconds
-(`MOBDEV_BLUETOOTH_REST_SECONDS` changes the five minutes). Moving the mouse over the mirror
+(`MOBDEV_BLUETOOTH_REST_SECONDS` changes the five minutes). For ten minutes after an iPhone or
+iPad is plugged in without pairing, Mobdev stays connected so that it can still pair; **Show on
+iPhone Again** connects again after that. Moving the mouse over the mirror
 connects right away and keeps Bluetooth awake, so the first click goes through without delay.
 Until the iPhone has connected all of its inputs again, Mobdev refuses input rather than send a
 click without the pointer move before it.
