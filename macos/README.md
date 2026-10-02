@@ -287,7 +287,9 @@ arguments:
 
   It prints a line per step and exits 0 when every step passed, 1 when one failed and 2 when the
   flow could not start. `--artifacts` keeps a video of the run (`run.mp4`), the activity log,
-  copied crash reports and, after a failure, `failure.png`; `--no-video` skips the video. Ctrl-C
+  copied crash reports and, after a failure, `failure.png`; `--no-video` skips the video. It waits
+  up to two minutes for the device to show up, since a simulator booting on a slow CI runner takes
+  a while; `--wait <seconds>` changes that. Ctrl-C
   stops the flow and still finishes the video. iPhones need the running app: call `run_flow` over
   MCP or the HTTP API.
 

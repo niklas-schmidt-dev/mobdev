@@ -18,7 +18,7 @@ public enum FlowCommand {
           --artifacts  where to keep a video of the run (run.mp4), the activity log, crash
                        reports and failure.png
           --no-video   do not record run.mp4
-          --wait       how long to wait for the device to appear, default 30
+          --wait       how long to wait for the device to appear, default 120
         """
 
     public static func run(_ arguments: [String]) -> Never {
@@ -46,7 +46,9 @@ public enum FlowCommand {
         var device: String?
         var artifacts: String?
         var video = true
-        var wait: TimeInterval = 30
+        /// On a GitHub macOS runner a simulator took 99 s to boot, and Mobdev did not list it for
+        /// 30 s more (2026-10-02).
+        var wait: TimeInterval = 120
     }
 
     static func parse(_ arguments: [String]) throws -> Options {
