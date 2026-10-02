@@ -12,6 +12,16 @@ struct DeviceScreenView: View {
     /// animated the whole stage and its video layer frame by frame, which made the window flicker.
     static let panelWidth: CGFloat = 340
 
+    /// The room for a device's screen and frame on a stage of `size`: a margin all around, minus
+    /// the panel while it is shown. An upright phone is limited by the height and keeps its size
+    /// when the panel opens or closes; a wide screen, such as an iPad held sideways, takes the
+    /// whole width while the panel is hidden.
+    static func room(in size: CGSize, panel: Bool) -> CGSize {
+        CGSize(
+            width: max(size.width - 80 - (panel ? panelWidth : 0), 100),
+            height: max(size.height - 90, 100))
+    }
+
     private var status: PhoneStatus? { model.state(id)?.status }
 
     var body: some View {
@@ -20,12 +30,12 @@ struct DeviceScreenView: View {
             Group {
                 if model.state(id)?.isEmulated == true {
                     if let size = status?.frameSize {
-                        EmulatorStage(id: id, frameSize: CGSize(width: size.width, height: size.height))
+                        EmulatorStage(id: id, frameSize: CGSize(width: size.width, height: size.height), panel: showPanel)
                     } else {
                         ProgressView("Waiting for the screen…")
                     }
                 } else if let size = status?.frameSize, model.hardware(id)?.capture.session != nil {
-                    PhoneStage(id: id, frameSize: CGSize(width: size.width, height: size.height))
+                    PhoneStage(id: id, frameSize: CGSize(width: size.width, height: size.height), panel: showPanel)
                 } else {
                     ConnectPhone(id: id)
                 }
@@ -217,16 +227,14 @@ private struct PhoneStage: View {
     @Environment(AppModel.self) private var model
     let id: String
     let frameSize: CGSize
+    /// Whether the panel is shown beside the screen.
+    let panel: Bool
     @State private var focused = false
 
     var body: some View {
         GeometryReader { proxy in
             let frame = ScreenFrame(form: model.state(id)?.info?.formFactor)
-            // Room for the setup panel is always kept, so opening it never resizes the phone.
-            let available = CGSize(
-                width: max(proxy.size.width - 80 - DeviceScreenView.panelWidth, 100),
-                height: max(proxy.size.height - 90, 100))
-            let screen = frame.fit(frameSize, in: available)
+            let screen = frame.fit(frameSize, in: DeviceScreenView.room(in: proxy.size, panel: panel))
             let radius = frame.corner(for: screen)
             let bezel = frame.bezel(for: screen)
 
@@ -279,6 +287,9 @@ private struct PhoneStage: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        // A new size when the panel opens or closes is not animated: animating the video layer's
+        // size frame by frame made the window flicker.
+        .transaction(value: panel) { $0.animation = nil }
     }
 
     private var hint: String {

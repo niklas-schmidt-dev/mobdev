@@ -8,6 +8,8 @@ struct EmulatorStage: View {
     @Environment(AppModel.self) private var model
     let id: String
     let frameSize: CGSize
+    /// Whether the panel is shown beside the screen.
+    let panel: Bool
     @State private var image: CGImage?
     @State private var dragStarted: Date?
     /// Where the pointer is over the screen, in its points, and the size it is shown at.
@@ -21,12 +23,8 @@ struct EmulatorStage: View {
     var body: some View {
         GeometryReader { proxy in
             let frame = ScreenFrame(form: model.state(id)?.info?.formFactor)
-            // Room for the panel is always kept, as on the iPhone page, so it never resizes the screen.
-            let available = CGSize(
-                width: max(proxy.size.width - 80 - DeviceScreenView.panelWidth, 100),
-                height: max(proxy.size.height - 90, 100))
             let size = image.map { CGSize(width: $0.width, height: $0.height) } ?? frameSize
-            let screen = frame.fit(size, in: available)
+            let screen = frame.fit(size, in: DeviceScreenView.room(in: proxy.size, panel: panel))
             let radius = frame.corner(for: screen)
             let bezel = frame.bezel(for: screen)
 
