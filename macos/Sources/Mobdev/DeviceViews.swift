@@ -230,21 +230,32 @@ struct StateBadge: View {
 
 // MARK: - Device artwork
 
-/// A drawing of the device's front in its color family, with the live screen if there is one.
+/// A drawing of the device's front in its color family, with the live screen if there is one. The
+/// screen's own shape decides the drawing's, so an iPad held sideways is drawn sideways.
 struct DeviceArtwork: View {
     let info: DeviceInfo?
     var screen: CGImage?
+    /// The height of the space it takes. Turned sideways it is at most 0.8 × as wide, so it fits a card.
     var height: CGFloat
 
     var body: some View {
         let form = info?.formFactor ?? .dynamicIsland
-        let width = height * (form == .iPad ? 0.72 : form == .homeButton ? 0.49 : 0.47)
-        let corner = width * (form == .homeButton ? 0.15 : form == .iPad ? 0.08 : 0.2)
-        let bezel = width * (form == .homeButton ? 0.055 : 0.04)
-        let chin = form == .homeButton ? height * 0.11 : bezel
+        let face = Face(form)
+        // Everything is measured in the screen's short side, then scaled to fit.
+        let aspect = screen.map { CGFloat($0.width) / CGFloat(max($0.height, 1)) } ?? face.aspect
+        let sideways = aspect > 1
+        let long = sideways ? aspect : 1 / aspect
+        let upright = CGSize(width: 1 + face.side * 2, height: long + face.chin * 2)
+        let front = sideways ? CGSize(width: upright.height, height: upright.width) : upright
+        let unit = min(height / front.height, height * 0.8 / front.width)
+        let screenSize = CGSize(width: (sideways ? long : 1) * unit, height: (sideways ? 1 : long) * unit)
+        let corner = (face.corner + face.side) * unit
         let light = info?.isLightColor ?? false
+        // The island and the notch lie along the top edge upright, and along the leading edge sideways.
+        let island = CGSize(width: 0.33 * unit, height: 0.093 * unit)
+        let notch = CGSize(width: 0.46 * unit, height: 0.076 * unit)
 
-        ZStack(alignment: .top) {
+        ZStack {
             RoundedRectangle(cornerRadius: corner, style: .continuous)
                 .fill(
                     LinearGradient(
@@ -254,54 +265,114 @@ struct DeviceArtwork: View {
                     RoundedRectangle(cornerRadius: corner, style: .continuous)
                         .strokeBorder(.white.opacity(light ? 0.8 : 0.22), lineWidth: 1)
                 }
+                .overlay(alignment: sideways ? .trailing : .bottom) {
+                    if form == .homeButton {
+                        let button = face.chin * 0.62 * unit
+                        Circle()
+                            .strokeBorder(light ? Color.black.opacity(0.15) : Color.white.opacity(0.18), lineWidth: 1.5)
+                            .frame(width: button, height: button)
+                            .padding(sideways ? .trailing : .bottom, face.chin * 0.19 * unit)
+                    }
+                }
                 .shadow(color: .black.opacity(0.28), radius: height * 0.06, y: height * 0.03)
+                .frame(width: front.width * unit, height: front.height * unit)
 
-            screenView(corner: max(corner - bezel, 2))
-                .frame(width: width - bezel * 2, height: height - chin * 2)
-                .padding(.top, chin)
-
-            switch form {
-            case .dynamicIsland:
-                Capsule()
-                    .fill(.black)
-                    .frame(width: width * 0.3, height: width * 0.085)
-                    .padding(.top, chin + width * 0.035)
-            case .notch:
-                UnevenRoundedRectangle(bottomLeadingRadius: width * 0.06, bottomTrailingRadius: width * 0.06)
-                    .fill(.black)
-                    .frame(width: width * 0.42, height: width * 0.07)
-                    .padding(.top, chin)
-            case .homeButton:
-                Circle()
-                    .strokeBorder(light ? Color.black.opacity(0.15) : Color.white.opacity(0.18), lineWidth: 1.5)
-                    .frame(width: chin * 0.62, height: chin * 0.62)
-                    .padding(.top, height - chin + chin * 0.19)
-            case .android:
-                Circle()
-                    .fill(.black)
-                    .frame(width: width * 0.075, height: width * 0.075)
-                    .padding(.top, chin + width * 0.04)
-            case .iPad:
-                EmptyView()
-            }
+            screenView(size: screenSize, corner: face.corner * unit)
+                .overlay(alignment: sideways ? .leading : .top) {
+                    switch form {
+                    case .dynamicIsland:
+                        Capsule()
+                            .fill(.black)
+                            .frame(width: sideways ? island.height : island.width, height: sideways ? island.width : island.height)
+                            .padding(sideways ? .leading : .top, 0.038 * unit)
+                    case .notch:
+                        let radius = 0.065 * unit
+                        UnevenRoundedRectangle(
+                            bottomLeadingRadius: sideways ? 0 : radius, bottomTrailingRadius: radius,
+                            topTrailingRadius: sideways ? radius : 0
+                        )
+                        .fill(.black)
+                        .frame(width: sideways ? notch.height : notch.width, height: sideways ? notch.width : notch.height)
+                    case .android:
+                        Circle()
+                            .fill(.black)
+                            .frame(width: 0.082 * unit, height: 0.082 * unit)
+                            .padding(sideways ? .leading : .top, 0.044 * unit)
+                    case .homeButton, .iPad:
+                        EmptyView()
+                    }
+                }
         }
-        .frame(width: width, height: height)
+        .frame(width: front.width * unit, height: height)
         .accessibilityHidden(true)
     }
 
-    @ViewBuilder private func screenView(corner: CGFloat) -> some View {
-        let shape = RoundedRectangle(cornerRadius: corner, style: .continuous)
-        if let screen {
-            Image(decorative: screen, scale: 1)
-                .resizable()
-                .aspectRatio(contentMode: .fill)
-                .clipShape(shape)
-        } else {
-            shape.fill(
+    @ViewBuilder private func screenView(size: CGSize, corner: CGFloat) -> some View {
+        let shape = RoundedRectangle(cornerRadius: max(corner, 1.5), style: .continuous)
+        Group {
+            if let screen {
+                // The screen is drawn in the picture's own proportions, so nothing is cropped.
+                Image(decorative: screen, scale: 1)
+                    .resizable()
+            } else {
                 LinearGradient(
                     colors: [Color(red: 0.12, green: 0.14, blue: 0.2), Color(red: 0.04, green: 0.05, blue: 0.08)],
-                    startPoint: .top, endPoint: .bottom))
+                    startPoint: .top, endPoint: .bottom)
+            }
         }
+        .frame(width: size.width, height: size.height)
+        .clipShape(shape)
+    }
+
+    /// The front's proportions in shares of the screen's short side, upright.
+    private struct Face {
+        /// The screen's width over its height when no picture says otherwise.
+        var aspect: CGFloat
+        /// The frame to the left and right of the screen, and above and below it.
+        var side: CGFloat
+        var chin: CGFloat
+        /// The screen's corner radius; the body's is this plus `side`, so the corners run parallel.
+        var corner: CGFloat
+
+        init(_ form: FormFactor) {
+            switch form {
+            case .homeButton: (aspect, side, chin, corner) = (0.56, 0.062, 0.25, 0.107)
+            // A wide, even frame and nearly square screen corners.
+            case .iPad: (aspect, side, chin, corner) = (0.72, 0.05, 0.05, 0.03)
+            case .dynamicIsland, .notch, .android: (aspect, side, chin, corner) = (0.46, 0.044, 0.044, 0.173)
+            }
+        }
+    }
+}
+
+/// The black frame around the live screen on a device's page: a thin one with round corners
+/// around a phone, a wider one with nearly square corners around an iPad, in either orientation.
+struct ScreenFrame {
+    var form: FormFactor?
+
+    private var cornerShare: CGFloat {
+        switch form {
+        case .iPad: 0.03
+        case .android: 0.12
+        default: 0.14
+        }
+    }
+
+    /// An iPad's frame grows with its screen; a phone's stays 10 points.
+    private var bezelShare: CGFloat { form == .iPad ? 0.05 : 0 }
+
+    /// The screen's corner radius at the size it is shown.
+    func corner(for screen: CGSize) -> CGFloat { min(screen.width, screen.height) * cornerShare }
+
+    func bezel(for screen: CGSize) -> CGFloat {
+        form == .iPad ? min(screen.width, screen.height) * bezelShare : 10
+    }
+
+    /// The largest size for a screen of `pixels` that fits into `available` with its frame.
+    func fit(_ pixels: CGSize, in available: CGSize) -> CGSize {
+        let band = min(pixels.width, pixels.height) * bezelShare * 2
+        let scale = min(available.width / (pixels.width + band), available.height / (pixels.height + band))
+        return CGSize(width: pixels.width * scale, height: pixels.height * scale)
     }
 }
 
@@ -376,7 +447,7 @@ struct DeviceInfoView: View {
                 } header: {
                     Text("Keyboard")
                 } footer: {
-                    Text("Match Settings › General › Keyboard › Hardware Keyboard on the iPhone, and turn off Auto-Correction there so typed text is not changed.")
+                    Text("Match Settings › General › Keyboard › Hardware Keyboard on the \(state.noun), and turn off Auto-Correction there so typed text is not changed.")
                 }
                 Section("Connection") {
                     LabeledContent("Screen (USB)") { Text(screenText(state)).foregroundStyle(.secondary) }
@@ -396,9 +467,9 @@ struct DeviceInfoView: View {
                     Text("Pass this id or the name as `device` to any tool when several iPhones are connected. `list_devices` returns them all.")
                 }
                 Section("Tips") {
-                    StepRow(title: "Auto-Lock: Never", detail: "The iPhone must stay unlocked while agents work.", state: .info)
+                    StepRow(title: "Auto-Lock: Never", detail: "The \(state.noun) must stay unlocked while agents work.", state: .info)
                     StepRow(
-                        title: "Re-pair", detail: "If taps stop working, forget this Mac on the iPhone and pair again.",
+                        title: "Re-pair", detail: "If taps stop working, forget this Mac on the \(state.noun) and pair again.",
                         state: .info)
                     Button("Diagnose…") { diagnosing = true }
                         .help("Check screen, USB, Bluetooth and AssistiveTouch, with a fix for each")

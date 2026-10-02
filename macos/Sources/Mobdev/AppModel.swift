@@ -30,12 +30,14 @@ struct DeviceState: Identifiable, Equatable {
     var isReady: Bool { status.isReady }
     /// A simulator or Android device: no cable, no Bluetooth, no setup.
     var isEmulated: Bool { kind != .iPhone }
+    /// "iPad" or "iPhone", for text about this device.
+    var noun: String { info?.deviceClass == "iPad" ? "iPad" : "iPhone" }
 
     /// One line for the window subtitle, sidebar and menu bar.
     var statusLine: String {
         if isEmulated { return isReady ? "Ready for agents" : "Starting" }
         if case .noPicture = status.screen { return "No picture from macOS" }
-        if case .locked = status.screen { return "Unlock the iPhone to see its screen" }
+        if case .locked = status.screen { return "Unlock the \(noun) to see its screen" }
         // Found over USB, but no picture has arrived yet.
         if isConnected, status.frameSize == nil { return "Waiting for the screen" }
         return switch (status.screen, status.bluetooth) {
@@ -45,7 +47,7 @@ struct DeviceState: Identifiable, Equatable {
         case (.connected, .unauthorized): "Bluetooth access needed"
         case (.connected, .poweredOff): "Bluetooth is off"
         case (.connected, _): "Pair over Bluetooth to control"
-        default: onUSB ? "Unlock the iPhone to see its screen" : "Not connected"
+        default: onUSB ? "Unlock the \(noun) to see its screen" : "Not connected"
         }
     }
 }

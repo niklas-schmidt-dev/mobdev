@@ -20,15 +20,15 @@ struct EmulatorStage: View {
 
     var body: some View {
         GeometryReader { proxy in
-            let bezel: CGFloat = 10
+            let frame = ScreenFrame(form: model.state(id)?.info?.formFactor)
             // Room for the panel is always kept, as on the iPhone page, so it never resizes the screen.
             let available = CGSize(
                 width: max(proxy.size.width - 80 - DeviceScreenView.panelWidth, 100),
                 height: max(proxy.size.height - 90, 100))
             let size = image.map { CGSize(width: $0.width, height: $0.height) } ?? frameSize
-            let scale = min(available.width / size.width, available.height / size.height)
-            let screen = CGSize(width: size.width * scale, height: size.height * scale)
-            let radius = screen.width * 0.12
+            let screen = frame.fit(size, in: available)
+            let radius = frame.corner(for: screen)
+            let bezel = frame.bezel(for: screen)
 
             VStack(spacing: 16) {
                 picture

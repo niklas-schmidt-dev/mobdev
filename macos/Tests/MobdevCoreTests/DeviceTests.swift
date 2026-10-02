@@ -13,6 +13,11 @@ import Testing
         #expect(!info.isLightColor)
         #expect(DeviceModels.formFactor(for: "iPhone14,6", deviceClass: "iPhone") == .homeButton)
         #expect(DeviceModels.formFactor(for: "iPhone13,2", deviceClass: "iPhone") == .notch)
+        let iPad = DeviceInfo(
+            id: "x", name: "iPad", productType: "iPad16,10", osVersion: "27.0", buildVersion: "", deviceClass: "iPad")
+        #expect(iPad.modelName == "iPad Air 13-inch (M4)")
+        #expect(iPad.formFactor == .iPad)
+        #expect(iPad.systemName == "iPadOS 27.0")
     }
 
     @Test func unknownModelsFallBackGracefully() {

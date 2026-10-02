@@ -222,14 +222,14 @@ private struct PhoneStage: View {
 
     var body: some View {
         GeometryReader { proxy in
-            let bezel: CGFloat = 10
+            let frame = ScreenFrame(form: model.state(id)?.info?.formFactor)
             // Room for the setup panel is always kept, so opening it never resizes the phone.
             let available = CGSize(
                 width: max(proxy.size.width - 80 - DeviceScreenView.panelWidth, 100),
                 height: max(proxy.size.height - 90, 100))
-            let scale = min(available.width / frameSize.width, available.height / frameSize.height)
-            let screen = CGSize(width: frameSize.width * scale, height: frameSize.height * scale)
-            let radius = screen.width * 0.14
+            let screen = frame.fit(frameSize, in: available)
+            let radius = frame.corner(for: screen)
+            let bezel = frame.bezel(for: screen)
 
             VStack(spacing: 16) {
                 PhoneMirrorView(
@@ -269,7 +269,7 @@ private struct PhoneStage: View {
                             .padding(-4)
                     }
                 }
-                .accessibilityLabel("iPhone screen")
+                .accessibilityLabel("\(noun) screen")
                 .accessibilityHint("Click to tap, drag to swipe, type while focused")
 
                 Text(hint)
@@ -284,17 +284,20 @@ private struct PhoneStage: View {
 
     private var hint: String {
         guard model.state(id)?.status.bluetooth.isConnected == true else {
-            return "Pair over Bluetooth to control the iPhone from here."
+            return "Pair over Bluetooth to control the \(noun) from here."
         }
         return focused
-            ? "Typing goes to the iPhone. ⌘V types the Mac clipboard."
+            ? "Typing goes to the \(noun). ⌘V types the Mac clipboard."
             : "Click to tap · drag to swipe · scroll · click, then type"
     }
+
+    private var noun: String { model.state(id)?.noun ?? "iPhone" }
 }
 
 private struct ConnectPhone: View {
     @Environment(AppModel.self) private var model
     let id: String
+    private var noun: String { model.state(id)?.noun ?? "iPhone" }
 
     var body: some View {
         switch model.state(id)?.status.screen ?? model.setupScreen {
@@ -302,7 +305,7 @@ private struct ConnectPhone: View {
             ContentUnavailableView {
                 Label("Camera Access Needed", systemImage: "video.slash")
             } description: {
-                Text("macOS treats the iPhone screen like a camera. Allow \(MobdevPaths.appName) in Privacy & Security.")
+                Text("macOS treats the \(noun) screen like a camera. Allow \(MobdevPaths.appName) in Privacy & Security.")
             } actions: {
                 Button("Open Privacy Settings") { model.openPrivacySettings("Privacy_Camera") }
                     .buttonStyle(.glassProminent)
@@ -323,7 +326,7 @@ private struct ConnectPhone: View {
             }
         case .locked(let name):
             ContentUnavailableView {
-                Label("Unlock Your iPhone", systemImage: "lock.iphone")
+                Label("Unlock Your \(noun)", systemImage: noun == "iPad" ? "lock.ipad" : "lock.iphone")
             } description: {
                 Text("\(name) is connected but locked, so it shows no picture. Unlock it with Face ID or the passcode.")
             }
@@ -355,6 +358,7 @@ private struct ConnectPhone: View {
 private struct StatusSummary: View {
     @Environment(AppModel.self) private var model
     let id: String
+    private var noun: String { model.state(id)?.noun ?? "iPhone" }
 
     var body: some View {
         let state = model.state(id)
@@ -407,7 +411,7 @@ private struct StatusSummary: View {
         case .snaps:
             row("Pointer", symbol: "cursorarrow", value: "Snap to Item is on", mark: warning)
                 .help(
-                    "Swipes turn into taps. On the iPhone: Settings › Accessibility › Touch › AssistiveTouch, turn off Snap to Item.")
+                    "Swipes turn into taps. On the \(noun): Settings › Accessibility › Touch › AssistiveTouch, turn off Snap to Item.")
         case .hidden:
             row("Pointer", symbol: "cursorarrow", value: "Not visible", mark: warning)
                 .help("The pointer did not appear. Turn on Settings › Accessibility › Touch › AssistiveTouch.")
@@ -427,6 +431,7 @@ private struct StatusSummary: View {
 struct SetupSteps: View {
     @Environment(AppModel.self) private var model
     let id: String
+    private var noun: String { model.state(id)?.noun ?? "iPhone" }
 
     private var status: PhoneStatus {
         model.state(id)?.status
@@ -445,12 +450,12 @@ struct SetupSteps: View {
                 Button("Open Bluetooth Settings") { model.openPrivacySettings("Privacy_Bluetooth") }
             } else if status.bluetooth == .advertising, !model.setupBluetooth.isConnected {
                 // Hidden while another iPhone is paired: republishing would interrupt it.
-                Button("Show on iPhone Again", systemImage: "arrow.clockwise") { model.offerBluetoothAgain() }
+                Button("Show on \(noun) Again", systemImage: "arrow.clockwise") { model.offerBluetoothAgain() }
             }
             if let host = model.state(id)?.replacementHost {
                 // Input never moves to another Bluetooth host on its own: a host's name is only what it says.
                 Text(
-                    "“\(host.name ?? "An iPhone")” is connected over Bluetooth, but this iPhone was paired as another device before. Use the connection only if it is this iPhone."
+                    "“\(host.name ?? "An iPhone")” is connected over Bluetooth, but this \(noun) was paired as another device before. Use the connection only if it is this \(noun)."
                 )
                 .font(.callout)
                 .foregroundStyle(.secondary)
@@ -487,7 +492,7 @@ struct SetupSteps: View {
         case .connected(let name, let width, let height): width > 0 ? "\(name) · \(width) × \(height)" : name
         case .searching, .starting: "Connect with a USB data cable and tap Trust."
         case .noPicture: "Connected, but macOS's screen capture helper delivers no picture. Restart it below."
-        case .locked: "Connected but locked. Unlock the iPhone."
+        case .locked: "Connected but locked. Unlock the \(noun)."
         default: status.screen.summary
         }
     }
@@ -505,10 +510,10 @@ struct SetupSteps: View {
         switch status.pointer {
         case .follows: "On. Taps and swipes work."
         case .snaps:
-            "Snap to Item is on, so swipes turn into taps. On the iPhone: Settings › Accessibility › Touch › AssistiveTouch, turn off Snap to Item."
+            "Snap to Item is on, so swipes turn into taps. On the \(noun): Settings › Accessibility › Touch › AssistiveTouch, turn off Snap to Item."
         case .hidden: "The pointer did not appear. Turn on Settings › Accessibility › Touch › AssistiveTouch."
         case nil:
-            "Checking by itself once the iPhone is ready. Settings › Accessibility › Touch › AssistiveTouch: turn it on, turn off Snap to Item and keep Perform Touch Gestures on."
+            "Checking by itself once the \(noun) is ready. Settings › Accessibility › Touch › AssistiveTouch: turn it on, turn off Snap to Item and keep Perform Touch Gestures on."
         }
     }
 
@@ -524,8 +529,8 @@ struct SetupSteps: View {
         switch status.bluetooth {
         case .connected: "Paired. \(MobdevPaths.appName) can tap and type."
         case .resting:
-            "Paired, resting: after five minutes without input \(MobdevPaths.appName) lets go, so the iPhone shows its own keyboard. The next tap connects again."
-        case .advertising: "On the iPhone: Settings › Bluetooth, then tap “\(HIDPeripheral.macName)” under Other Devices."
+            "Paired, resting: after five minutes without input \(MobdevPaths.appName) lets go, so the \(noun) shows its own keyboard. The next tap connects again."
+        case .advertising: "On the \(noun): Settings › Bluetooth, then tap “\(HIDPeripheral.macName)” under Other Devices."
         default: status.bluetooth.summary
         }
     }

@@ -1,7 +1,7 @@
 import MobdevCore
 import SwiftUI
 
-/// Everything that can keep an iPhone from working, checked in one place, each with its fix.
+/// Everything that can keep an iPhone or iPad from working, checked in one place, each with its fix.
 struct DiagnosisView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
@@ -9,6 +9,7 @@ struct DiagnosisView: View {
     @State private var usb: USBScreenState?
     @State private var developerMode: Bool??
     @State private var checking = false
+    private var noun: String { model.state(id)?.noun ?? "iPhone" }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -53,7 +54,7 @@ struct DiagnosisView: View {
 
     @ViewBuilder private var screenAccess: some View {
         if model.setupScreen == .cameraDenied {
-            row("Screen access", .attention, "macOS treats the iPhone screen like a camera. Allow \(MobdevPaths.appName) under Camera.")
+            row("Screen access", .attention, "macOS treats the \(noun) screen like a camera. Allow \(MobdevPaths.appName) under Camera.")
             Button("Open Privacy Settings") { model.openPrivacySettings("Privacy_Camera") }
         } else if !model.screenStarted {
             row("Screen access", .attention, "Not asked yet.")
@@ -68,14 +69,14 @@ struct DiagnosisView: View {
         case .connected(_, let width, let height) where width > 0:
             row("Picture", .done, "\(width) × \(height) pixels arrive.")
         case .connected:
-            row("Picture", .waiting, "Connected, waiting for the first picture. Wake and unlock the iPhone.")
+            row("Picture", .waiting, "Connected, waiting for the first picture. Wake and unlock the \(noun).")
         case .locked:
-            row("Picture", .waiting, "The iPhone is locked, so it sends no picture. Unlock it.")
+            row("Picture", .waiting, "The \(noun) is locked, so it sends no picture. Unlock it.")
         case .noPicture:
             row("Picture", .attention, "No picture arrives: macOS's screen capture helper is stuck. This happens after macOS or Xcode updates.")
             Button("Restart Screen Capture…") { model.restartScreenCapture() }
         default:
-            row("Picture", state.onUSB ? .waiting : .info, state.onUSB ? "Unlock the iPhone to see its screen." : "Needs the USB cable.")
+            row("Picture", state.onUSB ? .waiting : .info, state.onUSB ? "Unlock the \(noun) to see its screen." : "Needs the USB cable.")
         }
     }
 
@@ -86,13 +87,13 @@ struct DiagnosisView: View {
             } else if state.status.frameSize == nil, state.isConnected {
                 row(
                     "USB screen interface", .attention,
-                    "Missing (USB configuration \(usb.configuration)): macOS has not switched the iPhone into screen capture. Restarting the screen capture helper does.")
+                    "Missing (USB configuration \(usb.configuration)): macOS has not switched the \(noun) into screen capture. Restarting the screen capture helper does.")
                 Button("Restart Screen Capture…") { model.restartScreenCapture() }
             } else {
                 row("USB screen interface", .info, "Not active (USB configuration \(usb.configuration)). macOS turns it on when the capture starts.")
             }
         } else {
-            row("USB screen interface", .info, checking ? "Checking…" : "The iPhone is not on USB.")
+            row("USB screen interface", .info, checking ? "Checking…" : "The \(noun) is not on USB.")
         }
     }
 
@@ -101,10 +102,10 @@ struct DiagnosisView: View {
         case .connected:
             row("Bluetooth", .done, "Paired. \(MobdevPaths.appName) can tap and type.")
         case .resting:
-            row("Bluetooth", .done, "Paired and resting, so the iPhone shows its own keyboard. The next tap or key connects again within seconds.")
+            row("Bluetooth", .done, "Paired and resting, so the \(noun) shows its own keyboard. The next tap or key connects again within seconds.")
         case .advertising:
-            row("Bluetooth", .waiting, "Not paired. On the iPhone: Settings › Bluetooth, then tap “\(HIDPeripheral.macName)” under Other Devices.")
-            Button("Show on iPhone Again") { model.offerBluetoothAgain() }
+            row("Bluetooth", .waiting, "Not paired. On the \(noun): Settings › Bluetooth, then tap “\(HIDPeripheral.macName)” under Other Devices.")
+            Button("Show on \(noun) Again") { model.offerBluetoothAgain() }
         case .unauthorized:
             row("Bluetooth", .attention, "Bluetooth access is not allowed.")
             Button("Open Privacy Settings") { model.openPrivacySettings("Privacy_Bluetooth") }
@@ -125,7 +126,7 @@ struct DiagnosisView: View {
         case .hidden:
             row("AssistiveTouch", .attention, "The pointer did not appear. Turn on Settings › Accessibility › Touch › AssistiveTouch.")
         case nil:
-            row("AssistiveTouch", .info, "Not checked yet. Mobdev checks by itself once the iPhone is ready; the check moves the pointer without tapping.")
+            row("AssistiveTouch", .info, "Not checked yet. Mobdev checks by itself once the \(noun) is ready; the check moves the pointer without tapping.")
             if state.isReady { Button("Check Pointer") { model.checkPointer(id) } }
         }
     }
@@ -137,7 +138,7 @@ struct DiagnosisView: View {
         case .some(.some(false)):
             row("Developer Mode", .info, "Off. Only needed for your own apps and the UI tree: Settings › Privacy & Security › Developer Mode.")
         case .some(.none):
-            row("Developer Mode", .info, "Unknown: needs Xcode, and the iPhone connected to Xcode once. Only needed for your own apps and the UI tree.")
+            row("Developer Mode", .info, "Unknown: needs Xcode, and the \(noun) connected to Xcode once. Only needed for your own apps and the UI tree.")
         case .none:
             row("Developer Mode", .info, "Checking…")
         }
