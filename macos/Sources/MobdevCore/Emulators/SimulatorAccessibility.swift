@@ -60,9 +60,18 @@ public final class SimulatorAccessibility: @unchecked Sendable {
         guard screen.width > 0, screen.height > 0 else { throw DeveloperError("The simulator's app has no size yet.") }
         var elements: [UIElement] = []
         let deadline = Date().addingTimeInterval(20)
+        // Checked for every element: a slow simulator answered each request in time, but a level
+        // with many children took the read past the helper's 30 s limit (2026-10-02). A tree cut
+        // short is an error, not a smaller tree, so waiting for an element to go cannot end early.
+        var tooSlow = false
         func walk(_ element: NSAccessibilityElement, depth: Int) {
-            guard elements.count < Self.maxElements, depth < 64, Date() < deadline else { return }
+            guard elements.count < Self.maxElements, depth < 64, !tooSlow else { return }
             for case let child as NSAccessibilityElement in element.accessibilityChildren() ?? [] {
+                guard elements.count < Self.maxElements, !tooSlow else { return }
+                guard Date() < deadline else {
+                    tooSlow = true
+                    return
+                }
                 (child.value(forKey: "translation") as? NSObject)?.setValue(token, forKey: "bridgeDelegateToken")
                 if let found = Self.element(child, in: screen) { elements.append(found) }
                 walk(child, depth: depth + 1)
@@ -70,6 +79,7 @@ public final class SimulatorAccessibility: @unchecked Sendable {
         }
         walk(root, depth: 0)
         if bridge.wentUnanswered(token) { throw unanswered }
+        if tooSlow { throw DeveloperError("The simulator answered too slowly to read its whole UI tree.") }
         return elements
     }
 
