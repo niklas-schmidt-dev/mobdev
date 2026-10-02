@@ -9,6 +9,7 @@ final class FakePhone: PhoneBackend, @unchecked Sendable {
         case tap(NormalizedPoint, TimeInterval)
         case swipe(NormalizedPoint, NormalizedPoint)
         case scroll(Int)
+        case pan(Int)
         case type([KeyStroke])
         case key(KeyStroke)
         case button(ConsumerUsage)
@@ -66,6 +67,10 @@ final class FakePhone: PhoneBackend, @unchecked Sendable {
 
     func scroll(at point: NormalizedPoint, ticks: Int) async throws {
         events.withLock { $0.append(.scroll(ticks)) }
+    }
+
+    func pan(at point: NormalizedPoint, ticks: Int) async throws {
+        events.withLock { $0.append(.pan(ticks)) }
     }
 
     func type(_ strokes: [KeyStroke]) async throws {

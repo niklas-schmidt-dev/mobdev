@@ -134,7 +134,11 @@ extension Trait where Self == ConditionTrait {
             "scroll", arguments: ["direction": "down", "amount": 3], source: "test", screenshotByDefault: false)
         _ = try await tools.call(
             "scroll", arguments: ["direction": "up", "amount": 2], source: "test", screenshotByDefault: false)
-        #expect(phone.events.get() == [.scroll(3), .scroll(-2)])
+        _ = try await tools.call(
+            "scroll", arguments: ["direction": "right", "amount": 4], source: "test", screenshotByDefault: false)
+        _ = try await tools.call(
+            "scroll", arguments: ["direction": "left", "amount": 1], source: "test", screenshotByDefault: false)
+        #expect(phone.events.get() == [.scroll(3), .scroll(-2), .pan(4), .pan(-1)])
     }
 
     @Test func unknownToolThrows() async {

@@ -38,6 +38,7 @@ App Store apps.
 | Open an app | `open_app` with its name (Spotlight). For your own builds, `launch_app` |
 | Enter text | `tap` the field, then `type_text`; `submit: true` presses Return |
 | Scroll a list down | `swipe` from a larger y to a smaller y, or `scroll` with `direction: "down"` |
+| Scroll sideways | `scroll` with `direction: "right"` or `"left"`, or `swipe` horizontally |
 | Go back | `tap_text` the back button's label, or `tap` the chevron at the top left |
 | Home screen | `home` |
 | Wait for something | `wait_for_text` (or `gone: true`) instead of sleeping |

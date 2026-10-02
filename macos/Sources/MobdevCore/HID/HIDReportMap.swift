@@ -13,7 +13,7 @@ public enum ReportID: UInt8, CaseIterable, Sendable {
         switch self {
         case .keyboard: 8
         case .absolutePointer: 5
-        case .relativeMouse: 4
+        case .relativeMouse: 5
         case .consumer: 2
         }
     }
@@ -66,7 +66,8 @@ public enum HIDReportMap {
         0xC0, 0xC0,
     ]
 
-    // Input: buttons, dX, dY, wheel (signed bytes).
+    // Input: buttons, dX, dY, wheel, sideways wheel (AC Pan) (signed bytes). AC Pan in a second
+    // mouse of its own scrolled sideways, but then iOS took no more drags from this one (2026-10-02).
     static let relativeMouse: [UInt8] = [
         0x05, 0x01, 0x09, 0x02, 0xA1, 0x01,
         0x85, ReportID.relativeMouse.rawValue,
@@ -76,6 +77,8 @@ public enum HIDReportMap {
         0x95, 0x01, 0x75, 0x05, 0x81, 0x01,
         0x05, 0x01, 0x09, 0x30, 0x09, 0x31, 0x09, 0x38,
         0x15, 0x81, 0x25, 0x7F, 0x75, 0x08, 0x95, 0x03, 0x81, 0x06,
+        0x05, 0x0C, 0x0A, 0x38, 0x02,
+        0x15, 0x81, 0x25, 0x7F, 0x75, 0x08, 0x95, 0x01, 0x81, 0x06,
         0xC0, 0xC0,
     ]
 
@@ -96,10 +99,13 @@ public enum HIDReportMap {
         return [buttons, UInt8(px & 0xFF), UInt8(px >> 8), UInt8(py & 0xFF), UInt8(py >> 8)]
     }
 
-    public static func relativeMouseReport(buttons: UInt8, dx: Int = 0, dy: Int = 0, wheel: Int = 0) -> [UInt8] {
-        func byte(_ value: Int) -> UInt8 { UInt8(bitPattern: Int8(Swift.max(-127, Swift.min(127, value)))) }
-        return [buttons, byte(dx), byte(dy), byte(wheel)]
+    public static func relativeMouseReport(
+        buttons: UInt8, dx: Int = 0, dy: Int = 0, wheel: Int = 0, pan: Int = 0
+    ) -> [UInt8] {
+        [buttons, byte(dx), byte(dy), byte(wheel), byte(pan)]
     }
+
+    private static func byte(_ value: Int) -> UInt8 { UInt8(bitPattern: Int8(Swift.max(-127, Swift.min(127, value)))) }
 
     public static func keyboardReport(modifiers: UInt8, usage: UInt8?) -> [UInt8] {
         [modifiers, 0, usage ?? 0, 0, 0, 0, 0, 0]

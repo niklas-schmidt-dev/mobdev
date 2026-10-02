@@ -58,6 +58,8 @@ public protocol PhoneBackend: Sendable {
     func tap(at point: NormalizedPoint, hold: TimeInterval) async throws
     func swipe(from start: NormalizedPoint, to end: NormalizedPoint, duration: TimeInterval) async throws
     func scroll(at point: NormalizedPoint, ticks: Int) async throws
+    /// Scrolls sideways; positive `ticks` reveal content further right.
+    func pan(at point: NormalizedPoint, ticks: Int) async throws
     func type(_ strokes: [KeyStroke]) async throws
     func press(_ stroke: KeyStroke) async throws
     func press(_ button: ConsumerUsage) async throws
@@ -71,6 +73,19 @@ public protocol PhoneBackend: Sendable {
     func typeText(_ text: String) async throws -> Bool
     /// The elements on screen from the accessibility tree. Nil where there is none (an iPhone).
     func uiTree() async throws -> [UIElement]?
+}
+
+/// A wheel as a swipe, for devices without one: each step moves the content by a little over 5% of
+/// the screen, at most 60%. Positive ticks reveal content further down, or further right when
+/// `sideways`, so the finger moves up or left.
+func wheelSwipe(at point: NormalizedPoint, ticks: Int, sideways: Bool = false) -> (from: NormalizedPoint, to: NormalizedPoint) {
+    let distance = min(Double(abs(ticks)) * 0.055, 0.6)
+    let direction = ticks > 0 ? -1.0 : 1.0
+    let start = min(max((sideways ? point.x : point.y) - direction * distance / 2, 0.05), 0.95)
+    let end = min(max(start + direction * distance, 0.05), 0.95)
+    return sideways
+        ? (NormalizedPoint(x: start, y: point.y), NormalizedPoint(x: end, y: point.y))
+        : (NormalizedPoint(x: point.x, y: start), NormalizedPoint(x: point.x, y: end))
 }
 
 extension PhoneBackend {

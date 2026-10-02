@@ -41,6 +41,7 @@ final class FakeDevice: Device, @unchecked Sendable {
         try await phone.swipe(from: start, to: end, duration: duration)
     }
     func scroll(at point: NormalizedPoint, ticks: Int) async throws { try await phone.scroll(at: point, ticks: ticks) }
+    func pan(at point: NormalizedPoint, ticks: Int) async throws { try await phone.pan(at: point, ticks: ticks) }
     func type(_ strokes: [KeyStroke]) async throws { try await phone.type(strokes) }
     func press(_ stroke: KeyStroke) async throws { try await phone.press(stroke) }
     func press(_ button: ConsumerUsage) async throws { try await phone.press(button) }

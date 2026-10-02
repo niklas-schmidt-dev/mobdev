@@ -176,6 +176,7 @@ private final class RunnerPhone: PhoneBackend, @unchecked Sendable {
     func tap(at point: NormalizedPoint, hold: TimeInterval) async throws { try await runner.tap(at: point) }
     func swipe(from start: NormalizedPoint, to end: NormalizedPoint, duration: TimeInterval) async throws {}
     func scroll(at point: NormalizedPoint, ticks: Int) async throws {}
+    func pan(at point: NormalizedPoint, ticks: Int) async throws {}
     func type(_ strokes: [KeyStroke]) async throws {}
     func press(_ stroke: KeyStroke) async throws {}
     func press(_ button: ConsumerUsage) async throws {}

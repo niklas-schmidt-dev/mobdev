@@ -82,7 +82,8 @@ Until the iPhone has connected all of its inputs again, Mobdev refuses input rat
 click without the pointer move before it.
 
 The mirror in the app is live: click to tap, drag to swipe, swipe with two fingers on the trackpad
-(sideways too), scroll, and type while it has focus.
+(sideways too), scroll with the wheel (a sideways wheel or Shift scrolls sideways), and type while
+it has focus.
 ⌘V types the Mac clipboard on the phone. The inspector on the right shows what is still missing,
 Activity lists every agent action, and Settings (⌘,) holds the keyboard layout and API token.
 
@@ -141,7 +142,7 @@ only device, or the connected iPhone when simulators or Android devices run next
 | `tap` | `x`, `y` | |
 | `long_press` | `x`, `y`, `seconds` | |
 | `swipe` | `from_x`, `from_y`, `to_x`, `to_y`, `duration` | |
-| `scroll` | `direction` (`up`/`down`), `amount`, `x`, `y` | Mouse wheel |
+| `scroll` | `direction` (`up`/`down`/`left`/`right`), `amount`, `x`, `y` | Mouse wheel; `right` reveals content further right |
 | `type_text` | `text`, `submit` | Into the focused field, at most 1000 characters per call |
 | `press_key` | `key`, `modifiers` | e.g. `space` + `cmd` for Spotlight |
 | `home` | | |
@@ -387,7 +388,8 @@ the Mac.
 - Android types ASCII text only (`input text`), and adb does not know app names, so `open_app`
   matches package names.
 - `ui_tree` reads the simulator through macOS's private accessibility translation; tested with
-  Xcode 27 on macOS 27. `Mobdev flow` is tested on a Mac, not yet on GitHub's hosted runners.
+  Xcode 27 on macOS 27 and with Xcode 26.6 on GitHub's macOS 26 runners, where the example flow
+  runs on every change. The first tap after an app starts was once lost on such a slow runner.
 - Recording does not capture the scroll wheel; drag to scroll while recording.
 - Mobdev Runner finds the app in front through XCTest's private API, as WebDriverAgent does; tested
   with Xcode 27 on simulators. Its frames assume portrait. It is built with your Xcode, so a new

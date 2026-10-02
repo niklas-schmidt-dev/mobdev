@@ -66,7 +66,7 @@ import Testing
 }
 
 @Suite struct HIDReportTests {
-    @Test func descriptorDeclaresAllFourReports() {
+    @Test func descriptorDeclaresEveryReport() {
         let descriptor = HIDReportMap.descriptor
         for id in ReportID.allCases {
             #expect(zip(descriptor, descriptor.dropFirst()).contains { $0 == (0x85, id.rawValue) })
@@ -79,8 +79,32 @@ import Testing
         #expect(HIDReportMap.absolutePointerReport(x: -1, y: 2) == [0, 0, 0, 0xFF, 0x7F])
     }
 
+    /// The sideways wheel is the relative mouse's AC Pan. iOS reveals content further right for a
+    /// negative one (tried on an iPhone 14 Pro with iOS 27.0.1, 2026-10-02).
+    @Test func sidewaysScrollIsTheMousesPan() async throws {
+        #expect(HIDReportMap.relativeMouseReport(buttons: 0).count == ReportID.relativeMouse.length)
+        #expect(HIDReportMap.relativeMouseReport(buttons: 0, pan: -300) == [0, 0, 0, 0, 0x81])
+        let sink = RecordingSink()
+        let input = HIDInput(sink: sink, step: 0, wakeAfterIdle: nil)
+        try await input.pan(at: NormalizedPoint(x: 0.5, y: 0.5), ticks: 2)
+        #expect(sink.reports.get().map(\.0) == [.absolutePointer, .relativeMouse, .relativeMouse])
+        #expect(sink.reports.get().last?.1 == [0, 0, 0, 0, 0xFF])
+    }
+
+    /// Simulators and Android scroll with a swipe: revealing content further down or right moves
+    /// the finger up or left.
+    @Test func wheelSwipesMoveTheFingerAgainstTheContent() {
+        let center = NormalizedPoint(x: 0.5, y: 0.5)
+        let down = wheelSwipe(at: center, ticks: 4)
+        #expect(down.from.x == 0.5 && down.from.y > down.to.y)
+        let right = wheelSwipe(at: center, ticks: 4, sideways: true)
+        #expect(right.from.y == 0.5 && right.from.x > right.to.x)
+        let left = wheelSwipe(at: NormalizedPoint(x: 0.9, y: 0.5), ticks: -20, sideways: true)
+        #expect(left.from.x < left.to.x && left.to.x <= 0.95)
+    }
+
     @Test func relativeMouseClampsToSignedBytes() {
-        #expect(HIDReportMap.relativeMouseReport(buttons: 1, dx: 500, dy: -500, wheel: -3) == [1, 0x7F, 0x81, 0xFD])
+        #expect(HIDReportMap.relativeMouseReport(buttons: 1, dx: 500, dy: -500, wheel: -3, pan: 2) == [1, 0x7F, 0x81, 0xFD, 2])
     }
 
     @Test func tapMovesThenClicksThroughTheRelativeMouse() async throws {
@@ -90,8 +114,8 @@ import Testing
         let reports = sink.reports.get()
         #expect(reports.map(\.0) == [.absolutePointer, .relativeMouse, .relativeMouse])
         #expect(reports[0].1 == HIDReportMap.absolutePointerReport(x: 0.25, y: 0.75))
-        #expect(reports[1].1 == [1, 0, 0, 0])
-        #expect(reports[2].1 == [0, 0, 0, 0])
+        #expect(reports[1].1 == [1, 0, 0, 0, 0])
+        #expect(reports[2].1 == [0, 0, 0, 0, 0])
     }
 
     @Test func shiftedKeyPressesAndReleasesTheModifier() async throws {
@@ -116,7 +140,7 @@ import Testing
         // One empty mouse report before the first tap only; the second follows right after.
         #expect(kinds == [.relativeMouse, .absolutePointer, .relativeMouse, .relativeMouse,
             .absolutePointer, .relativeMouse, .relativeMouse])
-        #expect(sink.reports.get()[0].1 == [0, 0, 0, 0])
+        #expect(sink.reports.get()[0].1 == [0, 0, 0, 0, 0])
     }
 
     /// The mirror keeps the link awake while the mouse is over it, so its click needs no wake-up.

@@ -64,6 +64,7 @@ final class MirrorNSView: NSView {
     private var dragStarted = Date()
     private var dragged = false
     private var scrollAccumulator: CGFloat = 0
+    private var panAccumulator: CGFloat = 0
     /// A two-finger scroll on the trackpad, played on the iPhone as a touch that moves along.
     private var scrollTouch: (start: NormalizedPoint, current: NormalizedPoint, started: Date)?
     /// Whether that touch is down on the iPhone yet.
@@ -184,13 +185,20 @@ final class MirrorNSView: NSView {
             trackpadScroll(event)
             return
         }
-        // Positive ticks reveal content further down; on the Mac that is a negative delta.
-        scrollAccumulator -= event.scrollingDeltaY * (event.hasPreciseScrollingDeltas ? 0.1 : 1)
-        let ticks = Int(scrollAccumulator)
-        guard ticks != 0, let input else { return }
+        // Positive ticks reveal content further down or right; on the Mac that is a negative delta.
+        // A sideways wheel, or Shift with a plain wheel, scrolls sideways.
+        let scale: CGFloat = event.hasPreciseScrollingDeltas ? 0.1 : 1
+        scrollAccumulator -= event.scrollingDeltaY * scale
+        panAccumulator -= event.scrollingDeltaX * scale
+        let ticks = Int(scrollAccumulator), pan = Int(panAccumulator)
         scrollAccumulator -= CGFloat(ticks)
+        panAccumulator -= CGFloat(pan)
+        guard let input, ticks != 0 || pan != 0 else { return }
         let point = normalized(event)
-        Task { try? await input.scroll(at: point, ticks: ticks) }
+        Task {
+            if ticks != 0 { try? await input.scroll(at: point, ticks: ticks) }
+            if pan != 0 { try? await input.pan(at: point, ticks: pan) }
+        }
     }
 
     /// Two fingers on the trackpad move a touch on the iPhone the same way and as far, sideways too,

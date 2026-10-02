@@ -150,10 +150,10 @@ public final class PhoneTools: Sendable {
             ToolDefinition(
                 name: "scroll", title: "Scroll",
                 description:
-                    "Scroll with the mouse wheel at a point (default: screen center). \"down\" reveals content further down.",
+                    "Scroll with the mouse wheel at a point (default: screen center). \"down\" reveals content further down, \"right\" content further right.",
                 inputSchema: schema(
                     point.merging([
-                        "direction": ["type": "string", "enum": ["up", "down"]],
+                        "direction": ["type": "string", "enum": ["up", "down", "left", "right"]],
                         "amount": ["type": "integer", "description": "Wheel steps, default 5"],
                     ]) { $1 }, required: ["direction"]), readOnly: false),
             ToolDefinition(
@@ -283,12 +283,15 @@ public final class PhoneTools: Sendable {
             let point =
                 args.has("x") || args.has("y") ? try self.point(args, "x", "y") : NormalizedPoint(x: 0.5, y: 0.5)
             let direction = try args.string("direction")
-            guard direction == "up" || direction == "down" else {
-                throw ToolFailure("direction must be \"up\" or \"down\". Use swipe to move sideways.")
+            guard ["up", "down", "left", "right"].contains(direction) else {
+                throw ToolFailure("direction must be \"up\", \"down\", \"left\" or \"right\".")
             }
             let amount = Int(try args.number("amount", default: 5, range: 1...50))
             try requireTouch()
-            try await phone.scroll(at: point, ticks: direction == "down" ? amount : -amount)
+            switch direction {
+            case "left", "right": try await phone.pan(at: point, ticks: direction == "right" ? amount : -amount)
+            default: try await phone.scroll(at: point, ticks: direction == "down" ? amount : -amount)
+            }
             return ToolOutput(text: "Scrolled \(direction) by \(amount).")
         case "type_text":
             let text = try args.string("text", maxLength: Self.maxTypedCharacters)

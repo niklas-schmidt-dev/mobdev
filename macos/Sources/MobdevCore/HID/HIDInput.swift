@@ -80,6 +80,19 @@ public final class HIDInput: @unchecked Sendable {
         }
     }
 
+    /// Sideways wheel (AC Pan) at a point, one report per tick like `scroll`. Positive `ticks`
+    /// reveal content further right, which iOS does for a negative AC Pan.
+    public func pan(at point: NormalizedPoint, ticks: Int) async throws {
+        try await run {
+            try self.pointer(point)
+            self.pause(self.step * 2)
+            for _ in 0..<abs(ticks) {
+                try self.sink.send(.relativeMouse, HIDReportMap.relativeMouseReport(buttons: 0, pan: -ticks.signum()))
+                self.pause(self.step)
+            }
+        }
+    }
+
     public func move(to point: NormalizedPoint) async throws {
         try await run {
             try self.pointer(point)

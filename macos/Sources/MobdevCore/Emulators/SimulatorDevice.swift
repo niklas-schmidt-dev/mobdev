@@ -126,14 +126,15 @@ public final class SimulatorDevice: Device, @unchecked Sendable {
         try kit.touch(id, .up, at: last)
     }
 
-    /// A wheel step moves the content by a little over 5% of the screen, as a swipe.
+    /// As a swipe (see `wheelSwipe`).
     public func scroll(at point: NormalizedPoint, ticks: Int) async throws {
-        let distance = min(Double(abs(ticks)) * 0.055, 0.6)
-        // Positive ticks reveal content further down, so the finger moves up.
-        let direction = ticks > 0 ? -1.0 : 1.0
-        let startY = min(max(point.y - direction * distance / 2, 0.05), 0.95)
-        let endY = min(max(startY + direction * distance, 0.05), 0.95)
-        try await swipe(from: NormalizedPoint(x: point.x, y: startY), to: NormalizedPoint(x: point.x, y: endY), duration: 0.35)
+        let (start, end) = wheelSwipe(at: point, ticks: ticks)
+        try await swipe(from: start, to: end, duration: 0.35)
+    }
+
+    public func pan(at point: NormalizedPoint, ticks: Int) async throws {
+        let (start, end) = wheelSwipe(at: point, ticks: ticks, sideways: true)
+        try await swipe(from: start, to: end, duration: 0.35)
     }
 
     /// Stops between keys when cancelled, never inside one.

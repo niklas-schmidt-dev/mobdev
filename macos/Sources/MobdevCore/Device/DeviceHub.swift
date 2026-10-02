@@ -132,6 +132,10 @@ public final class HardwareDevice: PhoneBackend, @unchecked Sendable {
         try await requireInput().scroll(at: point, ticks: ticks)
     }
 
+    public func pan(at point: NormalizedPoint, ticks: Int) async throws {
+        try await requireInput().pan(at: point, ticks: ticks)
+    }
+
     public func type(_ strokes: [KeyStroke]) async throws {
         try await requireInput().type(strokes)
     }
