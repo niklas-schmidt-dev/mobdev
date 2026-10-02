@@ -31,6 +31,12 @@ if CommandLine.arguments.dropFirst().first == "__ui-tree", CommandLine.arguments
     SimulatorAccessibility.printTree(udid: CommandLine.arguments[2])
 }
 
+// `Mobdev __text <width> <height> [query]` recognizes text in pixels from stdin in a fresh process,
+// for the app itself.
+if CommandLine.arguments.dropFirst().first == "__text" {
+    TextRecognizer.runHelper(Array(CommandLine.arguments.dropFirst(2)))
+}
+
 // `Mobdev flow <file.json>` runs a flow on a simulator or Android device without the app, for CI.
 if CommandLine.arguments.dropFirst().first == "flow" {
     FlowCommand.run(Array(CommandLine.arguments.dropFirst(2)))

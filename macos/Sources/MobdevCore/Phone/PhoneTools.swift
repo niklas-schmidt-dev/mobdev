@@ -50,13 +50,23 @@ public final class PhoneTools: Sendable {
     let phone: PhoneBackend
     private let activity: ActivityLog
     private let settleDelay: TimeInterval
+    /// Every line of an image (query nil) or where a query is; Vision unless a test replaces it.
+    let readText: @Sendable (CGImage, String?) throws -> [TextMatch]
     /// Collects this device's calls while a flow is being recorded.
     public let recorder = FlowRecorder()
 
-    public init(phone: PhoneBackend, activity: ActivityLog, settleDelay: TimeInterval = 0.6) {
+    public convenience init(phone: PhoneBackend, activity: ActivityLog, settleDelay: TimeInterval = 0.6) {
+        self.init(phone: phone, activity: activity, settleDelay: settleDelay) { try TextRecognizer.read($0, query: $1) }
+    }
+
+    init(
+        phone: PhoneBackend, activity: ActivityLog, settleDelay: TimeInterval,
+        readText: @escaping @Sendable (CGImage, String?) throws -> [TextMatch]
+    ) {
         self.phone = phone
         self.activity = activity
         self.settleDelay = settleDelay
+        self.readText = readText
     }
 
     /// Typing takes about 60 ms per character and holds the phone's input until done, so one call
@@ -176,7 +186,7 @@ public final class PhoneTools: Sendable {
             ToolDefinition(
                 name: "read_screen", title: "Read screen",
                 description:
-                    "Recognize all visible text on the screen with its position (on-device OCR). Cheaper than a screenshot.",
+                    "Recognize all visible text on the screen with its position (on-device OCR). Cheaper than a screenshot. If macOS text recognition fails, this and the other text tools answer from the UI tree on simulators, Android and iPhones with Mobdev Runner.",
                 inputSchema: schema([:], screenshot: false), readOnly: true),
             ToolDefinition(
                 name: "find_text", title: "Find text",
@@ -325,26 +335,33 @@ public final class PhoneTools: Sendable {
             return ToolOutput(text: "Searched Spotlight for \"\(name)\" and opened the top hit.")
         case "read_screen":
             let (frame, size) = try currentFrame()
-            let lines = try TextRecognizer.lines(in: frame)
+            let found = try await screenText(nil, in: frame)
+            let lines = found.matches
             let text = lines.isEmpty
                 ? "No text recognized."
                 : lines.map { "\($0.text) @ \(coordinates($0.center, size))" }.joined(separator: "\n")
-            return ToolOutput(text: text, data: .array(lines.map { matchJSON($0, size) }))
+            return ToolOutput(
+                text: found.fromTree ? Self.fromTreeNote + "\n" + text : text,
+                data: .array(lines.map { matchJSON($0, size) }))
         case "find_text":
             let query = try args.string("text")
             let (frame, size) = try currentFrame()
-            let matches = try TextRecognizer.find(query, in: frame)
+            let found = try await screenText(query, in: frame)
+            let matches = found.matches
             let text = matches.isEmpty
                 ? "\"\(query)\" is not visible."
                 : matches.enumerated().map { index, match in
                     "\(index): \(match.text) @ \(coordinates(match.center, size))\(match.exact ? " (exact)" : "")"
                 }.joined(separator: "\n")
-            return ToolOutput(text: text, data: .array(matches.map { matchJSON($0, size) }))
+            return ToolOutput(
+                text: found.fromTree ? Self.fromTreeNote + "\n" + text : text,
+                data: .array(matches.map { matchJSON($0, size) }))
         case "tap_text":
             let query = try args.string("text")
             let (frame, size) = try currentFrame()
             try requireTouch()
-            let matches = try TextRecognizer.find(query, in: frame)
+            let found = try await screenText(query, in: frame)
+            let matches = found.matches
             let exact = matches.filter(\.exact)
             let candidates = exact.isEmpty ? matches : exact
             guard !candidates.isEmpty else {
@@ -362,21 +379,37 @@ public final class PhoneTools: Sendable {
             }
             let match = candidates[chosen]
             try await phone.tap(at: match.center, hold: 0.08)
-            return ToolOutput(text: "Tapped \"\(match.text)\" at \(coordinates(match.center, size)).")
+            return ToolOutput(
+                text: "Tapped \"\(match.text)\" at \(coordinates(match.center, size))."
+                    + (found.fromTree ? " " + Self.fromTreeNote : ""))
         case "wait_for_text":
             let query = try args.string("text")
             let timeout = try args.number("timeout", default: 10, range: 0...60)
             let gone = args.bool("gone") ?? false
             let deadline = Date().addingTimeInterval(timeout)
+            // Once recognition failed, the rest of the wait reads the UI tree.
+            var fromTree = false
             while true {
                 let (frame, _) = try currentFrame()
-                let visible = !(try TextRecognizer.find(query, in: frame)).isEmpty
+                let found: ScreenText
+                do {
+                    found = try await screenText(query, in: frame, treeOnly: fromTree)
+                } catch where fromTree && Date() < deadline {
+                    // A tree that cannot be read yet, as while an app launches, counts as not visible.
+                    try await pause(0.5)
+                    continue
+                }
+                fromTree = found.fromTree
+                let visible = !found.matches.isEmpty
                 if visible != gone {
-                    return ToolOutput(text: gone ? "\"\(query)\" is gone." : "\"\(query)\" is visible.")
+                    return ToolOutput(
+                        text: (gone ? "\"\(query)\" is gone." : "\"\(query)\" is visible.")
+                            + (fromTree ? " " + Self.fromTreeNote : ""))
                 }
                 if Date() >= deadline {
                     throw ToolFailure(
-                        "Timed out after \(timeout) s: \"\(query)\" \(gone ? "is still visible" : "did not appear").")
+                        "Timed out after \(timeout) s: \"\(query)\" \(gone ? "is still visible" : "did not appear")."
+                            + (fromTree ? " " + Self.fromTreeNote : ""))
                 }
                 try await pause(0.5)
             }

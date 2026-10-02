@@ -89,7 +89,7 @@ struct ElementQuery: CustomStringConvertible {
         return unique
     }
 
-    private static func folded(_ text: String) -> String {
+    static func folded(_ text: String) -> String {
         text.trimmingCharacters(in: .whitespacesAndNewlines)
             .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
     }

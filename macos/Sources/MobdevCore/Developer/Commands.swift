@@ -86,16 +86,34 @@ public struct ProcessRunner: CommandRunning {
     public func runBinary(_ executable: URL, _ arguments: [String], timeout: TimeInterval) throws
         -> (status: Int32, data: Data)
     {
+        try runBinary(executable, arguments, input: nil, timeout: timeout)
+    }
+
+    /// Like `runBinary(_:_:timeout:)`, with `input` written to the command's standard input.
+    public func runBinary(_ executable: URL, _ arguments: [String], input: Data?, timeout: TimeInterval) throws
+        -> (status: Int32, data: Data)
+    {
         let process = Process()
         process.executableURL = executable
         process.arguments = arguments
-        process.standardInput = FileHandle.nullDevice
+        let stdin = input.map { _ in Pipe() }
+        process.standardInput = stdin ?? FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice
         let pipe = Pipe()
         process.standardOutput = pipe
         let box = ProcessBox(process)
         try process.run()
         DispatchQueue.global().asyncAfter(deadline: .now() + timeout) { box.stop() }
+        if let stdin, let input {
+            // On its own thread, so a command that answers before reading everything cannot block
+            // this one. A command that exits early fails the write instead of raising SIGPIPE.
+            let handle = stdin.fileHandleForWriting
+            _ = fcntl(handle.fileDescriptor, F_SETNOSIGPIPE, 1)
+            DispatchQueue.global().async {
+                try? handle.write(contentsOf: input)
+                try? handle.close()
+            }
+        }
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
         return (box.waitForExit(timeout: timeout), data)
     }

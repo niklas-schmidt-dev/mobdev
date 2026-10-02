@@ -210,6 +210,80 @@ extension Trait where Self == ConditionTrait {
         #expect(missing.isError)
     }
 
+    // MARK: Text tools when text recognition fails
+
+    /// A simulator's tree: a title, a field with typed text, and a button around its label.
+    static let tree = [
+        UIElement(
+            role: "StaticText", label: "Willkommen", identifier: "", value: "",
+            frame: CGRect(x: 0.1, y: 0.1, width: 0.5, height: 0.04), enabled: true, tappable: false),
+        UIElement(
+            role: "TextField", label: "Name", identifier: "", value: "Niklas",
+            frame: CGRect(x: 0.1, y: 0.3, width: 0.8, height: 0.05), enabled: true, tappable: true),
+        UIElement(
+            role: "Button", label: "Weiter", identifier: "next", value: "",
+            frame: CGRect(x: 0.1, y: 0.8, width: 0.8, height: 0.06), enabled: true, tappable: true),
+        UIElement(
+            role: "StaticText", label: "Weiter", identifier: "", value: "",
+            frame: CGRect(x: 0.4, y: 0.81, width: 0.2, height: 0.04), enabled: true, tappable: false),
+    ]
+
+    func toolsWithoutRecognition(tree: [UIElement]?) -> (PhoneTools, FakePhone, ActivityLog) {
+        let phone = FakePhone(lines: [("Weiter", 120, 300)], tree: tree)
+        let log = ActivityLog()
+        let tools = PhoneTools(phone: phone, activity: log, settleDelay: 0) { _, _ in
+            throw TextRecognitionError("Vision failed: e5rtError(13); on the CPU: e5rtError(13)")
+        }
+        return (tools, phone, log)
+    }
+
+    @Test func textToolsReadTheUITreeWhenRecognitionFails() async throws {
+        let (tools, phone, log) = toolsWithoutRecognition(tree: Self.tree)
+        let screen = try await tools.call("read_screen", arguments: nil, source: "test", screenshotByDefault: false)
+        #expect(!screen.isError)
+        #expect(
+            screen.text.split(separator: "\n") == [
+                "Text recognition failed, so Mobdev read the UI tree instead.", "Willkommen @ (207, 154)",
+                "Name: Niklas @ (295, 416)", "Weiter @ (295, 1062)", "Weiter @ (295, 1062)",
+            ])
+        #expect(log.all.first?.summary == PhoneTools.fromTreeNote)
+
+        let field = try await tools.call("find_text", arguments: ["text": "niklas"], source: "test", screenshotByDefault: false)
+        #expect(field.text.hasSuffix("0: Niklas @ (295, 416) (exact)"))
+
+        // The button wins over the label inside it.
+        let tapped = try await tools.call("tap_text", arguments: ["text": "weiter"], source: "test", screenshotByDefault: false)
+        #expect(tapped.text == "Tapped \"Weiter\" at (295, 1062). " + PhoneTools.fromTreeNote)
+        #expect(phone.events.get() == [.tap(Self.tree[2].center, 0.08)])
+
+        let visible = try await tools.call(
+            "wait_for_text", arguments: ["text": "Willkommen", "timeout": 1], source: "test", screenshotByDefault: false)
+        #expect(visible.text == "\"Willkommen\" is visible. " + PhoneTools.fromTreeNote)
+        let stays = try await tools.call(
+            "wait_for_text", arguments: ["text": "Willkommen", "gone": true, "timeout": 0], source: "test",
+            screenshotByDefault: false)
+        #expect(stays.isError)
+        #expect(stays.text.contains("is still visible"))
+    }
+
+    @Test func textToolsExplainARecognitionFailureWithoutATree() async throws {
+        let (tools, phone, _) = toolsWithoutRecognition(tree: nil)
+        let calls: [(String, JSONValue?)] = [
+            ("read_screen", nil), ("find_text", ["text": "Weiter"]), ("tap_text", ["text": "Weiter"]),
+            ("wait_for_text", ["text": "Weiter", "timeout": 0]),
+        ]
+        for (name, arguments) in calls {
+            let output = try await tools.call(name, arguments: arguments, source: "test", screenshotByDefault: false)
+            #expect(output.isError)
+            let lines = output.text.split(separator: "\n")
+            #expect(
+                lines.first
+                    == "Text recognition failed in macOS, so Mobdev cannot read the text on this screen right now. Use screenshot to look at it; the next call may work again.")
+            #expect(lines.last == "Details: Vision failed: e5rtError(13); on the CPU: e5rtError(13)")
+        }
+        #expect(phone.events.get().isEmpty)
+    }
+
     @Test func openAppUsesSpotlight() async throws {
         let (tools, _) = tools()
         _ = try await tools.call("open_app", arguments: ["name": "Maps"], source: "test", screenshotByDefault: false)
