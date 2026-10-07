@@ -2,6 +2,40 @@ import Foundation
 import Testing
 @testable import MobdevCore
 
+/// What just worked becomes steps for a test.
+@Suite struct RecentStepsTests {
+    @Test func recentStepsKeepWhatSucceeded() async throws {
+        let phone = FakePhone(lines: [("Settings", 420, 300)])
+        let tools = PhoneTools(phone: phone, activity: ActivityLog(), settleDelay: 0)
+        func call(_ name: String, _ arguments: JSONValue) async throws -> ToolOutput {
+            try await tools.call(name, arguments: arguments, source: "test", screenshotByDefault: false)
+        }
+        _ = try await call("tap", ["x": 10, "y": 20])
+        _ = try await call("screenshot", [:])  // Only looks.
+        _ = try await call("tap", ["x": 9999, "y": 20])  // Fails.
+        _ = try await call("type_text", ["text": "Hel"])
+        _ = try await call("type_text", ["text": "lo", "submit": true])
+        let recent = try await call("recent_steps", [:])
+        #expect(recent.data?["steps"] == [["tap": ["x": 10, "y": 20]], ["type_text": ["text": "Hello", "submit": true]]])
+        #expect(recent.text.contains("1. tap"))
+        let last = try await call("recent_steps", ["count": 1])
+        #expect(last.data?["steps"]?.arrayValue?.count == 1)
+        _ = try await call("recent_steps", ["clear": true])
+        let cleared = try await call("recent_steps", [:])
+        #expect(cleared.data?["steps"] == [])
+    }
+
+    @Test func shortcutsRunThroughALinkWhereAppsAreReachable() async throws {
+        let apps = FakeApps()
+        let phone = FakePhone(lines: [], apps: apps)
+        let tools = PhoneTools(phone: phone, activity: ActivityLog(), settleDelay: 0)
+        let output = try await tools.call(
+            "run_shortcut", arguments: ["name": "Focus on"], source: "test", screenshotByDefault: false)
+        #expect(!output.isError)
+        #expect(apps.opened.get() == [URL(string: "shortcuts://run-shortcut?name=Focus%20on")!])
+    }
+}
+
 /// The Markdown that CI job summaries and pull request comments show.
 @Suite struct SummaryTests {
     @Test func aFlowSummaryShowsEveryStep() {

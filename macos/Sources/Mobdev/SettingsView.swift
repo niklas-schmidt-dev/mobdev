@@ -5,6 +5,7 @@ struct SettingsView: View {
     var body: some View {
         TabView {
             Tab("General", systemImage: "gearshape") { GeneralSettings() }
+            Tab("Agents", systemImage: "hand.raised") { AgentSettings() }
             Tab("API", systemImage: "key") { APISettings() }
         }
         .frame(width: 480)
@@ -54,6 +55,56 @@ private struct GeneralSettings: View {
             }
         }
         .formStyle(.grouped)
+    }
+}
+
+/// Guard rails for agents: apps they may not open.
+private struct AgentSettings: View {
+    @Environment(AppModel.self) private var model
+    @State private var newApp = ""
+    @State private var selection: String?
+
+    var body: some View {
+        Form {
+            Section {
+                List(model.settings.blockedApps, id: \.self, selection: $selection) { app in
+                    Text(app)
+                }
+                .frame(minHeight: 120)
+                .overlay {
+                    if model.settings.blockedApps.isEmpty {
+                        Text("No blocked apps").foregroundStyle(.secondary)
+                    }
+                }
+                .onDeleteCommand { remove() }
+                HStack {
+                    TextField("App name or bundle ID", text: $newApp, prompt: Text("e.g. Sparkasse or com.apple.mobilemail"))
+                        .onSubmit(add)
+                    Button("Add", action: add).disabled(newApp.trimmingCharacters(in: .whitespaces).isEmpty)
+                    Button("Remove", action: remove).disabled(selection == nil)
+                }
+            } header: {
+                Text("Blocked apps")
+            } footer: {
+                Text(
+                    "Agents cannot open or launch these apps with open_app or launch_app, in flows and tests too. A name also matches the end of a bundle ID. This prevents mistakes; it is not a sandbox, since an agent can still tap the app's icon."
+                )
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    private func add() {
+        let app = newApp.trimmingCharacters(in: .whitespaces)
+        guard !app.isEmpty, !model.settings.blockedApps.contains(app) else { return }
+        model.setBlockedApps(model.settings.blockedApps + [app])
+        newApp = ""
+    }
+
+    private func remove() {
+        guard let selection else { return }
+        model.setBlockedApps(model.settings.blockedApps.filter { $0 != selection })
+        self.selection = nil
     }
 }
 

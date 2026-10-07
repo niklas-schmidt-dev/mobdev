@@ -119,7 +119,7 @@ extension PhoneTools {
     /// While a flow is being recorded, a tap on a mark is saved as a step that still works when the
     /// marks are gone: tap_element by a unique identifier or label, tap_text for recognized text,
     /// else tap at the point.
-    func recordMarkTap(_ args: Arguments) {
+    func recordMarkTap(_ args: Arguments, into recorder: FlowRecorder) {
         guard recorder.isRecording, let observed = observed.get(),
             let number = args.value["mark"]?.doubleValue.map({ Int($0) }),
             let mark = observed.marks.first(where: { $0.number == number }), let size = try? screenshotSize()

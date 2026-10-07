@@ -330,6 +330,13 @@ final class AppModel {
         if enabled { emulators.start() } else { emulators.stop() }
     }
 
+    /// Apps agents may not open, by name or bundle ID. Empty entries are dropped.
+    func setBlockedApps(_ apps: [String]) {
+        settings.blockedApps = apps.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        save()
+        AppBlocklist.reload()
+    }
+
     func forget(_ id: String) { hub.forget(id) }
 
     // MARK: Setup

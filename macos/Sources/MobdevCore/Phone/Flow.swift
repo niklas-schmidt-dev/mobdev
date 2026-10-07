@@ -313,8 +313,10 @@ public final class FlowRecorder: Sendable {
     }
 
     private let state = Locked<State?>(nil)
+    /// Keeps at most this many steps, dropping the oldest; nil keeps all.
+    private let limit: Int?
 
-    public init() {}
+    public init(limit: Int? = nil) { self.limit = limit }
 
     public var isRecording: Bool { state.get() != nil }
     public var stepCount: Int { state.get()?.steps.count ?? 0 }
@@ -351,7 +353,7 @@ public final class FlowRecorder: Sendable {
     /// Calls that only look, and so replay nothing. Waits are kept: they are what a flow checks.
     static let skipped: Set<String> = [
         "status", "screenshot", "read_screen", "find_text", "ui_tree", "list_apps", "logs", "crash_reports",
-        "list_devices", "run_flow", "run_tests", "observe", "start_recording", "stop_recording",
+        "list_devices", "run_flow", "run_tests", "observe", "start_recording", "stop_recording", "recent_steps",
     ]
 
     /// A successful tool call. Consecutive typing merges into one step.
@@ -371,9 +373,16 @@ public final class FlowRecorder: Sendable {
                 current!.steps[current!.steps.count - 1] = Flow.Step(tool, merged)
             } else {
                 current!.steps.append(Flow.Step(tool, arguments))
+                if let limit, current!.steps.count > limit { current!.steps.removeFirst(current!.steps.count - limit) }
             }
         }
     }
+
+    /// The steps so far, without stopping.
+    public var steps: [Flow.Step] { state.get()?.steps ?? [] }
+
+    /// Forgets the steps so far and keeps recording.
+    public func clear() { state.withLock { $0?.steps = [] } }
 
     /// A click in the app's window, at a point given as fractions of the screen and in screenshot
     /// pixels. An element with a unique identifier or label under the point makes it tap_element.

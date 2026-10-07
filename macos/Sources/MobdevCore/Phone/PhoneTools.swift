@@ -56,6 +56,8 @@ public final class PhoneTools: Sendable {
     let unreadableGrace: TimeInterval
     /// Collects this device's calls while a flow is being recorded.
     public let recorder = FlowRecorder()
+    /// The newest successful actions, always, so `recent_steps` can turn what just worked into a test.
+    let history = FlowRecorder(limit: 200)
     /// The marks of the last `observe`, for `tap_mark`.
     let observed = Locked<ObservedMarks?>(nil)
     /// The screen recording `start_recording` started.
@@ -75,6 +77,7 @@ public final class PhoneTools: Sendable {
         self.settleDelay = settleDelay
         self.unreadableGrace = unreadableGrace
         self.readText = readText
+        history.start()
     }
 
     /// Typing takes about 60 ms per character and holds the phone's input until done, so one call
@@ -227,7 +230,7 @@ public final class PhoneTools: Sendable {
                         "gone": ["type": "boolean"],
                     ], required: ["text"]), readOnly: true),
         ] + observeDefinitions + treeDefinitions + appDefinitions + settingsDefinitions + recordingDefinitions
-            + flowDefinitions + testDefinitions
+            + sessionDefinitions + flowDefinitions + testDefinitions
     }()
 
     public static func definition(named name: String) -> ToolDefinition? {
@@ -259,10 +262,12 @@ public final class PhoneTools: Sendable {
             activity.record(
                 source: source, tool: name, summary: summary(name, args, output), failed: false, collapsing: collapsing)
             if !output.isError {
-                if name == "tap_mark" {
-                    recordMarkTap(args)
-                } else {
-                    recorder.record(name, arguments?.objectValue ?? [:])
+                for steps in [recorder, history] {
+                    if name == "tap_mark" {
+                        recordMarkTap(args, into: steps)
+                    } else {
+                        steps.record(name, arguments?.objectValue ?? [:])
+                    }
                 }
             }
             return output
@@ -275,7 +280,7 @@ public final class PhoneTools: Sendable {
 
     // MARK: Tools
 
-    private func run(_ name: String, _ args: Arguments) async throws -> ToolOutput {
+    func run(_ name: String, _ args: Arguments) async throws -> ToolOutput {
         switch name {
         case "status":
             return statusOutput()
@@ -451,6 +456,7 @@ public final class PhoneTools: Sendable {
             if let output = try await runTreeTool(name, args) { return output }
             if let output = try await runSettingsTool(name, args) { return output }
             if let output = try await runRecordingTool(name, args) { return output }
+            if let output = try await runSessionTool(name, args) { return output }
             return try await runAppTool(name, args)
         }
     }
