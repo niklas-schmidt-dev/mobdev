@@ -292,8 +292,10 @@ xcodebuild -scheme MyApp -destination 'generic/platform=iOS' -derivedDataPath bu
 - `crash_reports` with `name` copies the report to `~/Library/Application Support/dev.mobdev.mac/crash-reports`
   and returns the exception, the reason and the crashed thread. Frames of your own code carry
   addresses for `atos` when the report has no symbols.
-- `install_app` reads the path on the Mac that runs Mobdev, also when the agent connects through a
-  relay. `uninstall_app` refuses App Store and system apps.
+- `install_app` reads `path` on the Mac that runs Mobdev, also when the agent connects through a
+  relay. A build made elsewhere, such as in a cloud agent's container, is uploaded first and
+  installed with `upload` (see [Install builds from anywhere](#install-builds-from-anywhere)).
+  `uninstall_app` refuses App Store and system apps.
 
 ### Simulators and Android
 
@@ -701,6 +703,7 @@ curl -H "Authorization: Bearer $TOKEN" -X POST http://127.0.0.1:4686/v1/tools/ty
 
 `POST /v1/tools/<name>` takes the tool's arguments and returns `{"ok", "text", "data"}`; pass
 `"screenshot": true` to include one. `GET /v1/tools` lists the tools with their schemas.
+`/v1/uploads` receives builds for `install_app` (see [Install builds from anywhere](#install-builds-from-anywhere)).
 
 ## Remote access (optional)
 
@@ -722,6 +725,50 @@ claude mcp add --transport http mobdev-remote https://relay.mobdev.sh/h/<mac-nam
 Relays forward requests and store nothing. Anyone with the client key can control the phone;
 **New Client Key** revokes the old one, and revoking the access token in the dashboard disconnects
 the Mac.
+
+### Install builds from anywhere
+
+A cloud agent (Claude Code on the web, Codex cloud, Cursor background agents) or CI builds the app
+in its own container, uploads the build to the Mac through the relay and installs it on a device
+there with `install_app {"upload": "<id>"}`. The relay forwards the chunks like any other request
+and keeps nothing; the build lands in `uploads/` of Mobdev's folder, readable only by you, and is
+deleted 24 hours after its last use.
+
+[`scripts/mobdev-upload.sh`](../scripts/mobdev-upload.sh) needs only a shell, curl and `sha256sum`
+or `shasum`, so it runs in Linux containers without Mobdev:
+
+```sh
+curl -fsSLO https://raw.githubusercontent.com/niklas-schmidt-dev/mobdev/main/scripts/mobdev-upload.sh
+export MOBDEV_URL=https://relay.mobdev.sh/h/<mac-name> MOBDEV_KEY=mdc_…
+id=$(sh mobdev-upload.sh app/build/outputs/apk/debug/app-debug.apk)
+curl -sS -H "Authorization: Bearer $MOBDEV_KEY" -H 'Content-Type: application/json' \
+  -d "{\"upload\": \"$id\", \"device\": \"emulator-5554\"}" "$MOBDEV_URL/v1/tools/install_app"
+```
+
+An agent connected over MCP calls `install_app` with `{"upload": "<id>"}` instead of the `curl`.
+On a Mac, `Mobdev upload <file> --url https://relay.mobdev.sh/h/<mac-name>` (the key in
+`MOBDEV_KEY` or `--key`) does the same; without `--url` it sends the build to the Mobdev app on this
+Mac. Both zip an `.app` folder first, send chunks of up to 8 MiB, send a failed chunk again from
+where the Mac's copy ends, and print the upload's id (`--json`: the finished upload).
+
+An iPhone takes an `.ipa` or an `.app` built for devices, a simulator an `.app` built for the
+simulator, Android an `.apk`. An `.app` travels as a zip with the app at its top, as
+`ditto -c -k --keepParent MyApp.app MyApp.zip` makes it. `install_app` checks an upload as it checks
+a `path`. The protocol, on the relay and on the local API with the API token:
+
+| Request | |
+|---|---|
+| `POST /v1/uploads` `{"name", "size", "sha256"}` | 201 `{"id", "chunk_size", "received", …}`. `name` ends in `.ipa`, `.apk` or `.zip`; `sha256` is optional |
+| `PUT /v1/uploads/<id>?offset=<n>` with the bytes | At most `chunk_size` (8 MiB). `offset` must be what the Mac has, else 409 with `received` |
+| `GET /v1/uploads/<id>` | `received` and `state` (`receiving`, `finishing`, `finished`), to resume |
+| `POST /v1/uploads/<id>/finish` | Checks size and SHA-256 and unpacks a zip; `{"path", "kind", "sha256"}`. Safe to repeat |
+| `DELETE /v1/uploads/<id>` | Removes the upload |
+
+A zip is refused, before or right after unpacking, when it holds `../` or absolute paths, paths
+through its own symlinks, symlinks pointing outside the app, anything but one `.app` at its top, or
+more than 4 GB unpacked; setuid bits are dropped. Mobdev keeps at most 20 uploads and 4 GB; to make
+room, those unused the longest go, never one used in the last 10 minutes. Each upload shows in
+Mobdev's log (Console, subsystem `dev.mobdev.mac`), the install in the device's activity.
 
 ## Security and privacy
 

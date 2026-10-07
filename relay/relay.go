@@ -15,6 +15,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"regexp"
 	"sort"
@@ -504,8 +505,11 @@ func (s *Relay) listDevices(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(map[string]any{"macs": macs})
 }
 
+// Any method and any body pass, byte for byte: bodies travel base64 in the frames, so a build
+// uploaded in chunks (PUT /v1/uploads/<id>, application/octet-stream) reaches the Mac unchanged.
+// The hosted relay forwards the same headers (cloud/relay/src/protocol.ts).
 var forwardedRequestHeaders = []string{"Content-Type", "Accept", "Mcp-Protocol-Version", "Mcp-Method", "Mcp-Name"}
-var forwardedResponseHeaders = []string{"Content-Type", "Allow", "X-Image-Width", "X-Image-Height"}
+var forwardedResponseHeaders = []string{"Content-Type", "Allow", "Retry-After", "X-Image-Width", "X-Image-Height"}
 
 // forward sends an agent's request to the chosen Mac and relays the answer.
 func (s *Relay) forward(w http.ResponseWriter, r *http.Request) {
@@ -584,10 +588,16 @@ func (s *Relay) forward(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, s.cfg.MaxBody))
 	if err != nil {
 		var tooLarge *http.MaxBytesError
-		if errors.As(err, &tooLarge) {
+		var network net.Error
+		switch {
+		case errors.As(err, &tooLarge):
 			writeError(w, http.StatusRequestEntityTooLarge, "request body too large")
-		} else {
-			writeError(w, http.StatusBadRequest, "could not read the request body") // Too slow, or cut off.
+		case errors.As(err, &network) && network.Timeout():
+			// Worth sending again, in smaller pieces: Mobdev's upload clients halve their chunks.
+			writeError(w, http.StatusRequestTimeout, fmt.Sprintf(
+				"the request did not arrive within %s; send smaller pieces", s.cfg.BodyTimeout))
+		default:
+			writeError(w, http.StatusBadRequest, "could not read the request body") // Cut off.
 		}
 		return
 	}

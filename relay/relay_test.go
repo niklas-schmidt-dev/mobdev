@@ -165,6 +165,73 @@ func TestForwardsRequestToHostAndBack(t *testing.T) {
 	}
 }
 
+// A build uploaded in chunks: PUT with a binary application/octet-stream body as large as the
+// Mac takes (8 MiB) arrives byte for byte, and the Mac's answer, Retry-After included, comes back.
+func TestForwardsBinaryUploadChunksUnchanged(t *testing.T) {
+	cfg := testConfig()
+	cfg.RequestTimeout = 30 * time.Second // Encoding 11 MB of base64 takes a while with -race.
+	server := newServer(t, cfg)
+	conn, _, err := dialHost(t, server.URL, testSecret, "studio", nil)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	t.Cleanup(func() { conn.CloseNow() })
+	key := ClientKey(testSecret)
+	waitForHosts(t, server.URL, key, 1)
+	conn.SetReadLimit(64 << 20)
+	got := make(chan envelope, 4)
+	go func() {
+		for {
+			_, data, err := conn.Read(context.Background())
+			if err != nil {
+				return
+			}
+			var env envelope
+			if json.Unmarshal(data, &env) != nil || env.Type != "request" {
+				continue
+			}
+			got <- env
+			// Answers with the same bytes, as the body of a 409 that asks to wait.
+			reply, _ := json.Marshal(envelope{
+				Type: "response", ID: env.ID, Status: http.StatusConflict,
+				Headers: map[string]string{"Content-Type": env.Headers["content-type"], "Retry-After": "2", "Set-Cookie": "no=1"},
+				Body:    env.Body,
+			})
+			if conn.Write(context.Background(), websocket.MessageText, reply) != nil {
+				return
+			}
+		}
+	}()
+
+	for _, size := range []int{256 * 3, 8 << 20} {
+		chunk := make([]byte, size)
+		for i := range chunk {
+			chunk[i] = byte(i * 7)
+		}
+		req, _ := http.NewRequest(http.MethodPut, server.URL+"/h/studio/v1/uploads/abc?offset=8388608", strings.NewReader(string(chunk)))
+		req.Header.Set("Authorization", "Bearer "+key)
+		req.Header.Set("Content-Type", "application/octet-stream")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		answer, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+
+		env := <-got
+		sent, _ := base64.StdEncoding.DecodeString(env.Body)
+		if env.Method != http.MethodPut || env.Path != "/v1/uploads/abc" || env.Query != "offset=8388608" ||
+			env.Headers["content-type"] != "application/octet-stream" || string(sent) != string(chunk) {
+			t.Fatalf("the Mac got %s %s?%s %v and %d bytes, want %d unchanged", env.Method, env.Path, env.Query, env.Headers, len(sent), size)
+		}
+		if resp.StatusCode != http.StatusConflict || string(answer) != string(chunk) ||
+			resp.Header.Get("Content-Type") != "application/octet-stream" || resp.Header.Get("Retry-After") != "2" ||
+			resp.Header.Get("Set-Cookie") != "" {
+			t.Fatalf("the agent got %d %v and %d bytes", resp.StatusCode, resp.Header, len(answer))
+		}
+	}
+}
+
 func TestAnswersPing(t *testing.T) {
 	server := newServer(t, testConfig())
 	conn, _, err := dialHost(t, server.URL, testSecret, "studio", nil)
@@ -377,10 +444,11 @@ func TestStalledRequestBodiesAreCutOff(t *testing.T) {
 	waitForHosts(t, server.URL, key, 1)
 
 	// The headers promise 10 bytes of body and 4 arrive. Without a key the relay answers without
-	// reading the body, and the server then tries to discard the rest; with one the relay reads it.
+	// reading the body, and the server then tries to discard the rest; with one the relay reads it
+	// and answers 408, which tells upload clients to send smaller chunks.
 	for _, attempt := range []struct{ auth, want string }{
 		{"", "HTTP/1.1 401"},
-		{"Authorization: Bearer " + key + "\r\n", "HTTP/1.1 400"},
+		{"Authorization: Bearer " + key + "\r\n", "HTTP/1.1 408"},
 	} {
 		conn, err := net.Dial("tcp", server.Listener.Addr().String())
 		if err != nil {

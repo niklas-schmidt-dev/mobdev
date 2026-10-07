@@ -169,6 +169,8 @@ final class AppModel {
         if settings.emulatorsEnabled { emulators.start() }
         refresh()
         Task.detached(priority: .utility) { TextRecognizer.warmUp() }
+        // Builds agents uploaded and left unused for a day; a new upload also clears them.
+        Task.detached(priority: .utility) { UploadStore.shared.removeExpired() }
         Task { [weak self] in
             while let self {
                 await self.samplePictures()

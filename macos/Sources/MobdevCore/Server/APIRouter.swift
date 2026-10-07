@@ -14,14 +14,18 @@ public final class APIRouter: Sendable {
 
     private let tools: any ToolCalling
     private let mcp: MCPHandler
+    private let uploads: UploadStore
     private let token: @Sendable () -> String
     private let port: @Sendable () -> UInt16
 
+    /// `uploads` receives builds for `install_app`; give the tools the same store.
     public init(
-        tools: any ToolCalling, token: @escaping @Sendable () -> String, port: @escaping @Sendable () -> UInt16
+        tools: any ToolCalling, uploads: UploadStore = .shared, token: @escaping @Sendable () -> String,
+        port: @escaping @Sendable () -> UInt16
     ) {
         self.tools = tools
         self.mcp = MCPHandler(tools: tools)
+        self.uploads = uploads
         self.token = token
         self.port = port
     }
@@ -43,6 +47,8 @@ public final class APIRouter: Sendable {
             return .json(.array(tools.definitions.map(\.mcpJSON)))
         case ("GET", "/v1/screenshot"):
             return screenshot(request)
+        case (_, let path) where path == "/v1/uploads" || path.hasPrefix("/v1/uploads/"):
+            return await uploads.respond(to: request, source: source)
         case ("POST", let path) where path.hasPrefix("/v1/tools/"):
             let name = String(path.dropFirst("/v1/tools/".count))
             let arguments: JSONValue

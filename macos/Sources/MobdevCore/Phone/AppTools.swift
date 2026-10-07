@@ -17,10 +17,15 @@ extension PhoneTools {
             ToolDefinition(
                 name: "install_app", title: "Install app",
                 description:
-                    "Install a build from a path on the Mac that runs Mobdev: for an iPhone an .app or .ipa built for devices (Debug-iphoneos), for a simulator an .app built for the simulator (Debug-iphonesimulator), for Android an .apk. Replaces an older build and keeps its data. On an iPhone this needs Developer Mode.",
+                    "Install a build: for an iPhone an .app or .ipa built for devices (Debug-iphoneos), for a simulator an .app built for the simulator (Debug-iphonesimulator), for Android an .apk. Pass path for a build on the Mac that runs Mobdev, or upload for one sent from elsewhere, such as a cloud agent's or CI's container: upload it with POST /v1/uploads through the relay (Mobdev upload or scripts/mobdev-upload.sh do this) and pass its id. Replaces an older build and keeps its data. On an iPhone this needs Developer Mode.",
                 inputSchema: schema(
-                    ["path": ["type": "string", "description": "Absolute path on the Mac"]], required: ["path"],
-                    screenshot: false),
+                    [
+                        "path": ["type": "string", "description": "Absolute path on the Mac"],
+                        "upload": [
+                            "type": "string",
+                            "description": "The id of a finished upload (POST /v1/uploads), instead of path",
+                        ],
+                    ], screenshot: false),
                 readOnly: false),
             ToolDefinition(
                 name: "uninstall_app", title: "Uninstall app",
@@ -95,10 +100,11 @@ extension PhoneTools {
                 data: .array(apps.map(\.json)))
         case "install_app":
             let apps = try requireApps()
-            let path = try appPath(args.string("path"), for: apps.platform)
+            let (path, upload) = try build(args, for: apps.platform)
             let app = try await apps.install(at: path)
             return ToolOutput(
-                text: "Installed \(app.title) as \(app.bundleID). Start it with launch_app.", data: app.json)
+                text: "Installed \(app.title) as \(app.bundleID)\(upload.map { " from the upload \($0)" } ?? ""). Start it with launch_app.",
+                data: app.json)
         case "uninstall_app":
             let app = try await requireApps().uninstall(try args.string("bundle_id"))
             return ToolOutput(text: "Removed \(app.title) (\(app.bundleID)) and its data.", data: app.json)
@@ -215,6 +221,37 @@ extension PhoneTools {
                 "Tools for apps are not available for this device yet: Mobdev has not read its identity over USB. Reconnect the cable and unlock the iPhone.")
         }
         return apps
+    }
+
+    /// The build `path` or `upload` names, and the upload's name.
+    private func build(_ args: Arguments, for platform: AppPlatform) throws -> (URL, upload: String?) {
+        switch (args.has("path"), args.has("upload")) {
+        case (true, true):
+            throw ToolFailure("Pass path or upload, not both.")
+        case (false, false):
+            throw ToolFailure(
+                "Pass path, a build on the Mac that runs Mobdev, or upload, the id of a build sent with POST /v1/uploads.")
+        case (true, false):
+            return (try appPath(args.string("path"), for: platform), nil)
+        case (false, true):
+            let upload = try uploads.build(try args.string("upload"))
+            let fits =
+                switch platform {
+                case .iPhone: upload.kind != .apk
+                case .simulator: upload.kind == .app
+                case .android: upload.kind == .apk
+                }
+            guard fits else {
+                let needs =
+                    switch platform {
+                    case .iPhone: "an iPhone installs an .ipa, or an .app built for devices uploaded as a .zip"
+                    case .simulator: "a simulator installs an .app built for the simulator, uploaded as a .zip"
+                    case .android: "Android installs an .apk"
+                    }
+                throw ToolFailure("The upload \(upload.name) is an .\(upload.kind.rawValue); \(needs).")
+            }
+            return (try appPath(upload.url.path, for: platform), upload.name)
+        }
     }
 
     /// A build on this Mac that fits the device, checked before devicectl or adb sees it.

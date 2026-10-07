@@ -356,6 +356,7 @@ public final class HTTPServer: @unchecked Sendable {
     static func reason(_ status: Int) -> String {
         switch status {
         case 200: "OK"
+        case 201: "Created"
         case 202: "Accepted"
         case 204: "No Content"
         case 400: "Bad Request"
@@ -370,6 +371,8 @@ public final class HTTPServer: @unchecked Sendable {
         case 500: "Internal Server Error"
         case 502: "Bad Gateway"
         case 503: "Service Unavailable"
+        case 504: "Gateway Timeout"
+        case 507: "Insufficient Storage"
         default: "Status"
         }
     }

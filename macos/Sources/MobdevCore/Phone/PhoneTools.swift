@@ -64,14 +64,21 @@ public final class PhoneTools: Sendable {
     let recording = Locked<ActiveRecording?>(nil)
     /// Answers `assert_with_ai`: Apple Intelligence unless a test replaces it.
     let judge: any ScreenJudge
+    /// Builds sent from elsewhere, which `install_app` takes as `upload`.
+    let uploads: UploadStore
 
-    public convenience init(phone: PhoneBackend, activity: ActivityLog, settleDelay: TimeInterval = 0.6) {
-        self.init(phone: phone, activity: activity, settleDelay: settleDelay) { try TextRecognizer.read($0, query: $1) }
+    public convenience init(
+        phone: PhoneBackend, activity: ActivityLog, settleDelay: TimeInterval = 0.6, uploads: UploadStore = .shared
+    ) {
+        self.init(phone: phone, activity: activity, settleDelay: settleDelay, uploads: uploads) {
+            try TextRecognizer.read($0, query: $1)
+        }
     }
 
     init(
         phone: PhoneBackend, activity: ActivityLog, settleDelay: TimeInterval,
         unreadableGrace: TimeInterval = PhoneTools.unreadableGrace, judge: any ScreenJudge = AppleIntelligenceJudge(),
+        uploads: UploadStore = .shared,
         readText: @escaping @Sendable (CGImage, String?) throws -> [TextMatch]
     ) {
         self.phone = phone
@@ -79,6 +86,7 @@ public final class PhoneTools: Sendable {
         self.settleDelay = settleDelay
         self.unreadableGrace = unreadableGrace
         self.judge = judge
+        self.uploads = uploads
         self.readText = readText
         history.start()
     }

@@ -58,8 +58,15 @@ went away), it sends `{"type":"cancel","id"}` so the Mac can stop working on it;
 that still comes is dropped. Macs that do not know the frame ignore it. The
 Mac sends `ping` every 20 s and the relay answers `pong`; a connection silent for 75 s is closed. Only `/mcp` and `/v1/...` are forwarded, and only the headers MCP needs
 (`Content-Type`, `Accept`, `MCP-Protocol-Version`, `Mcp-Method`, `Mcp-Name`, `Mcp-Param-*`).
-Cookies and the agent's `Authorization` header are never forwarded. Frames of an unknown `type`
+Cookies and the agent's `Authorization` header are never forwarded. Answers keep `Content-Type`,
+`Allow`, `Retry-After`, `X-Image-Width` and `X-Image-Height`. Frames of an unknown `type`
 are ignored.
+
+Any method and any body pass byte for byte, since bodies travel as base64. That carries builds
+that agents upload for `install_app`: `PUT /v1/uploads/<id>?offset=…` with an
+`application/octet-stream` chunk of up to 8 MiB, about 11 MB in the frame (see
+[Install builds from anywhere](../macos/README.md#install-builds-from-anywhere)). The relay holds
+each chunk in memory only while it forwards it.
 
 ### Devices
 
@@ -90,7 +97,8 @@ and also lists every Mac of an account, including offline ones, at `GET /v1/acco
 
 Limits: 16 MB bodies, 90 s per request, 32 Macs per key and, as on the hosted relay, 4 requests
 in flight per Mac (more get 429 with `Retry-After: 1`). An agent's request headers must arrive
-within 10 s and the whole request within 30 s. At most 256 MB of request bodies are held at once:
+within 10 s and the whole request within 30 s; a body that takes longer gets 408, and Mobdev's
+upload clients then send smaller chunks. At most 256 MB of request bodies are held at once:
 each request reserves its `Content-Length`, or 16 MB without one, before its body is read and
 gets 503 when that does not fit. Logs contain method, path, status and duration only.
 

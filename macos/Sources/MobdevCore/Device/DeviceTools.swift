@@ -92,13 +92,18 @@ public final class DeviceTools: ToolCalling {
     private let hub: DeviceHub
     private let emulators: EmulatorHub?
     private let settleDelay: TimeInterval
+    private let uploads: UploadStore
     /// Per device, with the object it was made for: a rescan can replace a device under the same id.
     private let tools = Locked<[String: (device: any Device, tools: PhoneTools)]>([:])
 
-    public init(hub: DeviceHub, emulators: EmulatorHub? = nil, settleDelay: TimeInterval = 0.6) {
+    /// `uploads` is where `install_app` finds an `upload`: the store the API router receives them in.
+    public init(
+        hub: DeviceHub, emulators: EmulatorHub? = nil, settleDelay: TimeInterval = 0.6, uploads: UploadStore = .shared
+    ) {
         self.hub = hub
         self.emulators = emulators
         self.settleDelay = settleDelay
+        self.uploads = uploads
     }
 
     public static let definitions: [ToolDefinition] = {
@@ -190,7 +195,7 @@ public final class DeviceTools: ToolCalling {
         return tools.withLock { cache in
             cache = cache.filter { current.contains($0.key) }  // Forgotten or shut down devices.
             if let existing = cache[device.id], existing.device === device { return existing.tools }
-            let created = PhoneTools(phone: device, activity: device.activity, settleDelay: settleDelay)
+            let created = PhoneTools(phone: device, activity: device.activity, settleDelay: settleDelay, uploads: uploads)
             cache[device.id] = (device, created)
             return created
         }

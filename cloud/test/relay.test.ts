@@ -1,3 +1,4 @@
+import { Buffer } from "node:buffer";
 import { SELF, env, runInDurableObject } from "cloudflare:test";
 import { exports } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
@@ -57,6 +58,53 @@ describe("hosted relay", () => {
     const hosts = await listHosts(env.DB, id);
     expect(hosts).toHaveLength(1);
     expect(hosts[0]).toMatchObject({ name: "studio", online: 1 });
+  });
+
+  it("forwards binary upload chunks byte for byte, both ways", async () => {
+    const { token } = await account();
+    const hostSecret = secret();
+    const response = await connect(hostSecret, token);
+    expect(response.status).toBe(101);
+    const socket = response.webSocket!;
+    socket.accept();
+    const received: { method: string; path: string; query: string; headers: Record<string, string>; body: string }[] = [];
+    socket.addEventListener("message", (event) => {
+      const message = JSON.parse(event.data as string);
+      if (message.type !== "request") return;
+      received.push(message);
+      // Answers with the same bytes, as a 409 that asks to wait.
+      socket.send(
+        JSON.stringify({
+          type: "response",
+          id: message.id,
+          status: 409,
+          headers: { "Content-Type": message.headers["content-type"], "Retry-After": "2", "Set-Cookie": "no=1" },
+          body: message.body,
+        }),
+      );
+    });
+    const key = await clientKeyForSecret(hostSecret);
+
+    // As large as the Mac takes in one chunk: 8 MiB, about 11 MB as base64 in the frame.
+    for (const size of [256 * 3, 8 * 1024 * 1024]) {
+      const chunk = new Uint8Array(size).map((_, index) => (index * 7) & 0xff);
+      const answer = await SELF.fetch(`${BASE}/h/studio/v1/uploads/abc?offset=8388608`, {
+        method: "PUT",
+        body: chunk,
+        headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/octet-stream" },
+      });
+      expect(answer.status).toBe(409);
+      expect(answer.headers.get("Content-Type")).toBe("application/octet-stream");
+      expect(answer.headers.get("Retry-After")).toBe("2");
+      expect(answer.headers.get("Set-Cookie")).toBeNull();
+      // Buffer comparisons: vitest's deep equality takes long for millions of elements.
+      expect(Buffer.from(await answer.arrayBuffer()).equals(chunk)).toBe(true);
+
+      const request = received.at(-1)!;
+      expect(request).toMatchObject({ method: "PUT", path: "/v1/uploads/abc", query: "offset=8388608" });
+      expect(request.headers["content-type"]).toBe("application/octet-stream");
+      expect(Buffer.from(request.body, "base64").equals(chunk)).toBe(true);
+    }
   });
 
   it("rejects wrong keys and foreign paths", async () => {

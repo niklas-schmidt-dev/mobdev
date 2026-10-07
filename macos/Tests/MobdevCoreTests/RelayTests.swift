@@ -197,6 +197,48 @@ import Testing
         }
         #expect(try await listed().first?.devices == [locked])
     }
+
+    /// A build reaches the Mac through the relay in chunks, a full 8 MiB one among them, byte for
+    /// byte, and install_app installs it: sent by Mobdev upload's client and by the shell script.
+    @Test(.enabled(if: RelayEndToEndTests.goPath != nil, "Go is not installed"))
+    func uploadsThroughTheRelay() async throws {
+        let relay = try await RelayProcess.start()
+        defer { relay.stop() }
+        let temporary = TemporaryFolder()
+        let store = UploadStore(folder: temporary.url.appendingPathComponent("uploads"))
+        let apps = FakeApps(platform: .simulator)
+        let tools = PhoneTools(phone: FakePhone(lines: [], apps: apps), activity: ActivityLog(), settleDelay: 0, uploads: store)
+        let router = APIRouter(tools: tools, uploads: store, token: { "unused" }, port: { 0 })
+        let client = RelayClient(handler: { request in await router.handle(request, from: .relay) })
+        let secret = "mdh_" + SecretStore.randomHex(bytes: 32)
+        client.start(url: relay.base, secret: secret, hostName: "studio", accessToken: nil)
+        defer { client.stop() }
+        for _ in 0..<100 where client.state != .connected { try await Task.sleep(for: .milliseconds(50)) }
+        #expect(client.state == .connected)
+        let key = RelayClient.clientKey(forSecret: secret)
+        let mac = relay.base.appendingPathComponent("h/studio")
+
+        let data = randomData((8 << 20) + 1000)
+        let apk = try temporary.file("app-debug.apk", data)
+        let uploaded = try await UploadClient(transport: HTTPUploadTransport(base: mac, key: key), pause: { _ in })
+            .upload(apk, name: "app-debug.apk")
+        let path = try #require(uploaded["path"]?.stringValue)
+        #expect(try Data(contentsOf: URL(fileURLWithPath: path)) == data)
+
+        let script = try await MobdevUploadScript.run([try temporary.app().path], url: mac.absoluteString, key: key)
+        #expect(script.status == 0, "\(script.errors)")
+        let id = script.output.trimmingCharacters(in: .whitespacesAndNewlines)
+        var request = URLRequest(url: mac.appendingPathComponent("v1/tools/install_app"))
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = JSONValue(["upload": .string(id)]).encoded()
+        let (body, response) = try await URLSession.shared.data(for: request)
+        #expect((response as? HTTPURLResponse)?.statusCode == 200, "\(String(decoding: body, as: UTF8.self))")
+        let result = try JSONValue.parse(body)
+        #expect(result["text"]?.stringValue?.contains("from the upload Fixture.app.zip") == true, "\(result)")
+        #expect(apps.installed.get().map(\.lastPathComponent) == ["Fixture.app"])
+    }
 }
 
 /// Builds the Go relay once and runs it on a free loopback port.

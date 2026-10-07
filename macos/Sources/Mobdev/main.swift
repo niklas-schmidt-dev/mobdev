@@ -56,6 +56,12 @@ if CommandLine.arguments.dropFirst().first == "test" {
     TestCommand.run(Array(CommandLine.arguments.dropFirst(2)))
 }
 
+// `Mobdev upload <file>` sends a build to a Mac running Mobdev, through a relay or to the app here,
+// for install_app's `upload`.
+if CommandLine.arguments.dropFirst().first == "upload" {
+    UploadCommand.run(Array(CommandLine.arguments.dropFirst(2)))
+}
+
 // `Mobdev call <tool> …` runs one tool, through the app when it runs; `Mobdev tools` lists them.
 if CommandLine.arguments.dropFirst().first == "call" {
     CallCommand.run(Array(CommandLine.arguments.dropFirst(2)))

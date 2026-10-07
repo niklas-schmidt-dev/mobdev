@@ -51,6 +51,9 @@ export const TOKEN_RECHECK_MS = 60_000;
 
 export const DASHBOARD_URL = "https://mobdev.sh/dashboard";
 
+// Any method and any body pass, byte for byte: bodies travel base64 in the frames, so a build
+// uploaded in chunks (PUT /v1/uploads/<id>, application/octet-stream, up to 8 MiB each) reaches the
+// Mac unchanged. The Go relay forwards the same headers.
 export const FORWARDED_REQUEST_HEADERS = ["content-type", "accept", "mcp-protocol-version", "mcp-method", "mcp-name"];
 export const FORWARDED_RESPONSE_HEADERS = ["content-type", "allow", "retry-after", "x-image-width", "x-image-height"];
 

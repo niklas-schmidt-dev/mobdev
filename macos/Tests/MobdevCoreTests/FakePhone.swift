@@ -134,7 +134,7 @@ class FakePhone: PhoneBackend, @unchecked Sendable {
 }
 
 /// An app backend with no apps that remembers the URLs it was asked to open, and logs each under
-/// `app` as if the app had printed it.
+/// `app` as if the app had printed it, and the builds it was asked to install.
 final class FakeApps: AppBackend, @unchecked Sendable {
     let logs = AppLogs()
     let platform: AppPlatform
@@ -142,6 +142,7 @@ final class FakeApps: AppBackend, @unchecked Sendable {
     let opened = Locked<[URL]>([])
     /// Like simctl, which makes iOS ask before a custom scheme opens.
     let mayPromptToOpenURL: Bool
+    let installed = Locked<[URL]>([])
 
     init(platform: AppPlatform = .simulator, app: String = "dev.mobdev.fixture", mayPromptToOpenURL: Bool = false) {
         self.platform = platform
@@ -152,7 +153,13 @@ final class FakeApps: AppBackend, @unchecked Sendable {
     func activate(_ bundleID: String) async throws {}
     func apps(all: Bool) async throws -> [InstalledApp] { [] }
     func app(_ bundleID: String) async throws -> InstalledApp? { nil }
-    func install(at path: URL) async throws -> InstalledApp { throw DeveloperError("FakeApps installs nothing.") }
+    /// "Installs" an .app as its Info.plist's bundle ID, anything else under its file name.
+    func install(at path: URL) async throws -> InstalledApp {
+        installed.withLock { $0.append(path) }
+        let info = NSDictionary(contentsOf: path.appendingPathComponent("Info.plist"))
+        let bundleID = info?["CFBundleIdentifier"] as? String ?? "com.example." + path.deletingPathExtension().lastPathComponent
+        return InstalledApp(bundleID: bundleID, name: bundleID, version: "1.0", build: "1", developer: true, location: nil)
+    }
     func uninstall(_ bundleID: String) async throws -> InstalledApp { throw DeveloperError("FakeApps has no apps.") }
     func launch(_ bundleID: String, arguments: [String], environment: [String: String], restart: Bool) async throws
         -> LaunchOutcome
