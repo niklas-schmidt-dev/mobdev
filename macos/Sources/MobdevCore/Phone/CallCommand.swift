@@ -22,6 +22,7 @@ public enum CallCommand {
                     observe with image=true, and actions with screenshot=true
           --json    print the whole result as JSON
           --local   run here on a booted simulator or Android device, not through the app
+                    (always so for a Mobdev built with swift build, outside the app)
         """
 
     struct Options: Equatable {
@@ -93,7 +94,9 @@ public enum CallCommand {
         }
         var result: JSONValue
         do {
-            if options.local { throw LocalSocket.Failure.notRunning }
+            // A binary outside an app bundle, as `swift build` makes, never reaches the installed
+            // app: a developer's test call must not act on the iPhone that app controls.
+            if options.local || Bundle.main.bundleURL.pathExtension != "app" { throw LocalSocket.Failure.notRunning }
             result = try await callApp(options)
         } catch LocalSocket.Failure.notRunning {
             guard let local = await callHere(options, output: output) else { return 2 }
