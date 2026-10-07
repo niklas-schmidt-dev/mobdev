@@ -53,6 +53,14 @@ struct MobdevApp: App {
                     Button("Check for Updates…") { Updates.shared.checkForUpdates() }
                 }
             }
+            CommandGroup(replacing: .newItem) {
+                Button("New Project…") { model.showsNewProject = true }
+                    .keyboardShortcut("n", modifiers: [.command, .shift])
+                Button("Open Project…") {
+                    ProjectActions.open(model) { UserDefaults.standard.set($0.rawValue, forKey: "selectedPane") }
+                }
+                .keyboardShortcut("o")
+            }
         }
 
         Settings {

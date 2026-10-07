@@ -155,6 +155,7 @@ extension PhoneTools {
 
         let stem = baseline.url.deletingPathExtension().lastPathComponent
         let folder = baseline.artifacts ?? baseline.url.deletingLastPathComponent()
+        if let project = baseline.project { _ = try TestProject.output(.checks, in: project) }
         try files.createDirectory(at: folder, withIntermediateDirectories: true)
         let diffURL = folder.appendingPathComponent("\(stem)-diff.png")
         let actualURL = folder.appendingPathComponent("\(stem)-actual.png")
@@ -259,11 +260,16 @@ extension PhoneTools {
         let url: URL
         /// Where a failed comparison's files go; nil next to the baseline.
         let artifacts: URL?
+        /// Where a failed comparison's files stay until the check passes again: next to the
+        /// baseline, or the project's output/checks. Nil inside a run, which keeps its files.
+        var stale: URL? = nil
+        /// The project whose output/checks gets the files, made with its .gitignore on first use.
+        var project: URL? = nil
     }
 
     /// `path` as given, or `name` under baselines/<platform>/<width>x<height>/ in the running test
-    /// project or next to the flow file, else in Mobdev's folder. The size is the screen's in
-    /// pixels, so every device model and orientation has its own baselines.
+    /// project or flow file's project, the current project, else in Mobdev's folder. The size is
+    /// the screen's in pixels, so every device model and orientation has its own baselines.
     func baselineURL(_ args: Arguments, frame: CGImage) throws -> Baseline {
         if args.has("path") {
             guard !args.has("name") else { throw ToolFailure("Pass name or path, not both.") }
@@ -271,7 +277,9 @@ extension PhoneTools {
             guard path.hasPrefix("/"), path.lowercased().hasSuffix(".png") else {
                 throw ToolFailure("path must be an absolute path to a .png file on the Mac that runs Mobdev.")
             }
-            return Baseline(url: URL(fileURLWithPath: path).standardizedFileURL, artifacts: CheckContext.current?.artifacts)
+            let artifacts = CheckContext.current?.artifacts
+            let url = URL(fileURLWithPath: path).standardizedFileURL
+            return Baseline(url: url, artifacts: artifacts, stale: artifacts == nil ? url.deletingLastPathComponent() : nil)
         }
         guard args.has("name") else { throw ToolFailure("Pass name (a baseline name such as login-screen) or path.") }
         var name = try args.string("name", maxLength: 100)
@@ -282,11 +290,19 @@ extension PhoneTools {
             throw ToolFailure("name may hold letters, digits, spaces, dots, dashes and underscores, like login-screen.")
         }
         let context = CheckContext.current
-        let url = (context?.root ?? MobdevPaths.home).appendingPathComponent("baselines", isDirectory: true)
+        let root = context?.root ?? projects.current() ?? MobdevPaths.home
+        let url = root.appendingPathComponent(TestProject.baselinesFolderName, isDirectory: true)
             .appendingPathComponent(TestCase.platformName(deviceKind), isDirectory: true)
             .appendingPathComponent("\(frame.width)x\(frame.height)", isDirectory: true)
             .appendingPathComponent("\(name).png")
-        return Baseline(url: url, artifacts: context?.artifacts)
+        if let artifacts = context?.artifacts { return Baseline(url: url, artifacts: artifacts) }
+        // A project versions its baselines, so a failure's files go to its ignored output instead.
+        if TestProject.isProject(root) {
+            let checks = root.appendingPathComponent(TestProject.outputFolderName, isDirectory: true)
+                .appendingPathComponent(ProjectOutput.checks.rawValue, isDirectory: true)
+            return Baseline(url: url, artifacts: checks, stale: checks, project: root)
+        }
+        return Baseline(url: url, artifacts: nil, stale: url.deletingLastPathComponent())
     }
 
     /// What the device is; a backend that is no `Device` (a test's) by how its input travels.
@@ -298,11 +314,10 @@ extension PhoneTools {
         }
     }
 
-    /// The diff and actual screen a failed comparison left next to its baseline, once it passes.
+    /// The diff and actual screen a failed comparison left behind, once it passes.
     private func removeStaleFiles(of baseline: Baseline) {
-        guard baseline.artifacts == nil else { return }
+        guard let folder = baseline.stale else { return }
         let stem = baseline.url.deletingPathExtension().lastPathComponent
-        let folder = baseline.url.deletingLastPathComponent()
         for suffix in ["-diff.png", "-actual.png"] {
             try? FileManager.default.removeItem(at: folder.appendingPathComponent(stem + suffix))
         }

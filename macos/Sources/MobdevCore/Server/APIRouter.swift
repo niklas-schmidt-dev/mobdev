@@ -33,7 +33,16 @@ public final class APIRouter: Sendable {
     public func handle(_ request: HTTPRequest, from origin: Origin) async -> HTTPResponse {
         if origin != .relay {
             if let rejection = checkLocal(request, checkHost: origin == .local) { return rejection }
+            // The project of the agent's working folder, for this call only. Never from the relay:
+            // a remote agent's paths mean nothing on this Mac.
+            if let project = AgentProject.project(from: request.header(AgentProject.header.lowercased())) {
+                return await ProjectScope.$pinned.withValue(project) { await route(request, origin: origin) }
+            }
         }
+        return await route(request, origin: origin)
+    }
+
+    private func route(_ request: HTTPRequest, origin: Origin) async -> HTTPResponse {
         let source = origin == .relay ? "relay" : "local"
         switch (request.method, request.path) {
         case ("GET", "/healthz"):

@@ -6,11 +6,13 @@ import UniformTypeIdentifiers
 /// Record and Run Flow… in the activity header. Recording collects what happens on the device,
 /// from agents and from you, and saves it as a flow file that run_flow, this button and
 /// `Mobdev flow` in CI play back. Each Run Flow… keeps a video of the run (see `FlowVideos`).
+/// Run Flow offers the active project's flows first.
 struct FlowButtons: View {
     @Environment(AppModel.self) private var model
     let id: String
     @State private var running = false
     @State private var result: FlowRun?
+    @State private var projectFlows: [URL] = []
 
     var body: some View {
         HStack(spacing: 2) {
@@ -19,14 +21,33 @@ struct FlowButtons: View {
                 .help("Record what happens on this device as a flow you can replay")
             if running {
                 ProgressView().controlSize(.small).frame(width: 22)
-            } else {
+            } else if projectFlows.isEmpty {
                 Button("Run Flow…", systemImage: "play.circle") { chooseAndRun() }
                     .disabled(model.recording.contains(id))
                     .help("Replay a flow file on this device")
+            } else {
+                Menu {
+                    Section(model.activeProject.map(model.projectName) ?? "Project") {
+                        ForEach(projectFlows, id: \.path) { file in
+                            Button(file.deletingPathExtension().lastPathComponent) { Task { await run(file) } }
+                        }
+                    }
+                    Divider()
+                    Button("Other…") { chooseAndRun() }
+                } label: {
+                    Label("Run Flow", systemImage: "play.circle")
+                }
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .disabled(model.recording.contains(id))
+                .help("Replay one of the project's flows, or another flow file, on this device")
             }
         }
         .labelStyle(.iconOnly)
         .buttonStyle(.borderless)
+        .task(id: "\(model.activeProject?.path ?? "") \(model.activeProject.map(model.projectRevision) ?? 0)") {
+            projectFlows = model.activeProject.map { ProjectFiles(folder: $0).flows } ?? []
+        }
         .sheet(item: $result) { run in
             FlowResultSheet(run: run) {
                 result = nil
@@ -38,6 +59,7 @@ struct FlowButtons: View {
     private func chooseAndRun() {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.json, .yaml]
+        panel.directoryURL = model.activeProject?.appendingPathComponent(TestProject.flowsFolderName, isDirectory: true)
         panel.message = "Choose a flow to replay on this device: a Mobdev flow (.json) or a Maestro flow (.yaml)."
         guard panel.runModal() == .OK, let url = panel.url else { return }
         Task { await run(url) }
@@ -46,7 +68,7 @@ struct FlowButtons: View {
     private func run(_ file: URL) async {
         running = true
         var arguments: [String: JSONValue] = ["path": .string(file.path)]
-        let video = FlowVideos.newFile(for: file)
+        let video = FlowVideos.newFile(for: file, project: model.activeProject)
         if let video { arguments["video"] = .string(video.path) }
         let output = await model.run("run_flow", on: id, arguments)
         running = false
@@ -65,16 +87,25 @@ struct FlowRun: Identifiable {
     let video: URL?
 }
 
-/// Videos of the runs started with Run Flow…, in the app's folder. The newest 20 are kept.
+/// Videos of the runs started with Run Flow…, in output/flow-videos of the flow's project (or the
+/// active one), else in the app's folder. The newest 20 are kept in each.
 enum FlowVideos {
-    static var folder: URL { MobdevPaths.home.appendingPathComponent("flow-videos", isDirectory: true) }
     static let kept = 20
+
+    /// Where a flow's videos go: the project the flow file is in, else `project`.
+    static func folder(for flow: URL, project: URL?) -> URL? {
+        if let project = TestProject.enclosingProject(of: flow) ?? project, TestProject.isProject(project) {
+            return try? TestProject.output(.flowVideos, in: project)
+        }
+        let folder = MobdevPaths.home.appendingPathComponent("flow-videos", isDirectory: true)
+        return (try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)) != nil ? folder : nil
+    }
 
     /// A new file named after the flow and the time, like "sign-in 2026-10-01 at 14.03.22.mp4",
     /// after removing older videos. Nil when the folder cannot be created.
-    static func newFile(for flow: URL) -> URL? {
+    static func newFile(for flow: URL, project: URL?) -> URL? {
         let files = FileManager.default
-        guard (try? files.createDirectory(at: folder, withIntermediateDirectories: true)) != nil else { return nil }
+        guard let folder = folder(for: flow, project: project) else { return nil }
         let videos = ((try? files.contentsOfDirectory(at: folder, includingPropertiesForKeys: [.creationDateKey])) ?? [])
             .filter { $0.pathExtension == "mp4" }
             .map { ($0, (try? $0.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? .distantPast) }
@@ -129,6 +160,11 @@ struct RecordingBar: View {
     private func save() {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.json]
+        if let project = model.activeProject {
+            let flows = project.appendingPathComponent(TestProject.flowsFolderName, isDirectory: true)
+            try? FileManager.default.createDirectory(at: flows, withIntermediateDirectories: true)
+            panel.directoryURL = flows
+        }
         panel.nameFieldStringValue = "\(model.state(id)?.name ?? "Device") flow.json"
         panel.message = "Save the recorded steps. Replay them with Run Flow…, run_flow or Mobdev flow."
         guard panel.runModal() == .OK, let url = panel.url else { return }
@@ -141,7 +177,7 @@ struct RecordingBar: View {
     }
 }
 
-private struct FlowResultSheet: View {
+struct FlowResultSheet: View {
     let run: FlowRun
     let again: () -> Void
     @Environment(\.dismiss) private var dismiss

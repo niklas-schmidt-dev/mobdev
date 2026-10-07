@@ -118,7 +118,15 @@ final class AppModel {
         self.hub = hub
         let emulators = EmulatorHub { signal.fire() }
         self.emulators = emulators
-        let tools = DeviceTools(hub: hub, emulators: emulators)
+        // The project last shown in Tests becomes the first active one after the update.
+        let shown = UserDefaults.standard.string(forKey: "testsProject")
+        let known = settings.projects.map { URL(fileURLWithPath: $0, isDirectory: true) }
+        let active = settings.activeProject ?? (shown.flatMap { settings.projects.contains($0) ? $0 : nil }) ?? settings.projects.first
+        let projectList = ProjectList(known: known, active: active.map { URL(fileURLWithPath: $0, isDirectory: true) })
+        projects = projectList.known
+        activeProject = projectList.active
+        projectNames = Self.names(of: projectList.known)
+        let tools = DeviceTools(hub: hub, emulators: emulators, projects: projectList)
         self.tools = tools
         let portBox = self.portBox
         let router = APIRouter(tools: tools, token: { tokenBox.get() }, port: { portBox.get() })
@@ -139,6 +147,15 @@ final class AppModel {
 
         signal.connect { [weak self] in Task { @MainActor in self?.refresh() } }
         UIRunners.shared.onChange { signal.fire() }
+        // Agents open and create projects too; the list in the tools is the one that counts.
+        projectList.onChange { [weak self] in Task { @MainActor in self?.refreshProjects() } }
+        projectList.onOutput { [weak self] folder, _ in
+            Task { @MainActor in
+                guard let self else { return }
+                self.projectRevisions[ProjectList.normalized(folder).path, default: 0] += 1
+                self.projectNames = Self.names(of: self.projects)  // save_test may have made a mobdev.json.
+            }
+        }
         relaySignal.connect { [weak self] in
             Task { @MainActor in
                 guard let self else { return }
@@ -702,23 +719,65 @@ final class AppModel {
         }
     }
 
-    // MARK: Tests
+    // MARK: Projects
 
-    /// Projects opened in Tests, newest first, remembered across launches.
-    var testProjects: [URL] { settings.testProjects.map { URL(fileURLWithPath: $0, isDirectory: true) } }
+    /// Known projects, newest first, as the tools hold them.
+    private(set) var projects: [URL]
+    /// The project that gets what is saved without a path: the one last selected or opened.
+    private(set) var activeProject: URL?
+    /// Counts what tools saved into each project, so its views reload when an agent or a run
+    /// added a test, a screenshot, a recording or a crawl.
+    private(set) var projectRevisions: [String: Int] = [:]
 
-    /// Opens a project folder in Tests, or moves it to the front.
-    func addTestProject(_ folder: URL) {
-        let path = folder.standardizedFileURL.path
-        settings.testProjects.removeAll { $0 == path }
-        settings.testProjects.insert(path, at: 0)
-        save()
+    func projectRevision(_ folder: URL) -> Int { projectRevisions[ProjectList.normalized(folder).path] ?? 0 }
+
+    /// Each project's name from its mobdev.json, by folder path.
+    private(set) var projectNames: [String: String]
+
+    func projectName(_ folder: URL) -> String { projectNames[folder.path] ?? folder.lastPathComponent }
+
+    /// Another known project has the same name, so the sidebar adds the repository's.
+    func duplicateProjectName(_ folder: URL) -> Bool {
+        let name = projectName(folder)
+        return projects.filter { projectName($0) == name }.count > 1
     }
 
-    func removeTestProject(_ folder: URL) {
-        settings.testProjects.removeAll { $0 == folder.standardizedFileURL.path }
-        save()
+    func isActiveProject(_ folder: URL) -> Bool { activeProject?.path == folder.path }
+
+    private static func names(of folders: [URL]) -> [String: String] {
+        Dictionary(folders.map { ($0.path, ProjectList.name(of: $0)) }, uniquingKeysWith: { first, _ in first })
     }
+
+    private func refreshProjects() {
+        projects = tools.projects.known
+        activeProject = tools.projects.active
+        projectNames = Self.names(of: projects)
+        let paths = projects.map(\.path)
+        if settings.projects != paths || settings.activeProject != activeProject?.path {
+            settings.projects = paths
+            settings.activeProject = activeProject?.path
+            save()
+        }
+    }
+
+    /// Selecting a project makes it the active one.
+    func activateProject(_ folder: URL) { tools.projects.setActive(folder) }
+
+    /// Opens an existing project: its folder, its mobdev.json, or a repository with a mobdev/ folder.
+    func openProject(_ url: URL) throws -> URL { try tools.projects.open(url) }
+
+    /// Creates a project in `folder` and makes it active.
+    func createProject(in folder: URL, name: String, bundleID: String) throws -> URL {
+        let project = try TestProject.create(at: folder, name: name, bundleID: bundleID)
+        tools.projects.add(project.folder, activate: true)
+        return ProjectList.normalized(project.folder)
+    }
+
+    /// Forgets a project; its folder stays as it is.
+    func removeProject(_ folder: URL) { tools.projects.remove(folder) }
+
+    /// Whether the New Project sheet is open, from the File menu or the sidebar.
+    var showsNewProject = false
 
     /// Project folders whose tests run right now.
     private(set) var runningTests: Set<String> = []
@@ -884,6 +943,10 @@ final class AppModel {
         }
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.png]
+        if let project = activeProject {
+            panel.directoryURL = project.appendingPathComponent(TestProject.screenshotsFolderName, isDirectory: true)
+            try? FileManager.default.createDirectory(at: panel.directoryURL!, withIntermediateDirectories: true)
+        }
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd 'at' HH.mm.ss"
         panel.nameFieldStringValue = "\(device.name) \(formatter.string(from: Date())).png"

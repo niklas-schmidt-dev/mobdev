@@ -318,10 +318,8 @@ extension TestRunnerTests {
     @Test func projectToolsListSaveRunAndReport() async throws {
         let root = try folder()
         defer { try? FileManager.default.removeItem(at: root) }
-        let runs = root.appendingPathComponent("runs")
-        TestRuns.rootOverride.set(runs)
-        defer { TestRuns.rootOverride.set(nil) }
         let project = root.appendingPathComponent("project")
+        let runs = ProjectList.normalized(project).appendingPathComponent("output/runs")
         let files = DeviceTools(hub: DeviceHub(keyboardLayout: .us) {}, settleDelay: 0)
 
         // Saving into a folder that does not exist yet creates the project.
@@ -349,8 +347,9 @@ extension TestRunnerTests {
             source: "test", screenshotByDefault: false)
         #expect(bad.isError)
         #expect(bad.text.contains("not a tool a test can call"))
+        // "project" is the name of the project the first save added; a relative path is no project.
         let relative = try await files.call(
-            "save_test", arguments: ["project": "project", "name": "Bad", "steps": ["home"]], source: "test",
+            "save_test", arguments: ["project": "some/project", "name": "Bad", "steps": ["home"]], source: "test",
             screenshotByDefault: false)
         #expect(relative.isError)
         #expect(try TestProject.load(project).tests.count == 1)
@@ -365,7 +364,7 @@ extension TestRunnerTests {
         #expect(early.isError)
         #expect(early.text.contains("No results yet"))
 
-        // Running through the tool keeps the results in the app's folder, where test_result finds them.
+        // Running through the tool keeps the results in the project's output/runs, where test_result finds them.
         let phone = FakePhone(lines: [])
         let device = tools(phone)
         let passed = try await device.call(

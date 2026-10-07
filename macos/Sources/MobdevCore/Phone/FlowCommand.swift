@@ -113,13 +113,18 @@ public enum FlowCommand {
         for note in flow.notes { output("Note: \(note)") }
         let video = options.artifacts != nil && options.video ? home.url.appendingPathComponent("run.mp4") : nil
         let result: FlowResult
-        // Named baselines live next to the flow file; a failed comparison's files go to the artifacts.
-        let checks = CheckContext(root: file.deletingLastPathComponent(), artifacts: options.artifacts != nil ? home.url : nil)
+        // Named baselines live in the flow file's project, or next to it outside one; a failed
+        // comparison's files go to the artifacts.
+        let project = TestProject.enclosingProject(of: file)
+        let checks = CheckContext(
+            root: project ?? file.deletingLastPathComponent(), artifacts: options.artifacts != nil ? home.url : nil)
         do {
-            result = try await CheckContext.$current.withValue(checks) {
-                try await Flow.recording(device, to: video) {
-                    try await connection.tools.run(flow, on: device.id, variables: options.variables, source: "cli") {
-                        output(line($0))
+            result = try await ProjectScope.$pinned.withValue(project) {
+                try await CheckContext.$current.withValue(checks) {
+                    try await Flow.recording(device, to: video) {
+                        try await connection.tools.run(flow, on: device.id, variables: options.variables, source: "cli") {
+                            output(line($0))
+                        }
                     }
                 }
             }

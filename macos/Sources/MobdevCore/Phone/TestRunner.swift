@@ -313,16 +313,18 @@ public struct TestRunResult: Sendable, Codable, Equatable {
     }
 }
 
-/// Runs are kept in the app's folder, the newest 20 per project, for the Tests window,
-/// `run_tests` and `test_result`. `Mobdev test` writes wherever `--artifacts` says instead.
+/// Runs are kept in the project's output/runs, the newest 20, for the app, `run_tests` and
+/// `test_result`. A single test file outside a project, a project folder that cannot be written,
+/// and runs from before projects kept their own stay in the app's folder; both places are listed
+/// together, so the old runs give way to new ones by themselves. `Mobdev test` writes wherever
+/// `--artifacts` says instead.
 public enum TestRuns {
-    /// Another root than the app's folder, for tests.
-    static let rootOverride = Locked<URL?>(nil)
-    public static var folder: URL { (rootOverride.get() ?? MobdevPaths.home).appendingPathComponent("test-runs", isDirectory: true) }
+    /// Runs of folders without a mobdev.json, and those of projects from before 0.2.51.
+    public static var folder: URL { MobdevPaths.home.appendingPathComponent("test-runs", isDirectory: true) }
     public static let kept = 20
 
-    /// A project's runs live under its name and a hash of its folder, so two projects called
-    /// "App" stay apart.
+    /// A project's runs in the app's folder live under its name and a hash of its folder, so two
+    /// projects called "App" stay apart.
     public static func projectFolder(_ project: TestProject) -> URL {
         var hash: UInt64 = 0xcbf2_9ce4_8422_2325
         for byte in project.folder.standardizedFileURL.path.utf8 {
@@ -333,36 +335,56 @@ public enum TestRuns {
         return folder.appendingPathComponent(name, isDirectory: true)
     }
 
-    /// A new folder for a run, named after the time, after removing the oldest runs.
+    /// The project's own output/runs, for a folder with a mobdev.json.
+    static func ownFolder(_ project: TestProject) -> URL? {
+        guard TestProject.isProject(project.folder) else { return nil }
+        return project.folder.appendingPathComponent(TestProject.outputFolderName, isDirectory: true)
+            .appendingPathComponent(ProjectOutput.runs.rawValue, isDirectory: true)
+    }
+
+    /// A new folder for a run, named after the time, after removing the oldest runs. Two runs in
+    /// the same second, such as on two devices, get folders of their own.
     public static func newRunFolder(for project: TestProject) throws -> URL {
-        let parent = projectFolder(project)
-        try FileManager.default.createDirectory(at: parent, withIntermediateDirectories: true)
-        for old in runs(for: project).dropFirst(kept - 1) { try? FileManager.default.removeItem(at: old) }
+        let files = FileManager.default
+        var parent = projectFolder(project)
+        if ownFolder(project) != nil, let own = try? TestProject.output(.runs, in: project.folder) { parent = own }
+        try files.createDirectory(at: parent, withIntermediateDirectories: true)
+        for old in runs(for: project).dropFirst(kept - 1) { try? files.removeItem(at: old) }
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "yyyy-MM-dd HH.mm.ss"
-        var url = parent.appendingPathComponent(formatter.string(from: Date()), isDirectory: true)
-        var suffix = 2
-        while FileManager.default.fileExists(atPath: url.path) {
-            url = parent.appendingPathComponent("\(formatter.string(from: Date())) (\(suffix))", isDirectory: true)
-            suffix += 1
+        let stamp = formatter.string(from: Date())
+        for suffix in 1...1000 {
+            let url = parent.appendingPathComponent(suffix == 1 ? stamp : "\(stamp) (\(suffix))", isDirectory: true)
+            do {
+                // Without intermediate folders, creating fails when another run took the name first.
+                try files.createDirectory(at: url, withIntermediateDirectories: false)
+                return url
+            } catch let error as CocoaError where error.code == .fileWriteFileExists {
+                continue
+            }
         }
-        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
-        return url
+        throw ToolFailure("Could not make a folder for the run in \(parent.path).")
     }
 
-    /// A project's run folders, newest first.
+    /// A project's run folders in both places, newest first.
     public static func runs(for project: TestProject) -> [URL] {
-        let parent = projectFolder(project)
-        let names = (try? FileManager.default.contentsOfDirectory(atPath: parent.path)) ?? []
-        return names.filter { !$0.hasPrefix(".") }.sorted(by: >).map { parent.appendingPathComponent($0, isDirectory: true) }
+        let parents = [ownFolder(project), projectFolder(project)].compactMap { $0 }
+        let all = parents.flatMap { parent in
+            ((try? FileManager.default.contentsOfDirectory(atPath: parent.path)) ?? []).filter { !$0.hasPrefix(".") }
+                .map { parent.appendingPathComponent($0, isDirectory: true) }
+        }
+        return all.sorted { $0.lastPathComponent > $1.lastPathComponent }
     }
 
     /// The newest run with results, or the one in the named folder.
     public static func result(for project: TestProject, run: String? = nil) -> TestRunResult? {
         if let run {
             guard !run.contains("/"), !run.hasPrefix(".") else { return nil }
-            return try? TestRunResult.load(projectFolder(project).appendingPathComponent(run, isDirectory: true))
+            for folder in runs(for: project) where folder.lastPathComponent == run {
+                if let result = try? TestRunResult.load(folder) { return result }
+            }
+            return nil
         }
         for folder in runs(for: project) {
             if let result = try? TestRunResult.load(folder) { return result }
@@ -381,6 +403,20 @@ extension PhoneTools {
     public func runTests(
         _ project: TestProject, options: TestRunOptions, source: String,
         progress: (@Sendable (TestRunResult.Test) -> Void)? = nil
+    ) async -> TestRunResult {
+        // Everything the steps save without a path lands in this project, whatever becomes active
+        // meanwhile.
+        let own = TestProject.isProject(project.folder) ? ProjectList.normalized(project.folder) : nil
+        let result = await ProjectScope.$pinned.withValue(own ?? ProjectScope.pinned) {
+            await runTestsInScope(project, options: options, source: source, progress: progress)
+        }
+        if let own { projects.notifyOutput(own, .runs) }
+        return result
+    }
+
+    private func runTestsInScope(
+        _ project: TestProject, options: TestRunOptions, source: String,
+        progress: (@Sendable (TestRunResult.Test) -> Void)?
     ) async -> TestRunResult {
         let device = phone as? any Device
         let kind = device?.kind ?? (phone.status().input == .bluetooth ? DeviceKind.iPhone : .simulator)

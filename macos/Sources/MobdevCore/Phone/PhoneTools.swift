@@ -68,11 +68,15 @@ public final class PhoneTools: Sendable {
     let judge: any ScreenJudge
     /// Builds sent from elsewhere, which `install_app` takes as `upload`.
     let uploads: UploadStore
+    /// The projects of this process, shared by every device: where recordings, screenshots,
+    /// baselines and runs go when a call gives no path.
+    let projects: ProjectList
 
     public convenience init(
-        phone: PhoneBackend, activity: ActivityLog, settleDelay: TimeInterval = 0.6, uploads: UploadStore = .shared
+        phone: PhoneBackend, activity: ActivityLog, settleDelay: TimeInterval = 0.6, uploads: UploadStore = .shared,
+        projects: ProjectList = ProjectList()
     ) {
-        self.init(phone: phone, activity: activity, settleDelay: settleDelay, uploads: uploads) {
+        self.init(phone: phone, activity: activity, settleDelay: settleDelay, uploads: uploads, projects: projects) {
             try TextRecognizer.read($0, query: $1)
         }
     }
@@ -80,7 +84,7 @@ public final class PhoneTools: Sendable {
     init(
         phone: PhoneBackend, activity: ActivityLog, settleDelay: TimeInterval,
         unreadableGrace: TimeInterval = PhoneTools.unreadableGrace, judge: any ScreenJudge = AppleIntelligenceJudge(),
-        uploads: UploadStore = .shared,
+        uploads: UploadStore = .shared, projects: ProjectList = ProjectList(),
         readText: @escaping @Sendable (CGImage, String?) throws -> [TextMatch]
     ) {
         self.phone = phone
@@ -89,6 +93,7 @@ public final class PhoneTools: Sendable {
         self.unreadableGrace = unreadableGrace
         self.judge = judge
         self.uploads = uploads
+        self.projects = projects
         self.readText = readText
         history.start()
     }
@@ -118,7 +123,8 @@ public final class PhoneTools: Sendable {
         Set device state directly instead of tapping through Settings: `set_location`, `set_permission`, \
         `send_push`, `set_appearance`, `set_language`, `set_status_bar`, `biometrics`, `reset_app`, \
         `clipboard` and `set_orientation` (simulators and Android; some on iPhones with Developer Mode). \
-        `start_recording` and `stop_recording` keep a video of the screen. \
+        `start_recording` and `stop_recording` keep a video of the screen; `save_screenshot` saves the \
+        screen at full resolution, e.g. for App Store screenshots. \
         `performance` samples an app's CPU, memory and frames and `measure_launch` times its cold launch, \
         both with optional budgets that fail the call; `reload_app` and `dev_menu` reload a React Native \
         or Expo app and open its developer menu. \
@@ -130,8 +136,12 @@ public final class PhoneTools: Sendable {
         `run_flow` replays a saved list of tool calls and stops at the first failing step; control steps \
         (if, repeat, retry, run, set, extract) check the screen instead of guessing waits, and Maestro \
         .yaml flows run too. \
-        A project folder with tests/*.json (or Maestro .yaml) holds an app's tests: `list_tests` shows them, `save_test` writes \
-        one, `run_tests` runs them on a device with a video and a screenshot of each failure, and \
+        A project is a folder in the app's repository, usually mobdev/, with mobdev.json, tests/, flows/, \
+        baselines/, screenshots/ and maps/ (versioned) and output/ (runs, recordings, crawls; ignored). \
+        Without a path, recordings, screenshots, baselines, crawls and runs go into the project: the one \
+        of your working folder, else the active one (`list_projects`, `open_project`, `create_project`; ask \
+        before creating one). `list_tests` shows its tests, `save_test` and `save_flow` write one, \
+        `run_tests` runs them on a device with a video and a screenshot of each failure, and \
         `test_result` returns the newest results.
         """
 

@@ -31,13 +31,16 @@ extension PhoneTools {
 
     func runFlowTool(_ args: Arguments, source: String) async throws -> ToolOutput {
         var flow: Flow
-        // Named baselines of a flow file live next to it.
+        // Named baselines of a flow file live in its project, or next to it outside one.
         var checks = CheckContext.current
+        var project = ProjectScope.pinned
         if args.has("path") {
             let path = (try args.string("path") as NSString).expandingTildeInPath
             let file = URL(fileURLWithPath: path)
             flow = try Flow.load(file)
-            checks = CheckContext(root: file.deletingLastPathComponent(), artifacts: nil)
+            let enclosing = TestProject.enclosingProject(of: file)
+            checks = CheckContext(root: enclosing ?? file.deletingLastPathComponent(), artifacts: nil)
+            if let enclosing { project = enclosing }
         } else if let steps = args.value["steps"], !steps.isNull {
             flow = try Flow.parse(steps)
             try flow.loadSubflows(relativeTo: nil)
@@ -46,9 +49,11 @@ extension PhoneTools {
         }
         let variables = Variables(values: try args.stringDictionary("variables"))
         let video = try args.has("video") ? Flow.videoURL(try args.string("video")) : nil
-        let result = await CheckContext.$current.withValue(checks) {
-            await Flow.recording(phone, to: video) {
-                await run(flow, variables: variables, source: source)
+        let result = await ProjectScope.$pinned.withValue(project) {
+            await CheckContext.$current.withValue(checks) {
+                await Flow.recording(phone, to: video) {
+                    await run(flow, variables: variables, source: source)
+                }
             }
         }
         return ToolOutput(text: result.text, data: result.json, isError: !result.passed)

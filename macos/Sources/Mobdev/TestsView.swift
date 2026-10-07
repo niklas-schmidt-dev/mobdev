@@ -2,14 +2,13 @@ import AppKit
 import MobdevCore
 import SwiftUI
 
-/// A project's tests: a folder with tests/*.json (or Maestro .yaml) and a mobdev.json naming the app. Run them on a
-/// device and see each result with its steps, the failure's screenshot and the video. Agents write
-/// and run the same tests through list_tests, save_test, run_tests and test_result, and
-/// `Mobdev test` runs them in CI.
-struct TestsView: View {
+/// A project's tests: tests/*.json (or Maestro .yaml) next to the mobdev.json naming the app. Run
+/// them on a device and see each result with its steps, the failure's screenshot and the video.
+/// Agents write and run the same tests through list_tests, save_test, run_tests and test_result,
+/// and `Mobdev test` runs them in CI.
+struct ProjectTestsView: View {
     @Environment(AppModel.self) private var model
-    /// The project last shown, by folder.
-    @AppStorage("testsProject") private var storedPath = ""
+    let folder: URL
     @State private var project: TestProject?
     @State private var problem: String?
     @State private var deviceID = ""
@@ -20,26 +19,21 @@ struct TestsView: View {
         Binding(get: { storedTest.isEmpty ? nil : storedTest }, set: { storedTest = $0 ?? "" })
     }
 
-    private var path: String {
-        let known = model.testProjects.map(\.path)
-        return known.contains(storedPath) ? storedPath : (known.first ?? "")
-    }
-
     private var readyDevices: [DeviceState] { model.devices.filter(\.isReady) }
     private var device: DeviceState? { readyDevices.first { $0.id == deviceID } ?? readyDevices.first }
     private var running: Bool { project.map { model.runningTests.contains($0.folder.path) } ?? false }
 
     var body: some View {
         Group {
-            if model.testProjects.isEmpty {
+            if let project, project.tests.isEmpty {
                 ContentUnavailableView {
-                    Label("No Test Project", systemImage: "checklist")
+                    Label("No Tests Yet", systemImage: "checklist")
                 } description: {
                     Text(
-                        "A project is a folder with tests/*.json, each a list of tool calls, or Maestro flows in tests/*.yaml, and a mobdev.json naming the app. Open one, or let an agent create one with save_test."
+                        "Each test is a file in tests/: a list of tool calls (.json) or a Maestro flow (.yaml). Let an agent write one with save_test, or record a flow on a device and save it into tests/."
                     )
                 } actions: {
-                    Button("Open Folder…") { openFolder() }.buttonStyle(.borderedProminent)
+                    Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([project.testsFolder]) }
                 }
             } else if let project {
                 ProjectView(project: project, selectedTest: selectedTest, devices: readyDevices, deviceID: $deviceID)
@@ -50,56 +44,35 @@ struct TestsView: View {
                     Text(problem ?? "")
                 } actions: {
                     Button("Reload") { reload() }
-                    Button("Remove from List") { remove() }
                 }
             }
         }
-        .navigationTitle("Tests")
-        .navigationSubtitle(project?.name ?? "")
         .toolbar { toolbar }
-        .task(id: path) { reload() }
+        .task(id: "\(folder.path) \(model.projectRevision(folder))") { reload() }
     }
 
     @ToolbarContentBuilder private var toolbar: some ToolbarContent {
         ToolbarItemGroup {
-            if !model.testProjects.isEmpty {
-                Menu {
-                    ForEach(model.testProjects, id: \.path) { folder in
-                        Button(folder.lastPathComponent) { storedPath = folder.path }
-                    }
-                    Divider()
-                    Button("Open Folder…") { openFolder() }
-                    if project != nil || problem != nil {
-                        Button("Remove from List") { remove() }
-                    }
-                } label: {
-                    Label(project?.name ?? URL(fileURLWithPath: path).lastPathComponent, systemImage: "folder")
-                }
-                .help("Switch between projects, or open another folder")
-                Button("Reload", systemImage: "arrow.clockwise") { reload() }
-                    .help("Read the project's files again, e.g. after an agent saved a test")
-                    .disabled(running)
-                // The device is chosen in the project's header: the toolbar draws a picker's menu
-                // but not its title, so the choice would be invisible here.
-                if running {
-                    Button("Stop", systemImage: "stop.fill") { project.map(model.stopTests) }
-                        .help("Stop after the current step")
-                } else {
-                    Button("Run", systemImage: "play.fill") { run() }
-                        .disabled(project == nil || project?.tests.isEmpty == true || device == nil)
-                        .help(device == nil ? "Connect a device or boot a simulator first" : "Run every test on \(device?.name ?? "the device")")
-                }
+            Button("Reload", systemImage: "arrow.clockwise") { reload() }
+                .help("Read the project's files again")
+                .disabled(running)
+            // The device is chosen in the project's header: the toolbar draws a picker's menu
+            // but not its title, so the choice would be invisible here.
+            if running {
+                Button("Stop", systemImage: "stop.fill") { project.map(model.stopTests) }
+                    .help("Stop after the current step")
+            } else {
+                Button("Run", systemImage: "play.fill") { run() }
+                    .disabled(project == nil || project?.tests.isEmpty == true || device == nil)
+                    .help(device == nil ? "Connect a device or boot a simulator first" : "Run every test on \(device?.name ?? "the device")")
             }
         }
     }
 
     private func reload() {
-        guard !path.isEmpty else {
-            project = nil
-            return
-        }
+        guard !running else { return }
         do {
-            let loaded = try TestProject.load(URL(fileURLWithPath: path, isDirectory: true))
+            let loaded = try TestProject.load(folder)
             project = loaded
             problem = nil
             model.loadTestResult(for: loaded)
@@ -107,22 +80,6 @@ struct TestsView: View {
             project = nil
             problem = String(describing: error)
         }
-    }
-
-    private func openFolder() {
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.message = "Choose a project folder: one with tests/*.json or tests/*.yaml, and mobdev.json naming the app."
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        model.addTestProject(url)
-        storedPath = url.standardizedFileURL.path
-    }
-
-    private func remove() {
-        model.removeTestProject(URL(fileURLWithPath: path, isDirectory: true))
-        storedPath = model.testProjects.first?.path ?? ""
-        reload()
     }
 
     private func run() {

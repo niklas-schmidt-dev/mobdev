@@ -27,16 +27,19 @@ public enum MCPStdioBridge {
         private let launchApp: @Sendable () -> Void
         private let launchWait: TimeInterval
         private let timeout: TimeInterval
+        /// The project of the folder the agent started this bridge in, sent with every request.
+        private let project: URL?
         private var launched = false
 
         public init(
             socket: URL, tokenFile: URL, launchWait: TimeInterval = 10, timeout: TimeInterval = 300,
-            launchApp: @escaping @Sendable () -> Void
+            project: URL? = AgentProject.discover(), launchApp: @escaping @Sendable () -> Void
         ) {
             self.socket = socket
             self.tokenFile = tokenFile
             self.launchWait = launchWait
             self.timeout = timeout
+            self.project = project
             self.launchApp = launchApp
         }
 
@@ -86,6 +89,7 @@ public enum MCPStdioBridge {
         private func send(_ body: String, message: JSONValue?) async throws -> (Data, Int) {
             var headers = ["Content-Type": "application/json", "Accept": "application/json, text/event-stream"]
             if let token = SecretStore.read(tokenFile) { headers["Authorization"] = "Bearer \(token)" }
+            if let project { headers[AgentProject.header] = AgentProject.headerValue(project) }
             // Mirror the metadata a modern Streamable HTTP client would send.
             if let method = message?["method"]?.stringValue,
                 let version = message?["params"]?["_meta"]?["io.modelcontextprotocol/protocolVersion"]?.stringValue

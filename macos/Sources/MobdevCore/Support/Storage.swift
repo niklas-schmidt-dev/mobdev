@@ -18,9 +18,23 @@ public enum MobdevPaths {
         if let custom = ProcessInfo.processInfo.environment["MOBDEV_HOME"], !custom.isEmpty {
             return URL(fileURLWithPath: custom, isDirectory: true)
         }
+        // A test process has no bundle of its own, so it would fall back to the installed app's
+        // folder: CrawlerTests once left a map there (2026-10-07).
+        if isRunningTests { return testHome }
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         return support.appendingPathComponent(bundleIdentifier, isDirectory: true)
     }
+
+    /// `swift test`: XCTest's runner, or the helper that runs Swift Testing. Mobdev itself never
+    /// loads XCTest.
+    static let isRunningTests: Bool = {
+        let name = ProcessInfo.processInfo.processName
+        return name == "xctest" || name.hasPrefix("swiftpm-testing-helper") || NSClassFromString("XCTestCase") != nil
+    }()
+
+    /// One folder per test process, removed by the system with the rest of the temporary files.
+    private static let testHome = FileManager.default.temporaryDirectory
+        .appendingPathComponent("mobdev-tests-\(ProcessInfo.processInfo.processIdentifier)", isDirectory: true)
 
     /// The Mobdev.app this binary belongs to, also when it runs through a symlink such as one
     /// Homebrew makes, where `Bundle.main` sees the symlink's folder. Nil for a bare binary.
@@ -123,8 +137,11 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var runnerTeam = ""
     /// UDIDs of the iPhones with the UI tree turned on: Mobdev Runner starts whenever one is connected.
     public var runnerDevices: [String] = []
-    /// Project folders opened in Tests, newest first.
-    public var testProjects: [String] = []
+    /// Project folders the app knows, newest first: each holds a mobdev.json and the project's
+    /// tests, flows, screenshots and outputs.
+    public var projects: [String] = []
+    /// The project that gets what agents and the app produce when no path is given.
+    public var activeProject: String?
     /// Apps agents may not open or launch, by name or bundle ID, such as a banking app.
     public var blockedApps: [String] = []
 
@@ -152,8 +169,18 @@ public struct AppSettings: Codable, Equatable, Sendable {
         iPhoneSetupDeferred = try container.decodeIfPresent(Bool.self, forKey: .iPhoneSetupDeferred) ?? false
         runnerTeam = (try? container.decodeIfPresent(String.self, forKey: .runnerTeam)) ?? ""
         runnerDevices = (try? container.decodeIfPresent([String].self, forKey: .runnerDevices)) ?? []
-        testProjects = (try? container.decodeIfPresent([String].self, forKey: .testProjects)) ?? []
+        projects = (try? container.decodeIfPresent([String].self, forKey: .projects)) ?? []
+        if projects.isEmpty {
+            // Before projects held more than tests (0.2.50 and earlier) the list was "testProjects".
+            let legacy = try decoder.container(keyedBy: LegacyKeys.self)
+            projects = (try? legacy.decodeIfPresent([String].self, forKey: .testProjects)) ?? []
+        }
+        activeProject = (try? container.decodeIfPresent(String.self, forKey: .activeProject)) ?? nil
         blockedApps = (try? container.decodeIfPresent([String].self, forKey: .blockedApps)) ?? []
+    }
+
+    private enum LegacyKeys: String, CodingKey {
+        case testProjects
     }
 
     public static func load() -> AppSettings {

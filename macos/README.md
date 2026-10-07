@@ -94,6 +94,8 @@ Activity lists every agent action, and Settings (⌘,) holds the keyboard layout
 - **Diagnose…** (under the setup steps and in the device info) checks the cable, the picture, the
   iPhone's USB screen interface, macOS's screen capture helper, Bluetooth, AssistiveTouch and
   Developer Mode, and offers the fix for each, such as restarting a stuck capture helper.
+- **Projects** (at the top of the sidebar) hold an app's tests, flows, screenshots, map, recordings
+  and runs in a folder of its repository; see [Projects](#projects).
 - **Record** and **Run Flow…** (in the activity header) record and replay flows; see below.
 - **Inspect** (in the toolbar) lays an inspector over the screen: the element under the pointer is
   outlined with its role, label and identifier, and a click copies the step that taps it, such as
@@ -168,9 +170,16 @@ only device, or the connected iPhone when simulators or Android devices run next
 | `assert_with_ai` | `question`, `expect` | Asks Apple Intelligence on the Mac a yes/no question about the screen |
 | `run_flow` | `path`, `steps`, `variables`, `video` | Replays a flow (JSON or Maestro YAML) and stops at the first failing step; `video` saves a recording (.mp4) |
 | `run_tests` | `project`, `tests`, `variables`, `video`, `language` | Runs a project's tests on this device: every result, the first failure's screen, results.json and junit.xml |
+| `list_projects` | | The projects Mobdev knows, which is active, and which one your calls use |
+| `create_project` | `path`, `name`, `bundle_id`, `builds` | Makes a project, such as `~/code/my-app/mobdev`, and makes it active |
+| `open_project` | `project` | Makes a project active: its folder, a repository with `mobdev/`, or its name |
 | `list_tests` | `project` | A project's tests and its newest results |
 | `save_test` | `project`, `name`, `steps`, `description`, `platforms`, `file` | Writes a test into the project, creating it when needed |
+| `save_flow` | `project`, `name`, `steps`, `file` | Writes a flow into the project's `flows/` |
 | `test_result` | `project`, `run` | The newest run's results, with each failure's step, screenshot and video |
+| `save_screenshot` | `path` | The screen as a full-resolution PNG in the project's `screenshots/`, such as `de-DE/iphone-6.9/01-home` |
+| `crawl_app` | `bundle_id`, `max_actions`, `max_screens`, `max_depth`, `seconds`, `avoid`, `output` | Explores an app without a model, maps its screens and keeps every crash with the steps to it |
+| `navigate_to` | `bundle_id`, `screen`, `map` | Goes to a screen the map of `crawl_app` knows |
 | `list_apps` | `all` | Apps installed for development, or every app |
 | `install_app` | `path` | A build from a path on this Mac: `.app`/`.ipa` for iPhone, `.app` for simulators, `.apk` for Android |
 | `uninstall_app` | `bundle_id` | Only apps installed for development |
@@ -193,7 +202,7 @@ only device, or the connected iPhone when simulators or Android devices run next
 | `reset_app` | `bundle_id`, `keychain` | Deletes an app's data as if just installed |
 | `clipboard` | `text` | Reads the clipboard, or sets it to `text` |
 | `set_orientation` | `orientation` | `portrait`, `landscape_left`, `landscape_right`, `portrait_upside_down` |
-| `start_recording` | `path` | Records the screen to an .mp4 until `stop_recording` |
+| `start_recording` | `path` | Records the screen to an .mp4 until `stop_recording`, by default into the project's `output/recordings` |
 | `stop_recording` | | Ends the recording and says where it is |
 | `recent_steps` | `count`, `clear` | The newest actions that worked, as flow steps for `save_test` |
 | `run_shortcut` | `name` | Runs a shortcut from Apple's Shortcuts app |
@@ -225,7 +234,9 @@ $M call set_location '{"latitude": 52.52, "longitude": 13.405}' --device "iPhone
 
 It goes through the running app, so it reaches iPhones too and shows in Activity; without the app,
 or with `--local`, it runs by itself on booted simulators and Android devices, like `Mobdev flow`.
-`--json` prints the whole result, `--image` saves a returned screenshot. It exits 0 when the tool
+`--json` prints the whole result, `--image` saves a returned screenshot, and `--project` names the
+project that gets what the tool saves (default: the project of the current folder, see
+[Projects](#projects)). It exits 0 when the tool
 succeeded, 1 when it reported an error and 2 when it could not run. `start_recording`, `tap_mark`,
 network capture and other calls that build on an earlier one need the app.
 
@@ -269,8 +280,9 @@ it, and taps use the same picture, so they still land where the agent sees the e
 
 ### Recordings and recent steps
 
-`start_recording` records the screen to an .mp4 (in `recordings/` in Mobdev's folder unless
-`path` names one) until `stop_recording`, at about ten frames a second on simulators and iPhones;
+`start_recording` records the screen to an .mp4 (in the project's `output/recordings`, without a
+project in `recordings/` in Mobdev's folder, unless `path` names one) until `stop_recording`, at
+about ten frames a second on simulators and iPhones;
 it stops by itself after 30 minutes. `recent_steps` returns the newest actions that worked on a
 device, by any agent or in the app, as flow steps: looks and failed calls are left out and typing
 is merged. Once an agent found a path through the app, it saves those steps with `save_test`.
@@ -444,6 +456,60 @@ with your team and keeps it running on the iPhone, the way WebDriverAgent does. 
   other apps on the phone cannot use it. Taps still go through Bluetooth; text the keyboard layout
   has no keys for, such as emoji, is typed by the runner.
 
+### Projects
+
+A project is a folder in your app's repository, usually `mobdev/`, with everything Mobdev keeps for
+the app:
+
+```
+mobdev/
+  mobdev.json    the app, its builds and what every test starts with (see Tests)
+  tests/         tests
+  flows/         saved flows
+  baselines/     assert_screenshot's reference pictures
+  screenshots/   save_screenshot's pictures, such as App Store screenshots
+  maps/          crawl_app's map of each app
+  output/        test runs, recordings, crawls, failed checks and flow videos
+```
+
+Commit everything but `output/`. It brings its own `.gitignore`, so the repository's stays as it
+is, and it appears only when Mobdev first writes there. Only `mobdev.json` makes a folder a
+project; the other folders appear when something is saved into them.
+
+- **New Project…** (⇧⌘N, or under the projects in the sidebar) asks for the repository and writes
+  `mobdev/mobdev.json` into it. **Open Project…** (⌘O) adds an existing project, also when you
+  choose the repository. Projects come first in the sidebar; the active one shows its Tests, Flows,
+  Screenshots, App Map, Recordings and Runs.
+- The project you select is the **active** one. What is saved without a path lands there:
+  recordings, `save_screenshot`, `save_flow`, `save_test`, crawls with the app's map, and named
+  `assert_screenshot` baselines. The test tools use it when `project` is left out, Record's
+  **Save…** opens in its `flows/`, and **Run Flow** offers its flows.
+- An agent's working folder comes first. `Mobdev mcp` and `Mobdev call` send the project of the
+  folder they run in (a `mobdev/` there or in a folder above, up to the repository's root;
+  `MOBDEV_PROJECT` names another), and the app uses it for that agent's calls. So agents in two
+  repositories, or in two worktrees of one, never save into each other's project. Agents through
+  the relay use the active project.
+- A test run, and a flow file from a project, stay in their project, also when another one becomes
+  active meanwhile.
+- Agents find the projects with `list_projects`, switch with `open_project` and make one with
+  `create_project`.
+- Without a project, everything goes to Mobdev's folder, as before.
+
+Store screenshots in every language come from a test that saves them, run with `--language`:
+
+```json
+{"name": "Store screenshots", "platforms": ["ios"], "steps": [
+  {"launch_app": {"bundle_id": "com.example.MyApp", "restart": true}},
+  {"set_status_bar": {"preset": "screenshot"}},
+  {"wait_for_element": {"id": "home.title"}},
+  {"save_screenshot": {"path": "${LANGUAGE}/iphone-6.9/01-home"}}
+]}
+```
+
+```sh
+Mobdev test mobdev/ --simulator "iPhone 17 Pro Max" --language en-US --language de-DE --test "Store screenshots"
+```
+
 ### Flows and CI
 
 A flow is a list of tool calls saved as JSON, one step per line; a bare name is a tool without
@@ -514,12 +580,14 @@ keys are not tool names:
 - **Record** in a device's activity collects every call an agent or you make on it, and clicks,
   drags and keys in the app's window. On simulators and Android, a click on an element with a
   unique identifier or label is saved as `tap_element`, so the flow survives layout changes;
-  anything else as `tap` at the same point. **Save…** writes the file.
+  anything else as `tap` at the same point. **Save…** writes the file, in the active project's
+  `flows/` unless you choose another folder; agents save flows there with `save_flow`.
 - **Run Flow…**, the `run_flow` tool (`path` to a .json or Maestro .yaml file on the Mac, or
   `steps` inline) and `Mobdev flow` replay it, stop at the first step that fails and say which.
   `tap_element` waits up to 5 s for its element, so a flow rarely needs explicit waits.
 - Every run can keep a video. **Run Flow…** records one, and its result offers **Show Video**; the
-  app keeps the newest 20 in `~/Library/Application Support/dev.mobdev.mac/flow-videos`.
+  app keeps the newest 20 in the project's `output/flow-videos`, without a project in
+  `~/Library/Application Support/dev.mobdev.mac/flow-videos`.
   `run_flow` writes one when `video` names an .mp4 file on the Mac. The video has about
   10 frames a second on simulators, iPhones and Android (on Android without scrcpy, as many as
   `screencap` allows, one to three). It ends on the screen the flow left, held for a moment, so a
@@ -665,12 +733,13 @@ a variable from the file, the environment or the run; a secret's value comes fro
 or the run only and never appears in results. A test with `"platforms": ["android"]` is skipped on
 iOS, and the other way round.
 
-- **Tests** in the sidebar opens a project folder, runs its tests on a device and shows every
-  result with its steps, the screenshot of a failure and the video of the run. The app keeps the
-  newest 20 runs per project.
+- A project's **Tests** in the sidebar runs its tests on a device and shows every result with its
+  steps, the screenshot of a failure and the video of the run. The newest 20 runs stay in the
+  project's `output/runs`.
 - Agents get the same: `list_tests` shows a project, `save_test` writes a test (and creates the
-  project when there is none), `run_tests` runs the tests and returns every result with the first
-  failure's screen, and `test_result` returns the newest results again. So an agent drives the
+  project when a folder named in `project` has none), `run_tests` runs the tests and returns every
+  result with the first failure's screen, and `test_result` returns the newest results again.
+  Without `project` they use the agent's or the active project. So an agent drives the
   app with the tools above until a path works, saves the calls that mattered as a test, runs it,
   and fixes it from the failing step.
 - `Mobdev test` runs a project without the app, for scripts and CI, on booted simulators and
@@ -730,9 +799,11 @@ screen looks, not only what is on it:
 **`assert_screenshot`** compares the screen with a baseline picture (visual regression).
 
 - `name` resolves to `baselines/<ios|android>/<width>x<height>/<name>.png`: in the project while
-  its tests run (`run_tests`, the Tests window, `Mobdev test`), next to the flow file (`run_flow`
-  with `path`, `Mobdev flow`), in the current folder for `Mobdev assert_screenshot` without the
-  app, and otherwise in Mobdev's folder (`~/Library/Application Support/dev.mobdev.mac/baselines`).
+  its tests run (`run_tests`, the Tests window, `Mobdev test`); for a flow file (`run_flow` with
+  `path`, `Mobdev flow`) in its project, or next to it outside one; otherwise in the agent's or the
+  active project, for `Mobdev assert_screenshot` without the app in the current folder's project or
+  the folder itself, and without any project in Mobdev's folder
+  (`~/Library/Application Support/dev.mobdev.mac/baselines`).
   The size is the device's screen in pixels, so every model and orientation has its own baselines.
   `path` names a PNG instead; a full-resolution screenshot of the same shape works too.
 - Without a baseline it waits until the screen is still, records it, passes and says so. **Commit
@@ -751,9 +822,9 @@ screen looks, not only what is on it:
   where there is no UI tree), e.g. a clock, an avatar or a map.
 - A failure writes `<name>-diff.png` (changed pixels red, tolerated differences yellow, masked
   areas blue, a box around each changed region) and `<name>-actual.png`: into the test's folder of
-  the run, where `results.json` lists them as the test's `files`, or next to the baseline outside
-  a test. The tool returns the diff and the changed regions; a later pass removes the files next
-  to the baseline.
+  the run, where `results.json` lists them as the test's `files`; outside a run into the project's
+  `output/checks`, so they stay out of the commit, or next to the baseline without a project. The
+  tool returns the diff and the changed regions; a later pass removes the files again.
 
 **`accessibility_audit`** checks the screen from the UI tree (simulators, Android, iPhones with
 Mobdev Runner):

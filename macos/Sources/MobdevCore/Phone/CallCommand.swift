@@ -12,13 +12,15 @@ import ImageIO
 /// returned. Exits 0 when the tool succeeded, 1 when it reported an error and 2 when it could not run.
 public enum CallCommand {
     static let usage = """
-        Usage: Mobdev call <tool> ['{"json": "arguments"}' | key=value …] [--device <id or name>] [--image <file>] [--json] [--local]
+        Usage: Mobdev call <tool> ['{"json": "arguments"}' | key=value …] [--device <id or name>] [--project <folder>] [--image <file>] [--json] [--local]
                Mobdev <tool> [key=value …]        the same, e.g. Mobdev tap x=120 y=300
                Mobdev tools [--json]              lists the tools
 
         Runs one Mobdev tool. Values are JSON where they parse as JSON (numbers, true, false,
         arrays, objects) and text otherwise: Mobdev type_text text="hello world" submit=true.
           --device  the device from list_devices; needed when several are connected
+          --project the project that gets recordings, screenshots and the like; default
+                    MOBDEV_PROJECT, else the project of the current folder (its mobdev/ folder)
           --image   where to save the picture the tool returns (.png or .jpg): for screenshot,
                     observe and accessibility_audit with image=true, actions with screenshot=true,
                     and the diff of a failed assert_screenshot
@@ -34,6 +36,7 @@ public enum CallCommand {
         var image: String?
         var json = false
         var local = false
+        var project: String?
     }
 
     public static func run(_ arguments: [String]) -> Never {
@@ -53,9 +56,13 @@ public enum CallCommand {
             switch argument {
             case "--json": options.json = true
             case "--local": options.local = true
-            case "--device", "--image":
+            case "--device", "--image", "--project":
                 guard let value = rest.popFirst() else { throw ToolFailure("\(argument) needs a value.") }
-                if argument == "--device" { options.device = value } else { options.image = value }
+                switch argument {
+                case "--device": options.device = value
+                case "--image": options.image = value
+                default: options.project = value
+                }
             case "-h", "--help": throw ToolFailure("")
             default:
                 if argument.hasPrefix("{") {
@@ -92,6 +99,10 @@ public enum CallCommand {
         }
         guard isTool(options.tool) else {
             output("Unknown tool \(options.tool). Mobdev tools lists them.")
+            return 2
+        }
+        if let given = options.project, project(options) == nil {
+            output("\(given) is no project: it has no mobdev.json, and no mobdev/ folder with one.")
             return 2
         }
         var result: JSONValue
@@ -147,6 +158,7 @@ public enum CallCommand {
     static func callApp(_ options: Options) async throws -> JSONValue {
         var headers = ["Content-Type": "application/json"]
         if let token = SecretStore.read(MobdevPaths.tokenFile) { headers["Authorization"] = "Bearer \(token)" }
+        if let project = project(options) { headers[AgentProject.header] = AgentProject.headerValue(project) }
         let body = JSONValue.object(options.arguments).encoded()
         let request = MCPStdioBridge.Bridge.request("POST", "/v1/tools/\(options.tool)", headers: headers, body: body)
         let response = try await withCheckedThrowingContinuation { continuation in
@@ -183,14 +195,18 @@ public enum CallCommand {
         defer { connection.emulators.stop(waiting: true) }
         var arguments = options.arguments
         arguments["device"] = .string(connection.device.id)
-        // Named baselines go to baselines/ in the current folder, since this process's own
-        // Mobdev folder is temporary.
-        let checks = CheckContext(
-            root: URL(fileURLWithPath: FileManager.default.currentDirectoryPath, isDirectory: true), artifacts: nil)
+        // What the tool saves goes into the project; without one, named baselines go to baselines/
+        // in the current folder, since this process's own Mobdev folder is temporary.
+        let project = project(options)
+        let checks = project == nil
+            ? CheckContext(root: URL(fileURLWithPath: FileManager.default.currentDirectoryPath, isDirectory: true), artifacts: nil)
+            : CheckContext.current
         do {
-            let result = try await CheckContext.$current.withValue(checks) {
-                try await connection.tools.call(
-                    options.tool, arguments: .object(arguments), source: "cli", screenshotByDefault: false)
+            let result = try await ProjectScope.$pinned.withValue(project) {
+                try await CheckContext.$current.withValue(checks) {
+                    try await connection.tools.call(
+                        options.tool, arguments: .object(arguments), source: "cli", screenshotByDefault: false)
+                }
             }
             var body: [String: JSONValue] = ["ok": .bool(!result.isError), "text": .string(result.text)]
             if let data = result.data { body["data"] = data }
@@ -205,6 +221,12 @@ public enum CallCommand {
             output(String(describing: error))
             return nil
         }
+    }
+
+    /// --project, else MOBDEV_PROJECT, else the project of the current folder.
+    static func project(_ options: Options) -> URL? {
+        if let given = options.project { return AgentProject.discover(environment: ["MOBDEV_PROJECT": given]) }
+        return AgentProject.discover()
     }
 
     /// Up to the first ". " that ends a sentence, not one inside "e.g." or a file name such as ".mp4".

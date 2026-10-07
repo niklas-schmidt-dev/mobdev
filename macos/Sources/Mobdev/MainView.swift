@@ -2,15 +2,22 @@ import MobdevCore
 import SwiftUI
 
 enum Pane: Hashable {
-    case overview, device(String), remoteDevice(mac: String, id: String), tests, agents, activity, remote
+    case overview, device(String), remoteDevice(mac: String, id: String), agents, activity, remote
+    /// A project's part, by the project's folder path.
+    case project(String, ProjectSection)
+    /// The active project's tests, or how to get a project: what the Tests pane of 0.2.50 and
+    /// earlier, stored as "tests", opens now.
+    case projects
 
-    /// Stored in user defaults as "overview", "device:<id>", "remote-device:<mac>/<id>", "agents", …
+    /// Stored in user defaults as "overview", "device:<id>", "remote-device:<mac>/<id>",
+    /// "project:<section>:<path>", "agents", …
     var rawValue: String {
         switch self {
         case .overview: "overview"
         case .device(let id): "device:\(id)"
         case .remoteDevice(let mac, let id): "remote-device:\(mac)/\(id)"
-        case .tests: "tests"
+        case .project(let path, let section): "project:\(section.rawValue):\(path)"
+        case .projects: "projects"
         case .agents: "agents"
         case .activity: "activity"
         case .remote: "remote"
@@ -19,11 +26,18 @@ enum Pane: Hashable {
 
     init(rawValue: String) {
         switch rawValue {
-        case "tests": self = .tests
+        case "tests", "projects": self = .projects
         case "agents": self = .agents
         case "activity": self = .activity
         case "remote": self = .remote
         case let value where value.hasPrefix("device:"): self = .device(String(value.dropFirst("device:".count)))
+        case let value where value.hasPrefix("project:"):
+            let parts = value.dropFirst("project:".count).split(separator: ":", maxSplits: 1)
+            if parts.count == 2, let section = ProjectSection(rawValue: String(parts[0])) {
+                self = .project(String(parts[1]), section)
+            } else {
+                self = .projects
+            }
         case let value where value.hasPrefix("remote-device:"):
             let parts = value.dropFirst("remote-device:".count).split(separator: "/", maxSplits: 1)
             self = parts.count == 2 ? .remoteDevice(mac: String(parts[0]), id: String(parts[1])) : .overview
@@ -37,11 +51,24 @@ struct MainView: View {
     /// Reopens the pane that was last selected.
     @AppStorage("selectedPane") private var storedPane = Pane.overview.rawValue
 
+    /// The stored pane; "projects" (and "tests" from 0.2.50 and earlier) is the active project's
+    /// tests, so its row in the sidebar is selected.
+    private var shownPane: Pane {
+        let pane = Pane(rawValue: storedPane)
+        if pane == .projects, let active = model.activeProject { return .project(active.path, .tests) }
+        return pane
+    }
+
     private var pane: Binding<Pane?> {
         Binding(
-            get: { Pane(rawValue: storedPane) },
+            get: { shownPane },
             // The list reports nil for clicks that select nothing; stay on the current pane then.
-            set: { if let pane = $0 { storedPane = pane.rawValue } })
+            set: { pane in
+                guard let pane else { return }
+                storedPane = pane.rawValue
+                // The project you look at is the one that gets what is saved without a path.
+                if case .project(let path, _) = pane { model.activateProject(URL(fileURLWithPath: path, isDirectory: true)) }
+            })
     }
 
     var body: some View {
@@ -49,7 +76,7 @@ struct MainView: View {
             Sidebar(selection: pane)
                 .navigationSplitViewColumnWidth(min: 220, ideal: 250, max: 320)
         } detail: {
-            switch Pane(rawValue: storedPane) {
+            switch shownPane {
             case .overview: DevicesOverview()
             case .device(let id):
                 if model.state(id) != nil {
@@ -63,7 +90,10 @@ struct MainView: View {
                 } else {
                     DevicesOverview()
                 }
-            case .tests: TestsView()
+            case .project(let path, let section):
+                ProjectDetailView(folder: URL(fileURLWithPath: path, isDirectory: true), section: section).id(path + section.rawValue)
+            case .projects:
+                NoProjectView()
             case .agents: AgentsView()
             case .activity: ActivityView()
             case .remote: RemoteView()
@@ -74,6 +104,13 @@ struct MainView: View {
             OnboardingView()
                 .environment(model)
         }
+        .sheet(isPresented: Bindable(model).showsNewProject) {
+            NewProjectSheet { folder in storedPane = Pane.project(folder.path, .overview).rawValue }
+                .environment(model)
+        }
+        // The Tests pane of 0.2.50 and earlier becomes the active project's tests for good, so the
+        // view stays on that project when another one becomes active.
+        .onAppear { if case .project = shownPane, Pane(rawValue: storedPane) == .projects { storedPane = shownPane.rawValue } }
     }
 }
 
@@ -89,6 +126,22 @@ private struct Sidebar: View {
             .badge(model.devices.filter(\.isReady).count)
             // A badge hides the link's value from the list's selection, so tag the row again.
             .tag(Pane.overview)
+
+            Section("Projects") {
+                ForEach(model.projects, id: \.path) { folder in
+                    ProjectSidebarRows(folder: folder)
+                }
+                Button { model.showsNewProject = true } label: {
+                    Label("New Project…", systemImage: "plus")
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                Button { ProjectActions.open(model) { selection = $0 } } label: {
+                    Label("Open Project…", systemImage: "folder.badge.plus")
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+            }
 
             Section("This Mac") {
                 let iPhones = model.devices.filter { !$0.isEmulated }
@@ -129,13 +182,6 @@ private struct Sidebar: View {
                         }
                     }
                 }
-            }
-            Section("Projects") {
-                NavigationLink(value: Pane.tests) {
-                    Label("Tests", systemImage: "checklist")
-                }
-                .badge(model.runningTests.isEmpty ? nil : Text("Running"))
-                .tag(Pane.tests)
             }
             Section("Agents") {
                 NavigationLink(value: Pane.agents) {

@@ -650,6 +650,7 @@ struct ToolIcon: View {
         case "home": "house.fill"
         case "open_app": "square.grid.2x2.fill"
         case "screenshot": "camera.fill"
+        case "save_screenshot": "photo.badge.arrow.down.fill"
         case "read_screen": "text.viewfinder"
         case "find_text": "magnifyingglass"
         case "wait_for_text": "hourglass"
@@ -661,6 +662,10 @@ struct ToolIcon: View {
         case "list_tests": "list.bullet.rectangle"
         case "save_test": "square.and.pencil"
         case "test_result": "doc.text.magnifyingglass"
+        case "save_flow": "square.and.arrow.down.fill"
+        case "list_projects": "folder.fill"
+        case "open_project": "folder.badge.gearshape"
+        case "create_project": "folder.badge.plus"
         case "list_devices": "iphone.gen3"
         case "list_apps": "apps.iphone"
         case "install_app": "arrow.down.app.fill"
@@ -685,8 +690,9 @@ struct ToolIcon: View {
         case "tap_text", "tap_element": .purple
         case "type_text", "press_key": .indigo
         case "home", "open_app": .green
-        case "screenshot", "read_screen", "find_text", "wait_for_text", "ui_tree", "wait_for_element": .orange
-        case "run_flow", "run_tests", "list_tests", "save_test", "test_result": .pink
+        case "screenshot", "save_screenshot", "read_screen", "find_text", "wait_for_text", "ui_tree", "wait_for_element": .orange
+        case "run_flow", "run_tests", "list_tests", "save_test", "save_flow", "test_result": .pink
+        case "list_projects", "open_project", "create_project": .cyan
         case "install_app", "uninstall_app", "launch_app", "stop_app", "open_url", "measure_launch", "dev_menu",
             "reload_app": .teal
         case "list_apps", "logs", "crash_reports", "performance": .brown

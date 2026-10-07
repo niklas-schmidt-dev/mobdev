@@ -212,7 +212,10 @@ import Testing
         let names = DeviceTools.definitions.map(\.name)
         #expect(names.first == "list_devices")
         let projectTools = ProjectTools.definitions.map(\.name)
-        #expect(Set(projectTools) == ["list_tests", "save_test", "test_result"])
+        #expect(
+            Set(projectTools) == [
+                "list_projects", "create_project", "open_project", "list_tests", "save_test", "save_flow", "test_result",
+            ])
         #expect(Set(names) == Set(PhoneTools.definitions.map(\.name) + ["list_devices"] + projectTools))
         for definition in DeviceTools.definitions where definition.name != "list_devices" {
             // A project's files need no device; everything else acts on one.

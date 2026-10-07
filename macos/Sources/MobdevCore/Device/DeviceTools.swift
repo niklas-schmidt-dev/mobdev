@@ -96,17 +96,21 @@ public final class DeviceTools: ToolCalling {
     private let emulators: EmulatorHub?
     private let settleDelay: TimeInterval
     private let uploads: UploadStore
+    /// The projects every device's tools save into; the app fills it from its settings.
+    public let projects: ProjectList
     /// Per device, with the object it was made for: a rescan can replace a device under the same id.
     private let tools = Locked<[String: (device: any Device, tools: PhoneTools)]>([:])
 
     /// `uploads` is where `install_app` finds an `upload`: the store the API router receives them in.
     public init(
-        hub: DeviceHub, emulators: EmulatorHub? = nil, settleDelay: TimeInterval = 0.6, uploads: UploadStore = .shared
+        hub: DeviceHub, emulators: EmulatorHub? = nil, settleDelay: TimeInterval = 0.6, uploads: UploadStore = .shared,
+        projects: ProjectList = ProjectList()
     ) {
         self.hub = hub
         self.emulators = emulators
         self.settleDelay = settleDelay
         self.uploads = uploads
+        self.projects = projects
     }
 
     public static let definitions: [ToolDefinition] = {
@@ -142,7 +146,7 @@ public final class DeviceTools: ToolCalling {
         if name == "list_devices" { return listDevices() }
         do {
             // A project's files need no device.
-            if ProjectTools.isProjectTool(name) { return try ProjectTools.call(name, Arguments(arguments ?? [:])) }
+            if ProjectTools.isProjectTool(name) { return try ProjectTools.call(name, Arguments(arguments ?? [:]), projects: projects) }
             // Only a missing (or null) `device` means "pick for me". A number, an empty string or
             // anything else is a mistake, and guessing could act on the wrong phone.
             let query: String?
@@ -200,7 +204,8 @@ public final class DeviceTools: ToolCalling {
         return tools.withLock { cache in
             cache = cache.filter { current.contains($0.key) }  // Forgotten or shut down devices.
             if let existing = cache[device.id], existing.device === device { return existing.tools }
-            let created = PhoneTools(phone: device, activity: device.activity, settleDelay: settleDelay, uploads: uploads)
+            let created = PhoneTools(
+                phone: device, activity: device.activity, settleDelay: settleDelay, uploads: uploads, projects: projects)
             cache[device.id] = (device, created)
             return created
         }

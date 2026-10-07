@@ -50,8 +50,15 @@ public struct AppMap: Sendable, Codable, Equatable {
     public var crashes: [Crash]
     /// Why the crawl ended.
     public var ended: String
+    /// The crawl's folder with its screenshots: relative to the project for a project's map,
+    /// absolute otherwise. Nil in maps from before 0.2.51.
+    public var crawl: String?
 
     public func screen(_ id: String) -> Screen? { screens.first { $0.id == id } }
+
+    /// Whether the crawl ran to one of its limits rather than stopping after an error.
+    public var completed: Bool { !ended.hasPrefix(AppMap.errorPrefix) }
+    static let errorPrefix = "Stopped after an error"
 }
 
 /// What `crawl_app` may do.
@@ -77,7 +84,7 @@ extension PhoneTools {
         ToolDefinition(
             name: "crawl_app", title: "Crawl app",
             description:
-                "Explore an app by itself, without a model: launch it fresh, tap every element it has not tried, note where each tap leads, and keep every crash with the steps that cause it as a flow. Writes a map of the screens with screenshots (crawl.json, report.md) and remembers it for navigate_to. Skips text fields and anything that reads like delete, pay, buy, send or sign out, plus avoid. Runs at most seconds (default 120; over a relay keep it under 80, or use `Mobdev crawl_app … --local`). Simulators, Android, and iPhones with the UI tree on.",
+                "Explore an app by itself, without a model: launch it fresh, tap every element it has not tried, note where each tap leads, and keep every crash with the steps that cause it as a flow. Writes the crawl with screenshots (crawl.json, report.md) into the project's output/crawls and its map to maps/<bundle id>.json for navigate_to (without a project: Mobdev's folder). Skips text fields and anything that reads like delete, pay, buy, send or sign out, plus avoid. Runs at most seconds (default 120; over a relay keep it under 80, or use `Mobdev crawl_app … --local`). Simulators, Android, and iPhones with the UI tree on.",
             inputSchema: schema(
                 [
                     "bundle_id": ["type": "string"],
@@ -86,7 +93,7 @@ extension PhoneTools {
                     "max_depth": ["type": "integer", "minimum": 1, "maximum": 20, "description": "Taps from launch, default 6"],
                     "seconds": ["type": "number", "description": "Time limit, default 120, at most 1800"],
                     "avoid": ["type": "array", "items": ["type": "string"], "description": "Labels never to tap"],
-                    "output": ["type": "string", "description": "Folder on the Mac for the results; default in Mobdev's crawls folder"],
+                    "output": ["type": "string", "description": "Folder on the Mac for the results; default the project's output/crawls"],
                 ], required: ["bundle_id"], screenshot: false),
             readOnly: false),
         ToolDefinition(
@@ -112,8 +119,9 @@ extension PhoneTools {
             options.maxDepth = Int(try args.number("max_depth", default: 6, range: 1...20))
             options.seconds = try args.number("seconds", default: 120, range: 5...1800)
             options.avoid = try args.stringArray("avoid")
-            options.output = try args.has("output") ? Self.folder(try args.string("output")) : Self.newCrawlFolder(bundleID)
-            let map = try await crawl(options, source: source)
+            let project = args.has("output") ? nil : projects.current()
+            options.output = try args.has("output") ? Self.folder(try args.string("output")) : Self.newCrawlFolder(bundleID, project: project)
+            let map = try await crawl(options, source: source, project: project)
             var output = ToolOutput(text: Self.summary(map, folder: options.output), data: (try? JSONValue.parse(Self.encode(map))) ?? .null)
             if let crash = map.crashes.first, let shot = crash.screenshot,
                 let image = CGImage.load(options.output.appendingPathComponent(shot))
@@ -125,7 +133,9 @@ extension PhoneTools {
             let bundleID = try args.string("bundle_id")
             let query = try args.string("screen")
             let file = try args.has("map") ? URL(fileURLWithPath: (try args.string("map") as NSString).expandingTildeInPath) : nil
-            guard let map = Self.savedMap(bundleID, file: file) else {
+            // The given crawl, else the project's map, else the one in Mobdev's folder.
+            let candidates = file.map { [$0] } ?? ([projects.current().map { Self.mapFile(bundleID, in: $0) }, Self.mapFile(bundleID)].compactMap { $0 })
+            guard let map = candidates.lazy.compactMap({ Self.savedMap(bundleID, file: $0) }).first else {
                 throw ToolFailure(
                     file.map { "\($0.path) is not a crawl of \(bundleID)." } ?? "There is no map of \(bundleID) yet. Run crawl_app first.")
             }
@@ -171,7 +181,7 @@ extension PhoneTools {
     /// Roles that bring up a keyboard; the crawler does not type.
     static let fieldRoles: Set<String> = ["TextField", "SecureTextField", "SearchField", "TextArea", "EditText"]
 
-    func crawl(_ options: CrawlOptions, source: String) async throws -> AppMap {
+    func crawl(_ options: CrawlOptions, source: String, project: URL? = nil) async throws -> AppMap {
         guard let apps = phone.apps else {
             throw ToolFailure("crawl_app needs the app tools: Developer Mode and Xcode for an iPhone.")
         }
@@ -338,13 +348,15 @@ extension PhoneTools {
                 current = next
             }
         } catch {
-            ended = "Stopped after an error: \(error)"
+            ended = "\(AppMap.errorPrefix): \(error)"
         }
         map.ended = ended
         map.seconds = (Date().timeIntervalSince(started) * 10).rounded() / 10
         try Self.encode(map).write(to: options.output.appendingPathComponent("crawl.json"))
         try Data(Self.report(map).utf8).write(to: options.output.appendingPathComponent("report.md"))
-        Self.saveMap(map)
+        // A crawl that broke off would replace a good map, which a project versions.
+        if map.completed { Self.saveMap(map, crawl: options.output, project: project) }
+        if let project { projects.notifyOutput(project, .crawls) }
         return map
     }
 
@@ -499,13 +511,22 @@ extension PhoneTools {
 
     static var mapsFolder: URL { MobdevPaths.home.appendingPathComponent("app-maps", isDirectory: true) }
 
-    static func mapFile(_ bundleID: String) -> URL {
-        mapsFolder.appendingPathComponent(String(bundleID.map { $0.isLetter || $0.isNumber || $0 == "." || $0 == "-" ? $0 : "_" }) + ".json")
+    /// The map of an app in a project's maps/, else in Mobdev's folder.
+    static func mapFile(_ bundleID: String, in project: URL? = nil) -> URL {
+        let folder = project.map { $0.appendingPathComponent(TestProject.mapsFolderName, isDirectory: true) } ?? mapsFolder
+        return folder.appendingPathComponent(String(bundleID.map { $0.isLetter || $0.isNumber || $0 == "." || $0 == "-" ? $0 : "_" }) + ".json")
     }
 
-    static func saveMap(_ map: AppMap) {
-        try? FileManager.default.createDirectory(at: mapsFolder, withIntermediateDirectories: true)
-        try? encode(map).write(to: mapFile(map.app))
+    static func saveMap(_ map: AppMap, crawl: URL, project: URL?) {
+        var map = map
+        if let project, crawl.standardizedFileURL.path.hasPrefix(project.path + "/") {
+            map.crawl = String(crawl.standardizedFileURL.path.dropFirst(project.path.count + 1))
+        } else {
+            map.crawl = crawl.standardizedFileURL.path
+        }
+        let file = mapFile(map.app, in: project)
+        try? FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? encode(map).write(to: file, options: .atomic)
     }
 
     static func savedMap(_ bundleID: String, file: URL? = nil) -> AppMap? {
@@ -555,12 +576,24 @@ extension PhoneTools {
         return (exact.isEmpty ? loose : exact).min { $0.depth < $1.depth }
     }
 
-    static func newCrawlFolder(_ bundleID: String) throws -> URL {
+    /// How many crawls a project keeps in output/crawls.
+    static let keptCrawls = 10
+
+    /// A crawl's folder, named after the app and the time: in the project's output/crawls,
+    /// else in Mobdev's folder.
+    static func newCrawlFolder(_ bundleID: String, project: URL? = nil) throws -> URL {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "yyyy-MM-dd-HHmmss"
         let name = String(bundleID.map { $0.isLetter || $0.isNumber || $0 == "." ? $0 : "_" })
-        let url = MobdevPaths.home.appendingPathComponent("crawls/\(name)-\(formatter.string(from: Date()))", isDirectory: true)
+        let parent: URL
+        if let project {
+            parent = try TestProject.output(.crawls, in: project)
+            TestProject.trim(parent, keeping: keptCrawls - 1)
+        } else {
+            parent = MobdevPaths.home.appendingPathComponent("crawls", isDirectory: true)
+        }
+        let url = parent.appendingPathComponent("\(formatter.string(from: Date()))-\(name)", isDirectory: true)
         try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
         return url
     }
