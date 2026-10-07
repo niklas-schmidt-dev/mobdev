@@ -4,8 +4,9 @@ import Foundation
 /// settings (Agents › Blocked apps) or with MOBDEV_BLOCKED_APPS, a comma-separated list of names
 /// and bundle IDs, for `Mobdev flow` and `Mobdev test`.
 ///
-/// It stops `open_app`, `launch_app` and `activate`-style calls by name or bundle ID. It is a guard
-/// rail against mistakes, not a sandbox: an agent can still tap the app's icon on the home screen.
+/// It stops `open_app`, `launch_app`, `measure_launch` and `activate`-style calls by name or bundle
+/// ID. It is a guard rail against mistakes, not a sandbox: an agent can still tap the app's icon on
+/// the home screen.
 public enum AppBlocklist {
     /// The list from the settings and the environment, read at most every two seconds.
     static func current() -> [String] {
@@ -48,7 +49,7 @@ public enum AppBlocklist {
         let app: String?
         switch tool {
         case "open_app": app = args.value["name"]?.stringValue
-        case "launch_app": app = args.value["bundle_id"]?.stringValue
+        case "launch_app", "measure_launch": app = args.value["bundle_id"]?.stringValue
         default: return
         }
         guard let app else { return }

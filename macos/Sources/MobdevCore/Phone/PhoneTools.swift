@@ -117,6 +117,9 @@ public final class PhoneTools: Sendable {
         `send_push`, `set_appearance`, `set_language`, `set_status_bar`, `biometrics`, `reset_app`, \
         `clipboard` and `set_orientation` (simulators and Android; some on iPhones with Developer Mode). \
         `start_recording` and `stop_recording` keep a video of the screen. \
+        `performance` samples an app's CPU, memory and frames and `measure_launch` times its cold launch, \
+        both with optional budgets that fail the call; `reload_app` and `dev_menu` reload a React Native \
+        or Expo app and open its developer menu. \
         Checks fail a flow or test step when the screen does not pass: `assert_screenshot` compares it with \
         a baseline picture, `accessibility_audit` finds missing labels, small targets and low contrast, and \
         `assert_with_ai` asks Apple Intelligence on the Mac a yes/no question about it. \
@@ -253,6 +256,7 @@ public final class PhoneTools: Sendable {
                     ], required: ["text"]), readOnly: true),
         ] + observeDefinitions + treeDefinitions + appDefinitions + settingsDefinitions + recordingDefinitions
             + sessionDefinitions + crawlDefinitions + checkDefinitions + flowDefinitions + testDefinitions
+            + devLoopDefinitions
     }()
 
     public static func definition(named name: String) -> ToolDefinition? {
@@ -488,6 +492,7 @@ public final class PhoneTools: Sendable {
             if let output = try await runRecordingTool(name, args) { return output }
             if let output = try await runSessionTool(name, args) { return output }
             if let output = try await runCheckTool(name, args) { return output }
+            if let output = try await runDevLoopTool(name, args) { return output }
             return try await runAppTool(name, args)
         }
     }

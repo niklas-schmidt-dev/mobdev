@@ -79,6 +79,12 @@ public protocol PhoneBackend: Sendable {
     func frontmostApp() async throws -> String?
     /// Pixels of `frame()` per point on iOS, per dp on Android. Nil: estimated from the screen size.
     func screenScale() async -> Double?
+    /// An app's CPU, memory and launch time as the system measures them. Nil where Mobdev cannot
+    /// read them (an iPhone).
+    var performance: AppPerformance? { get }
+    /// Opens a React Native or Expo app's developer menu the way the platform does and says how.
+    /// Nil where the device has no way Mobdev can use (an iPhone cannot be shaken from the Mac).
+    func developerMenu() async throws -> String?
 }
 
 /// A wheel as a swipe, for devices without one: each step moves the content by a little over 5% of
@@ -103,4 +109,6 @@ extension PhoneBackend {
     public var settings: DeviceSettings? { nil }
     public func frontmostApp() async throws -> String? { nil }
     public func screenScale() async -> Double? { nil }
+    public var performance: AppPerformance? { nil }
+    public func developerMenu() async throws -> String? { nil }
 }

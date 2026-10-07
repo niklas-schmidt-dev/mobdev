@@ -551,7 +551,7 @@ final class AndroidApps: AppBackend, @unchecked Sendable {
     }
 
     /// The app's launcher activity, e.g. "com.android.settings/.Settings".
-    private func launcherActivity(_ package: String) async throws -> String {
+    func launcherActivity(_ package: String) async throws -> String {
         let text = try await adb.shell(
             serial,
             "cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.LAUNCHER \(package)"
@@ -569,7 +569,7 @@ final class AndroidApps: AppBackend, @unchecked Sendable {
         if output.contains("Error:") { throw DeveloperError(output.trimmingCharacters(in: .whitespacesAndNewlines)) }
     }
 
-    private func pid(_ package: String) async -> Int? {
+    func pid(_ package: String) async -> Int? {
         guard let text = try? await adb.shell(serial, "pidof \(package)", timeout: 10) else { return nil }
         return text.split(whereSeparator: \.isWhitespace).first.flatMap { Int($0) }
     }

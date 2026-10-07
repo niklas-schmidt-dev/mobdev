@@ -659,6 +659,10 @@ struct ToolIcon: View {
         case "open_url": "link"
         case "logs": "text.alignleft"
         case "crash_reports": "exclamationmark.triangle.fill"
+        case "performance": "gauge.with.dots.needle.67percent"
+        case "measure_launch": "stopwatch"
+        case "dev_menu": "ellipsis.rectangle"
+        case "reload_app": "arrow.clockwise"
         default: "info.circle.fill"
         }
     }
@@ -671,8 +675,9 @@ struct ToolIcon: View {
         case "home", "open_app": .green
         case "screenshot", "read_screen", "find_text", "wait_for_text", "ui_tree", "wait_for_element": .orange
         case "run_flow", "run_tests", "list_tests", "save_test", "test_result": .pink
-        case "install_app", "uninstall_app", "launch_app", "stop_app", "open_url": .teal
-        case "list_apps", "logs", "crash_reports": .brown
+        case "install_app", "uninstall_app", "launch_app", "stop_app", "open_url", "measure_launch", "dev_menu",
+            "reload_app": .teal
+        case "list_apps", "logs", "crash_reports", "performance": .brown
         default: .gray
         }
     }

@@ -193,6 +193,10 @@ only device, or the connected iPhone when simulators or Android devices run next
 | `stop_recording` | | Ends the recording and says where it is |
 | `recent_steps` | `count`, `clear` | The newest actions that worked, as flow steps for `save_test` |
 | `run_shortcut` | `name` | Runs a shortcut from Apple's Shortcuts app |
+| `performance` | `bundle_id`, `seconds`, `max_cpu`, `max_memory_mb`, `max_janky_percent` | CPU, memory and (Android) frames of a running app; budgets fail the call. Simulators and Android |
+| `measure_launch` | `bundle_id`, `runs`, `method`, `max_ms`, `stable` | Cold launch time over several runs: min, median, max |
+| `dev_menu` | `port` | Opens a React Native or Expo app's developer menu |
+| `reload_app` | `port` | Reloads a React Native or Expo app through Metro, else through its developer menu |
 
 Text recognition uses Apple's Vision framework on the Mac; no screen content leaves the machine
 unless your agent sends it to its model. Each recognition runs in a fresh process (`Mobdev __text`),
@@ -273,9 +277,9 @@ tool reaches from outside, such as turning on a Focus or changing the brightness
 
 ### Developer tools
 
-The app tools, `list_apps` to `crash_reports`, close the loop for apps you build: the agent builds with `xcodebuild`,
-installs the build, launches it, drives it with the tools above and reads its output and crash
-reports. They use Xcode's `devicectl`, so they need Xcode on the Mac and **Developer Mode** on the
+The tools from `list_apps` to `crash_reports` close the loop for apps you build: the agent builds
+with `xcodebuild`, installs the build, launches it, drives it with the tools above and reads its
+output and crash reports. They use Xcode's `devicectl`, so they need Xcode on the Mac and **Developer Mode** on the
 iPhone (Settings > Privacy & Security > Developer Mode). Everything else works without either.
 
 ```sh
@@ -296,6 +300,48 @@ xcodebuild -scheme MyApp -destination 'generic/platform=iOS' -derivedDataPath bu
   relay. A build made elsewhere, such as in a cloud agent's container, is uploaded first and
   installed with `upload` (see [Install builds from anywhere](#install-builds-from-anywhere)).
   `uninstall_app` refuses App Store and system apps.
+
+### Performance
+
+`performance` samples a running app for `seconds` (default 5, at most 60) and reports average and
+peak CPU as a percent of one core, memory at the start, the end and its peak, and on Android its
+frames. `measure_launch` stops the app, starts it again and times it `runs` times (default 3).
+Budgets turn both into checks for tests and flows: the call fails, with the numbers, when the app
+goes over `max_cpu` (average), `max_memory_mb` (peak), `max_janky_percent` or `max_ms` (median).
+
+- **iOS Simulator**: the app is a process on the Mac. Mobdev finds its pid with `launchctl list`
+  inside that simulator and reads CPU time and physical footprint (the memory Xcode's gauge shows)
+  with `proc_pid_rusage`. Launch time is iOS's own `ApplicationFirstFramePresentation` signpost,
+  streamed with `simctl spawn <udid> log stream`: from SpringBoard taking the launch request to the
+  app's first frame, the number Xcode's Organizer and MetricKit report. Simulators have no frame
+  times; use Android or Instruments for those. A simulator shares the Mac's CPU, so its numbers say
+  how an app compares with itself, not how fast an iPhone is.
+- **Android**: one adb shell command reads `/proc/<pid>/stat` and `VmRSS` about once a second,
+  resets `dumpsys gfxinfo` before and reads it after (frames, janky share, 50th to 99th percentile
+  frame times), and adds the PSS from `dumpsys meminfo`. Launch time is `am start -W`'s `TotalTime`
+  after `am force-stop`.
+- **iPhone**: CPU and memory need Instruments, so `performance` says how to record them with
+  `xcrun xctrace record --template 'Activity Monitor'`. `measure_launch` times the screen instead.
+- `method: "screen"` (any device): from the first frame that changes (the launch animation) to the
+  last change before the screen stays still for `stable` seconds (default 2). It includes what the
+  app loads after its first frame, but a launch or splash screen shown longer than `stable` ends it
+  early.
+- Over a relay a call has 90 seconds, so keep `seconds`, and `runs` times the launch, below that.
+
+### React Native, Expo and Flutter
+
+- `reload_app` connects to Metro's message socket on this Mac (`ws://localhost:<port>/message`,
+  port 8081 by default, also Expo CLI) and sends `reload` to every app connected to it, as `r` in
+  Metro's terminal does; Expo CLI accepts it only from the same Mac. When no app is connected, or
+  Metro does not answer, Mobdev opens the developer menu and taps its Reload.
+- `dev_menu` shakes a simulator (the Darwin notification `com.apple.UIKit.SimulatorShake`, which
+  UIKit in the simulator turns into a shake for the frontmost app), presses the Menu key on Android
+  (`input keyevent 82`), and on an iPhone, which cannot be shaken from the Mac, sends `devMenu`
+  through Metro.
+- Open Expo Go projects with `open_url` and `exp://127.0.0.1:8081`, development builds with
+  `<scheme>://expo-development-client/?url=…`. `testID` is the `id` for `tap_element`. The
+  [`mobdev-react-native`](../skills/mobdev-react-native/SKILL.md) skill covers the loop, logs and
+  Flutter.
 
 ### Simulators and Android
 
