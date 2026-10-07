@@ -131,16 +131,14 @@ private struct Sidebar: View {
                 ForEach(model.projects, id: \.path) { folder in
                     ProjectSidebarRows(folder: folder)
                 }
-                Button { model.showNewProject() } label: {
-                    Label("New Project…", systemImage: "plus")
+                // With projects, New and Open are the + below the sidebar and in the File menu.
+                if model.projects.isEmpty {
+                    Button { model.showNewProject() } label: {
+                        Label("New Project…", systemImage: "plus")
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
                 }
-                .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
-                Button { ProjectActions.open(model) { selection = $0 } } label: {
-                    Label("Open Project…", systemImage: "folder.badge.plus")
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
             }
 
             Section("This Mac") {
@@ -190,8 +188,6 @@ private struct Sidebar: View {
                 NavigationLink(value: Pane.activity) {
                     Label("Activity", systemImage: "waveform.path.ecg")
                 }
-            }
-            Section("Cloud") {
                 NavigationLink(value: Pane.remote) {
                     Label("Remote Access", systemImage: "network")
                 }
@@ -200,6 +196,25 @@ private struct Sidebar: View {
             }
         }
         .listStyle(.sidebar)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            HStack {
+                Menu {
+                    Button("New Project…") { model.showNewProject() }
+                    Button("Open Project…") { ProjectActions.open(model) { selection = $0 } }
+                } label: {
+                    Label("Add Project", systemImage: "plus")
+                }
+                .menuStyle(.button)
+                .buttonStyle(.borderless)
+                .menuIndicator(.hidden)
+                .labelStyle(.iconOnly)
+                .fixedSize()
+                .help("New Project or Open Project")
+                Spacer()
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+        }
     }
 }
 

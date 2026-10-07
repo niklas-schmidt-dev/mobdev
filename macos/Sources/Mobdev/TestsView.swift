@@ -132,42 +132,23 @@ private struct ProjectView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
+    /// The newest run and the device to run on; the project's name, app and folder are in its overview.
     private var header: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(project.name).font(.title2.weight(.semibold))
-                Spacer()
-                if running {
-                    ProgressView().controlSize(.small)
-                    Text("Running \(live.count + 1) of \(project.tests.count)").foregroundStyle(.secondary).monospacedDigit()
-                } else if let last {
-                    RunSummary(result: last)
-                }
-            }
-            HStack(spacing: 10) {
-                Text(project.folder.path)
-                    .font(.callout.monospaced())
+        HStack(spacing: 12) {
+            if running {
+                ProgressView().controlSize(.small)
+                Text("Running \(live.count + 1) of \(project.tests.count)").foregroundStyle(.secondary).monospacedDigit()
+            } else if let last {
+                RunSummary(result: last)
+            } else {
+                Text(project.tests.count == 1 ? "1 test, not run yet" : "\(project.tests.count) tests, not run yet")
                     .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    .textSelection(.enabled)
-                Button("Show in Finder", systemImage: "folder") {
-                    NSWorkspace.shared.activateFileViewerSelecting([project.file.path.isEmpty ? project.folder : project.file])
-                }
-                .labelStyle(.iconOnly)
-                .buttonStyle(.borderless)
-                .help("Show mobdev.json in Finder")
             }
-            HStack(alignment: .firstTextBaseline) {
-                if let bundleID = project.app.bundleID {
-                    Text("App: \(bundleID)").font(.callout).foregroundStyle(.secondary)
-                }
-                Spacer()
-                devicePicker
-            }
+            Spacer()
+            devicePicker
         }
         .padding(.horizontal, 18)
-        .padding(.vertical, 14)
+        .padding(.vertical, 12)
     }
 
     /// What the device picker lists: the ready devices, or one entry saying there is none.
@@ -219,7 +200,7 @@ private struct RunSummary: View {
             Text("·").foregroundStyle(.tertiary)
             Text(result.device.name).foregroundStyle(.secondary)
             Text("·").foregroundStyle(.tertiary)
-            Text(result.started, format: .relative(presentation: .named)).foregroundStyle(.secondary)
+            Text(result.started.relativeText).foregroundStyle(.secondary)
         }
         .font(.callout)
         .accessibilityElement(children: .combine)

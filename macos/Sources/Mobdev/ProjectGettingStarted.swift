@@ -32,11 +32,11 @@ struct ProjectGettingStarted: View {
     var body: some View {
         Group {
             if !isHidden && done.contains(false) {
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 18) {
                     HStack(alignment: .firstTextBaseline) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Get Started").font(.title3.weight(.semibold))
-                            Text("Your agent does the work through Mobdev; these steps get it there.")
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Get Started").font(.title2.weight(.semibold))
+                            Text("Your agent does the work through Mobdev. These steps get it there.")
                                 .foregroundStyle(.secondary)
                         }
                         Spacer()
@@ -46,23 +46,26 @@ struct ProjectGettingStarted: View {
                     }
                     step(1, "Connect your agent", done: done[0]) { connect }
                     step(2, "Let it write the first tests", done: done[1]) {
-                        PromptBlock(prompt: ProjectPrompts.firstTests(context))
+                        PromptLine(prompt: ProjectPrompts.firstTests(context))
                     }
                     step(3, "Run them", done: done[2]) {
                         HStack(spacing: 10) {
-                            Text("Here, on a device, or ask your agent to call run_tests. Results stay in Runs.")
+                            Text("Here on a device, or your agent calls run_tests. Results stay in Runs.")
                                 .foregroundStyle(.secondary)
+                            Spacer()
                             if let runTests {
-                                Button("Run Tests", systemImage: "play.fill", action: runTests).disabled(!hasTests)
+                                Button("Run Tests", systemImage: "play.fill", action: runTests)
+                                    .buttonStyle(.glass)
+                                    .disabled(!hasTests)
                             }
                         }
                     }
                     step(4, "Run them in CI", done: done[3]) {
-                        PromptBlock(prompt: ProjectPrompts.continuousIntegration(context))
+                        PromptLine(prompt: ProjectPrompts.continuousIntegration(context))
                     }
                 }
-                .padding(18)
-                .background(.background.secondary, in: .rect(cornerRadius: 14))
+                .padding(22)
+                .background(.background.secondary, in: .rect(cornerRadius: 16))
             }
         }
         .task(id: "\(folder.path) \(model.projectRevision(folder)) \(model.testResults[folder.path]?.started.timeIntervalSince1970 ?? 0)") {
@@ -79,11 +82,11 @@ struct ProjectGettingStarted: View {
     private func step(_ number: Int, _ title: String, done: Bool, @ViewBuilder content: () -> some View) -> some View {
         HStack(alignment: .top, spacing: 12) {
             ZStack {
-                Circle().fill(done ? Color.green : Color.secondary.opacity(0.18)).frame(width: 24, height: 24)
+                Circle().fill(done ? Color.green : Color.accentColor.opacity(0.15)).frame(width: 26, height: 26)
                 if done {
                     Image(systemName: "checkmark").font(.caption.weight(.bold)).foregroundStyle(.white)
                 } else {
-                    Text("\(number)").font(.callout.weight(.semibold)).monospacedDigit()
+                    Text("\(number)").font(.callout.weight(.semibold)).monospacedDigit().foregroundStyle(.tint)
                 }
             }
             .accessibilityLabel(done ? "Done" : "Step \(number)")
@@ -127,75 +130,101 @@ struct ProjectGettingStarted: View {
     static let skillsCommand = "npx skills add niklas-schmidt-dev/mobdev"
 }
 
-/// Prompts for the project's agent, below its overview's cards.
+/// Prompts for the project's agent, below its overview's run actions.
 struct ProjectAgentPrompts: View {
     @Environment(AppModel.self) private var model
     let folder: URL
     let project: TestProject?
-    @State private var expanded: String?
 
     var body: some View {
         let context = ProjectPrompts.Context(
             project: folder, bundleID: project?.app.bundleID, device: model.devices.first(where: \.isReady)?.name)
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Ask Your Agent").font(.title3.weight(.semibold))
-            Text("Copy a prompt into Claude Code, Codex or another agent that has Mobdev. Each names the skill that does the job.")
-                .foregroundStyle(.secondary)
+        let prompts = ProjectPrompts.all(context)
+        VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Ask Your Agent").font(.title2.weight(.semibold))
+                Text("Prompts for Claude Code, Codex or any agent with Mobdev, filled in for this project.")
+                    .foregroundStyle(.secondary)
+            }
             VStack(spacing: 0) {
-                ForEach(ProjectPrompts.all(context)) { prompt in
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack(spacing: 12) {
-                            Image(systemName: prompt.systemImage).foregroundStyle(.tint).frame(width: 22)
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text(prompt.title).font(.headline)
-                                Text(prompt.summary).font(.callout).foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            if let skill = prompt.skill {
-                                Text(skill).font(.caption.monospaced()).foregroundStyle(.secondary)
-                                    .padding(.horizontal, 6).padding(.vertical, 2)
-                                    .background(.quaternary.opacity(0.6), in: .capsule)
-                            }
-                            Button(expanded == prompt.id ? "Hide" : "Show") {
-                                withAnimation(.snappy) { expanded = expanded == prompt.id ? nil : prompt.id }
-                            }
-                            .buttonStyle(.link)
-                            CopyButton(title: "Copy Prompt") { prompt.text }
-                        }
-                        if expanded == prompt.id {
-                            Text(prompt.text).font(.callout).textSelection(.enabled)
-                                .padding(10).frame(maxWidth: .infinity, alignment: .leading)
-                                .background(.quaternary.opacity(0.5), in: .rect(cornerRadius: 8))
-                        }
-                    }
-                    .padding(.vertical, 10)
-                    if prompt.id != ProjectPrompts.all(context).last?.id { Divider() }
+                ForEach(prompts) { prompt in
+                    PromptRow(prompt: prompt)
+                    if prompt.id != prompts.last?.id { Divider().padding(.leading, 44) }
                 }
             }
-            .padding(.horizontal, 14)
-            .background(.background.secondary, in: .rect(cornerRadius: 12))
+            .padding(.horizontal, 16)
+            .padding(.vertical, 4)
+            .background(.background.secondary, in: .rect(cornerRadius: 16))
         }
     }
 }
 
-/// A prompt with its skill, the text and a copy button.
-private struct PromptBlock: View {
+/// One prompt: what it does and its skill, the text when opened, and a copy button.
+private struct PromptRow: View {
     let prompt: ProjectPrompt
+    @State private var open = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 12) {
+                Image(systemName: prompt.systemImage)
+                    .font(.title3)
+                    .foregroundStyle(.tint)
+                    .frame(width: 28)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(prompt.title)
+                    Text([prompt.summary, prompt.skill].compactMap { $0 }.joined(separator: " · "))
+                        .font(.callout).foregroundStyle(.secondary).lineLimit(1)
+                }
+                Spacer(minLength: 12)
+                Button {
+                    withAnimation(.snappy) { open.toggle() }
+                } label: {
+                    Image(systemName: "chevron.right")
+                        .rotationEffect(.degrees(open ? 90 : 0))
+                }
+                .buttonStyle(.borderless)
+                .help(open ? "Hide the prompt" : "Show the prompt")
+                .accessibilityLabel(open ? "Hide Prompt" : "Show Prompt")
+                CopyButton { prompt.text }
+                    .controlSize(.small)
+            }
+            if open {
+                Text(prompt.text)
+                    .font(.callout)
+                    .textSelection(.enabled)
+                    .padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(.quaternary.opacity(0.5), in: .rect(cornerRadius: 10))
+                    .padding(.leading, 40)
+            }
+        }
+        .padding(.vertical, 10)
+    }
+}
+
+/// A Get Started step's prompt: its line with the skill, the text on demand, and a copy button.
+private struct PromptLine: View {
+    let prompt: ProjectPrompt
+    @State private var open = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(prompt.text)
-                .font(.callout)
-                .textSelection(.enabled)
-                .padding(10)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(.quaternary.opacity(0.5), in: .rect(cornerRadius: 8))
-            HStack {
-                if let skill = prompt.skill {
-                    Text("Uses the \(skill) skill.").font(.callout).foregroundStyle(.secondary)
-                }
-                Spacer()
+            HStack(spacing: 10) {
+                Text([prompt.summary, prompt.skill.map { "Uses \($0)." }].compactMap { $0 }.joined(separator: " "))
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 12)
+                Button(open ? "Hide Prompt" : "Show Prompt") { withAnimation(.snappy) { open.toggle() } }
+                    .buttonStyle(.borderless)
                 CopyButton(title: "Copy Prompt") { prompt.text }
+            }
+            if open {
+                Text(prompt.text)
+                    .font(.callout)
+                    .textSelection(.enabled)
+                    .padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(.quaternary.opacity(0.5), in: .rect(cornerRadius: 10))
             }
         }
     }

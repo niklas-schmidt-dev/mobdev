@@ -308,51 +308,50 @@ private struct ProjectOverview: View {
     @AppStorage("selectedPane") private var storedPane = Pane.overview.rawValue
     let folder: URL
     @State private var project: TestProject?
-    @State private var counts: [ProjectSection: String] = [:]
+    @State private var stats: [ProjectSection: Stat] = [:]
     @State private var deviceID = ""
     @State private var crawling = false
     @State private var message: String?
     @State private var renaming = false
 
+    /// A part of the project at a glance: how many there are, and one line on what stands out.
+    struct Stat {
+        var value: String
+        var caption: String
+        var tint: Color?
+    }
+
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 28) {
                 header
                 ProjectGettingStarted(folder: folder, project: project, runTests: model.readyDevice(deviceID).map { _ in runAllTests })
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 190, maximum: 260), spacing: 14)], spacing: 14) {
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 3), spacing: 12) {
                     ForEach(ProjectSection.allCases.dropFirst()) { section in
-                        Button { storedPane = Pane.project(folder.path, section).rawValue } label: {
-                            VStack(alignment: .leading, spacing: 6) {
-                                Label(section.title, systemImage: section.systemImage).font(.headline)
-                                Text(counts[section] ?? "")
-                                    .font(.callout).foregroundStyle(.secondary)
-                                    .lineLimit(2, reservesSpace: true)
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(14)
-                            .background(.background.secondary, in: .rect(cornerRadius: 12))
-                        }
-                        .buttonStyle(.plain)
+                        tile(section)
                     }
                 }
                 actions
                 ProjectAgentPrompts(folder: folder, project: project)
-                    .padding(.top, 8)
             }
-            .padding(28)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 32)
+            .padding(.vertical, 28)
+            .frame(maxWidth: 980, alignment: .leading)
+            .frame(maxWidth: .infinity)
         }
+        .toolbar { moreMenu }
+        .modifier(ProjectRenameAlert(folder: folder, isPresented: $renaming))
         .task(id: "\(folder.path) \(model.projectRevision(folder)) \(model.testResults[folder.path]?.started.timeIntervalSince1970 ?? 0)") {
             load()
         }
     }
 
     private var header: some View {
-        HStack(alignment: .top, spacing: 14) {
+        HStack(alignment: .center, spacing: 18) {
             Menu {
                 ProjectIconMenuItems(folder: folder)
             } label: {
-                ProjectIconView(folder: folder, size: 56)
+                ProjectIconView(folder: folder, size: 64)
             }
             .menuStyle(.button)
             .buttonStyle(.plain)
@@ -360,47 +359,85 @@ private struct ProjectOverview: View {
             .fixedSize()
             .help("Choose the project's icon")
             .accessibilityLabel("Project icon")
-            details
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(project?.name ?? folder.lastPathComponent).font(.largeTitle.weight(.semibold))
+                    if model.isActiveProject(folder) {
+                        Text("Active")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.tint)
+                            .padding(.horizontal, 7).padding(.vertical, 2)
+                            .background(.tint.opacity(0.14), in: .capsule)
+                            .help("What agents and the app save without a path goes into this project")
+                    }
+                }
+                Text(project?.app.bundleID ?? "No app in mobdev.json yet").font(.title3).foregroundStyle(.secondary)
+                Text((folder.path as NSString).abbreviatingWithTildeInPath)
+                    .font(.callout).foregroundStyle(.tertiary).textSelection(.enabled)
+                    .lineLimit(1).truncationMode(.middle)
+            }
         }
     }
 
-    private var details: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(project?.name ?? folder.lastPathComponent).font(.title2.weight(.semibold))
-            HStack(spacing: 6) {
-                Text(project?.app.bundleID ?? "No app set in mobdev.json")
-                    .foregroundStyle(project?.app.bundleID == nil ? .secondary : .primary)
-                if model.isActiveProject(folder) {
-                    Text("Active").font(.caption.weight(.medium)).padding(.horizontal, 6).padding(.vertical, 1)
-                        .background(.tint.opacity(0.15), in: .capsule)
-                        .help("What agents and the app save without a path goes into this project")
-                }
-            }
-            HStack(spacing: 8) {
-                Text(folder.path).font(.callout.monospaced()).foregroundStyle(.secondary).textSelection(.enabled)
-                Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([folder]) }
-                    .buttonStyle(.link)
-                Button("Open mobdev.json") { NSWorkspace.shared.open(folder.appendingPathComponent(TestProject.fileName)) }
-                    .buttonStyle(.link)
+    /// The project's less frequent actions, in the toolbar as in Finder and Xcode.
+    private var moreMenu: some ToolbarContent {
+        ToolbarItem {
+            Menu {
                 Button("Rename…") { renaming = true }
-                    .buttonStyle(.link)
+                Menu("Icon") { ProjectIconMenuItems(folder: folder) }
+                Divider()
+                Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([folder]) }
+                Button("Open mobdev.json") { NSWorkspace.shared.open(folder.appendingPathComponent(TestProject.fileName)) }
+                Divider()
+                Button("Remove from List") { model.removeProject(folder) }
+            } label: {
+                Label("Project", systemImage: "ellipsis")
             }
+            .help("Rename, icon, Finder and more")
         }
-        .modifier(ProjectRenameAlert(folder: folder, isPresented: $renaming))
+    }
+
+    private func tile(_ section: ProjectSection) -> some View {
+        let stat = stats[section] ?? Stat(value: "–", caption: " ")
+        return Button { storedPane = Pane.project(folder.path, section).rawValue } label: {
+            VStack(alignment: .leading, spacing: 6) {
+                Label(section.title, systemImage: section.systemImage)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.secondary)
+                Text(stat.value)
+                    .font(.system(size: 30, weight: .semibold, design: .rounded))
+                    .monospacedDigit()
+                    .contentTransition(.numericText())
+                Text(stat.caption)
+                    .font(.callout)
+                    .foregroundStyle(stat.tint ?? .secondary)
+                    .lineLimit(1)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(16)
+            .background(.background.secondary, in: .rect(cornerRadius: 14))
+            .contentShape(.rect(cornerRadius: 14))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(section.title): \(stat.value), \(stat.caption)")
     }
 
     private var actions: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Run").font(.title3.weight(.semibold))
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Run").font(.title2.weight(.semibold))
             HStack(spacing: 10) {
                 DevicePicker(deviceID: $deviceID)
-                Button("Run Tests", systemImage: "play.fill", action: runAllTests)
-                .disabled(
-                    model.readyDevice(deviceID) == nil || project?.tests.isEmpty != false || model.runningTests.contains(folder.path))
+                Spacer()
                 Button(crawling ? "Crawling…" : "Crawl App", systemImage: "map") { crawl() }
+                    .buttonStyle(.glass)
                     .disabled(model.readyDevice(deviceID) == nil || project?.app.bundleID == nil || crawling)
                     .help(project?.app.bundleID == nil ? "Set the app's bundle_id in mobdev.json first" : "Explore the app by itself and map its screens")
+                Button("Run Tests", systemImage: "play.fill", action: runAllTests)
+                    .buttonStyle(.glassProminent)
+                    .disabled(
+                        model.readyDevice(deviceID) == nil || project?.tests.isEmpty != false || model.runningTests.contains(folder.path))
             }
+            .controlSize(.large)
             if let message { Text(message).font(.callout).foregroundStyle(.secondary).textSelection(.enabled) }
         }
     }
@@ -427,24 +464,35 @@ private struct ProjectOverview: View {
     private func load() {
         project = try? TestProject.load(folder)
         let files = ProjectFiles(folder: folder)
-        var counts: [ProjectSection: String] = [:]
+        var stats: [ProjectSection: Stat] = [:]
         let tests = project?.tests.count ?? 0
         if let last = model.testResults[folder.path] ?? project.flatMap({ TestRuns.result(for: $0) }) {
-            let (passed, failed, _) = last.counts
-            counts[.tests] = "\(tests) tests · last run \(passed) passed\(failed > 0 ? ", \(failed) failed" : "")"
+            let (_, failed, _) = last.counts
+            stats[.tests] = failed > 0
+                ? Stat(value: "\(tests)", caption: "\(failed) failed in the last run", tint: .red)
+                : Stat(value: "\(tests)", caption: "All passed in the last run", tint: .green)
         } else {
-            counts[.tests] = tests == 1 ? "1 test" : "\(tests) tests"
+            stats[.tests] = Stat(value: "\(tests)", caption: tests == 0 ? "None yet" : "Not run yet")
         }
-        counts[.flows] = Self.count(files.flows.count, "flow", "flows")
-        counts[.screenshots] = "\(Self.count(files.screenshots.count, "screenshot", "screenshots")) · \(Self.count(files.baselines.count, "baseline", "baselines"))"
+        let flows = files.flows.count
+        stats[.flows] = Stat(value: "\(flows)", caption: flows == 0 ? "None yet" : "Ready to replay")
+        let baselines = files.baselines.count
+        stats[.screenshots] = Stat(value: "\(files.screenshots.count)", caption: Self.count(baselines, "baseline", "baselines"))
         let maps = files.maps
-        counts[.map] = maps.isEmpty
-            ? "Not crawled yet"
-            : maps.map { "\($0.map.app): \($0.map.screens.count) screens, \(Self.count($0.map.crashes.count, "crash", "crashes"))" }.joined(separator: "\n")
-        counts[.recordings] = Self.count(files.recordings.count, "recording", "recordings")
+        let screens = maps.reduce(0) { $0 + $1.map.screens.count }
+        let crashes = maps.reduce(0) { $0 + $1.map.crashes.count }
+        stats[.map] = maps.isEmpty
+            ? Stat(value: "–", caption: "Not crawled yet")
+            : Stat(
+                value: "\(screens)", caption: crashes > 0 ? Self.count(crashes, "crash", "crashes") : "\(screens == 1 ? "Screen" : "Screens"), no crashes",
+                tint: crashes > 0 ? .red : nil)
+        let recordings = files.recordings
+        stats[.recordings] = Stat(
+            value: "\(recordings.count)",
+            caption: recordings.first.map { "Newest \(ProjectFiles.modified($0).relativeText)" } ?? "None yet")
         let runs = project.map { TestRuns.runs(for: $0).count } ?? 0
-        counts[.runs] = "\(Self.count(runs, "test run", "test runs")) · \(Self.count(files.crawls.count, "crawl", "crawls"))"
-        self.counts = counts
+        stats[.runs] = Stat(value: "\(runs)", caption: Self.count(files.crawls.count, "crawl", "crawls"))
+        self.stats = stats
     }
 
     static func count(_ number: Int, _ one: String, _ many: String) -> String {
@@ -479,19 +527,23 @@ private struct ProjectFlowsView: View {
                     .padding(.horizontal, 16).padding(.vertical, 10)
                     Divider()
                     List(flows, id: \.self) { flow in
-                        HStack {
-                            Label(flow.deletingPathExtension().lastPathComponent, systemImage: Self.isMaestro(flow) ? "doc.text" : "doc.badge.gearshape")
-                            Spacer()
+                        ProjectRow(
+                            systemImage: Self.isMaestro(flow) ? "doc.text" : "point.topleft.down.to.point.bottomright.curvepath",
+                            title: flow.deletingPathExtension().lastPathComponent, subtitle: Self.subtitle(flow)
+                        ) {
                             if running == flow {
                                 ProgressView().controlSize(.small)
                             } else {
-                                Button("Run") { Task { await run(flow) } }
+                                Button("Run", systemImage: "play.fill") { Task { await run(flow) } }
+                                    .buttonStyle(.glass)
                                     .disabled(model.readyDevice(deviceID) == nil || running != nil)
+                                    .help("Replay this flow on the device and keep a video")
                             }
                         }
                         .contextMenu {
-                            Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([flow]) }
+                            Button("Run") { Task { await run(flow) } }.disabled(model.readyDevice(deviceID) == nil || running != nil)
                             Button("Open") { NSWorkspace.shared.open(flow) }
+                            Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([flow]) }
                         }
                     }
                 }
@@ -507,6 +559,14 @@ private struct ProjectFlowsView: View {
     }
 
     static func isMaestro(_ url: URL) -> Bool { ["yaml", "yml"].contains(url.pathExtension.lowercased()) }
+
+    /// "3 steps · Modified 2 hours ago", or that it is a Maestro flow.
+    static func subtitle(_ flow: URL) -> String {
+        let modified = "Modified \(ProjectFiles.modified(flow).relativeText)"
+        if isMaestro(flow) { return "Maestro flow · \(modified)" }
+        guard let steps = try? Flow.load(flow).steps.count else { return modified }
+        return "\(steps == 1 ? "1 step" : "\(steps) steps") · \(modified)"
+    }
 
     private func run(_ file: URL) async {
         guard let device = model.readyDevice(deviceID) else { return }
@@ -527,7 +587,7 @@ private struct ProjectFlowsView: View {
 private struct ProjectScreenshotsView: View {
     @Environment(AppModel.self) private var model
     let folder: URL
-    @State private var groups: [(title: String, files: [URL])] = []
+    @State private var groups: [(section: String, title: String, files: [URL])] = []
     @State private var preview: URL?
 
     var body: some View {
@@ -541,9 +601,15 @@ private struct ProjectScreenshotsView: View {
             } else {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 22) {
-                        ForEach(groups, id: \.title) { group in
+                        ForEach(Array(groups.enumerated()), id: \.offset) { index, group in
                             VStack(alignment: .leading, spacing: 10) {
-                                Text(group.title).font(.headline)
+                                if index == 0 || groups[index - 1].section != group.section {
+                                    Text(group.section).font(.title2.weight(.semibold))
+                                        .padding(.top, index == 0 ? 0 : 10)
+                                }
+                                if !group.title.isEmpty {
+                                    Text(group.title).font(.headline).foregroundStyle(.secondary)
+                                }
                                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 120, maximum: 160), spacing: 14)], spacing: 14) {
                                     ForEach(group.files, id: \.self) { file in
                                         Button { preview = file } label: {
@@ -573,12 +639,13 @@ private struct ProjectScreenshotsView: View {
 
     private func load() {
         let files = ProjectFiles(folder: folder)
-        var groups: [(title: String, files: [URL])] = []
-        for (title, list) in [("Screenshots", files.screenshots), ("Baselines", files.baselines)] where !list.isEmpty {
+        var groups: [(section: String, title: String, files: [URL])] = []
+        for (section, list) in [("Screenshots", files.screenshots), ("Baselines", files.baselines)] where !list.isEmpty {
             let byFolder = Dictionary(grouping: list) { files.group(of: $0) }
             for key in byFolder.keys.sorted() {
-                let sub = key.split(separator: "/").dropFirst().joined(separator: "/")
-                groups.append((sub.isEmpty ? title : "\(title) · \(sub)", byFolder[key] ?? []))
+                // "screenshots/de-DE/iphone-6.3" is shown as "de-DE · iphone-6.3" under Screenshots.
+                let title = key.split(separator: "/").dropFirst().joined(separator: " · ")
+                groups.append((section, title, byFolder[key] ?? []))
             }
         }
         self.groups = groups
@@ -653,7 +720,7 @@ private struct ProjectMapView: View {
         let crawl = ProjectFiles(folder: folder).crawlFolder(of: map)
         VStack(alignment: .leading, spacing: 10) {
             Text(map.app).font(.title3.weight(.semibold))
-            Text("\(map.screens.count) screens, \(map.actions) taps, \(ProjectOverview.count(map.crashes.count, "crash", "crashes")) on \(map.device), \(map.started.formatted(date: .abbreviated, time: .shortened)). \(map.ended)")
+            Text("\(ProjectOverview.count(map.screens.count, "screen", "screens")), \(ProjectOverview.count(map.actions, "tap", "taps")), \(ProjectOverview.count(map.crashes.count, "crash", "crashes")) on \(map.device), \(map.started.shortText). \(map.ended)")
                 .font(.callout).foregroundStyle(.secondary)
             if !map.crashes.isEmpty {
                 ForEach(Array(map.crashes.enumerated()), id: \.offset) { index, crash in
@@ -716,15 +783,16 @@ private struct ProjectRecordingsView: View {
                 }
             } else {
                 List(recordings, id: \.self) { video in
-                    HStack {
-                        Label(video.deletingPathExtension().lastPathComponent, systemImage: "film")
-                        Spacer()
-                        Text(ProjectFiles.modified(video).formatted(date: .abbreviated, time: .shortened))
-                            .foregroundStyle(.secondary)
-                        Text(Self.size(video)).foregroundStyle(.secondary).monospacedDigit().frame(minWidth: 64, alignment: .trailing)
-                        Button("Play") { FlowVideos.play(video) }
+                    ProjectRow(
+                        systemImage: "film", title: video.deletingPathExtension().lastPathComponent,
+                        subtitle: "\(ProjectFiles.modified(video).shortText) · \(Self.size(video))"
+                    ) {
+                        Button("Play", systemImage: "play.fill") { FlowVideos.play(video) }
+                            .buttonStyle(.glass)
+                            .help("Play in QuickTime Player")
                     }
                     .contextMenu {
+                        Button("Play") { FlowVideos.play(video) }
                         Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([video]) }
                     }
                 }
@@ -745,7 +813,7 @@ private struct ProjectRunsView: View {
     @Environment(AppModel.self) private var model
     let folder: URL
     @State private var runs: [(folder: URL, result: TestRunResult?)] = []
-    @State private var crawls: [URL] = []
+    @State private var crawls: [(folder: URL, map: AppMap?)] = []
 
     var body: some View {
         Group {
@@ -760,34 +828,14 @@ private struct ProjectRunsView: View {
                     if !runs.isEmpty {
                         Section("Test Runs") {
                             ForEach(runs, id: \.folder) { run in
-                                HStack {
-                                    if let result = run.result {
-                                        Image(systemName: result.passed ? "checkmark.circle.fill" : "xmark.circle.fill")
-                                            .foregroundStyle(result.passed ? .green : .red)
-                                        Text(result.summaryLine).lineLimit(2)
-                                    } else {
-                                        Image(systemName: "questionmark.circle").foregroundStyle(.secondary)
-                                        Text(run.folder.lastPathComponent)
-                                    }
-                                    Spacer()
-                                    Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([run.folder]) }
-                                        .buttonStyle(.link)
-                                }
+                                runRow(run.folder, run.result)
                             }
                         }
                     }
                     if !crawls.isEmpty {
                         Section("Crawls") {
-                            ForEach(crawls, id: \.self) { crawl in
-                                HStack {
-                                    Image(systemName: "map").foregroundStyle(.secondary)
-                                    Text(crawl.lastPathComponent)
-                                    Spacer()
-                                    Button("Report") { NSWorkspace.shared.open(crawl.appendingPathComponent("report.md")) }
-                                        .buttonStyle(.link)
-                                    Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([crawl]) }
-                                        .buttonStyle(.link)
-                                }
+                            ForEach(crawls, id: \.folder) { crawl in
+                                crawlRow(crawl.folder, crawl.map)
                             }
                         }
                     }
@@ -797,11 +845,85 @@ private struct ProjectRunsView: View {
         .task(id: "\(folder.path) \(model.projectRevision(folder)) \(model.runningTests.contains(folder.path))") { load() }
     }
 
+    private func runRow(_ run: URL, _ result: TestRunResult?) -> some View {
+        let (passed, failed, skipped) = result?.counts ?? (0, 0, 0)
+        var parts = ["\(passed) passed"]
+        if failed > 0 { parts.append("\(failed) failed") }
+        if skipped > 0 { parts.append("\(skipped) skipped") }
+        let subtitle = result.map {
+            "\($0.device.name) · \($0.started.shortText) · \(String(format: "%.1f", $0.seconds)) s"
+        } ?? run.lastPathComponent
+        return ProjectRow(
+            systemImage: result == nil ? "questionmark.circle" : result?.passed == true ? "checkmark.circle.fill" : "xmark.circle.fill",
+            tint: result == nil ? .secondary : result?.passed == true ? .green : .red,
+            title: result == nil ? "No results" : parts.joined(separator: ", "), subtitle: subtitle
+        ) {
+            Button("Show in Finder", systemImage: "folder") { NSWorkspace.shared.activateFileViewerSelecting([run]) }
+                .buttonStyle(.borderless).labelStyle(.iconOnly)
+                .help("Show the run's results, videos and screenshots in Finder")
+        }
+        .contextMenu {
+            Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([run]) }
+        }
+    }
+
+    private func crawlRow(_ crawl: URL, _ map: AppMap?) -> some View {
+        let crashes = map?.crashes.count ?? 0
+        let title = map.map {
+            "\(ProjectOverview.count($0.screens.count, "screen", "screens")), \(crashes == 0 ? "no crashes" : crashes == 1 ? "1 crash" : "\(crashes) crashes")"
+        }
+            ?? crawl.lastPathComponent
+        let subtitle = [map?.app, ProjectFiles.modified(crawl).shortText].compactMap { $0 }
+            .joined(separator: " · ")
+        return ProjectRow(systemImage: "map", tint: crashes > 0 ? .red : .accentColor, title: title, subtitle: subtitle) {
+            Button("Report", systemImage: "doc.text") { NSWorkspace.shared.open(crawl.appendingPathComponent("report.md")) }
+                .buttonStyle(.borderless).labelStyle(.iconOnly)
+                .help("Open the crawl's report")
+            Button("Show in Finder", systemImage: "folder") { NSWorkspace.shared.activateFileViewerSelecting([crawl]) }
+                .buttonStyle(.borderless).labelStyle(.iconOnly)
+                .help("Show the crawl's screenshots and flows in Finder")
+        }
+        .contextMenu {
+            Button("Open Report") { NSWorkspace.shared.open(crawl.appendingPathComponent("report.md")) }
+            Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([crawl]) }
+        }
+    }
+
     private func load() {
         if let project = try? TestProject.load(folder) {
             runs = TestRuns.runs(for: project).map { ($0, try? TestRunResult.load($0)) }
         }
-        crawls = ProjectFiles(folder: folder).crawls
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        crawls = ProjectFiles(folder: folder).crawls.map { folder in
+            (folder, (try? Data(contentsOf: folder.appendingPathComponent("crawl.json"))).flatMap { try? decoder.decode(AppMap.self, from: $0) })
+        }
+    }
+}
+
+/// A row of a project's list, as Finder and Xcode's organizer show files: an icon, a title, a
+/// line below it, and the row's actions at its end.
+struct ProjectRow<Trailing: View>: View {
+    let systemImage: String
+    var tint: Color = .accentColor
+    let title: String
+    let subtitle: String
+    @ViewBuilder var trailing: () -> Trailing
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: systemImage)
+                .font(.title3)
+                .foregroundStyle(tint)
+                .frame(width: 28)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).lineLimit(1)
+                Text(subtitle).font(.callout).foregroundStyle(.secondary).lineLimit(1)
+            }
+            Spacer(minLength: 12)
+            trailing()
+        }
+        .padding(.vertical, 5)
     }
 }
 

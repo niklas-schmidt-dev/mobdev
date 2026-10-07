@@ -14,6 +14,20 @@ struct StatusDot: View {
 }
 
 /// A glass button that copies text and confirms with a checkmark.
+extension Locale {
+    /// The app speaks English, so its dates read in English, in the Mac's regional formats: a Mac
+    /// in Germany gets "7. Oct 2026 at 22:19" and "12 minutes ago", not "vor 12 Minuten". (Changing
+    /// only the language of Locale.Components drops the region, and with it the 24-hour clock.)
+    static let app = Locale(identifier: "en_\(Locale.current.region?.identifier ?? "US")")
+}
+
+extension Date {
+    /// "12 minutes ago".
+    var relativeText: String { formatted(.relative(presentation: .named).locale(.app)) }
+    /// "7 Oct 2026 at 22:19".
+    var shortText: String { formatted(Date.FormatStyle(date: .abbreviated, time: .shortened).locale(.app)) }
+}
+
 struct CopyButton: View {
     var title = "Copy"
     let text: () -> String

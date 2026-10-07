@@ -108,7 +108,7 @@ struct ActivityDay<Item: Identifiable>: Identifiable {
     private static func title(for day: Date, calendar: Calendar) -> String {
         if calendar.isDateInToday(day) { return "Today" }
         if calendar.isDateInYesterday(day) { return "Yesterday" }
-        return day.formatted(.dateTime.weekday(.wide).day().month(.wide))
+        return day.formatted(.dateTime.weekday(.wide).day().month(.wide).locale(.app))
     }
 }
 
