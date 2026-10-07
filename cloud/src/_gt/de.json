@@ -1193,7 +1193,7 @@
       " mit und entsteht erst, wenn Mobdev zum ersten Mal etwas hineinschreibt."
     ]
   },
-  "27b0c448c74bd77c": {
+  "64e4319a1cb1585c": {
     "t": "ul",
     "i": 1,
     "c": [
@@ -1254,16 +1254,21 @@
       {
         "t": "li",
         "i": 11,
-        "c": "Ein Testlauf bleibt in seinem Projekt, auch wenn währenddessen ein anderes aktiv wird."
+        "c": "Die Übersicht eines neuen Projekts sagt, was als Nächstes kommt: deinen Agenten verbinden, ihn die ersten Tests schreiben lassen, sie ausführen und in CI laufen lassen, mit Prompts zum Kopieren, die für jede Aufgabe den passenden Skill nennen."
       },
       {
         "t": "li",
         "i": 12,
+        "c": "Ein Testlauf bleibt in seinem Projekt, auch wenn währenddessen ein anderes aktiv wird."
+      },
+      {
+        "t": "li",
+        "i": 13,
         "c": [
           "Jedes Projekt zeigt das Icon seiner App, gefunden im Repository: das Icon aus einer Expo-",
           {
             "t": "code",
-            "i": 13,
+            "i": 14,
             "c": "app.json"
           },
           ", das iOS-App-Icon oder das Launcher-Icon von Android. In der Übersicht des Projekts wählst du jede andere Bilddatei."

@@ -1191,7 +1191,7 @@
       " and appears only when Mobdev first writes there."
     ]
   },
-  "27b0c448c74bd77c": {
+  "64e4319a1cb1585c": {
     "t": "ul",
     "i": 1,
     "c": [
@@ -1252,16 +1252,21 @@
       {
         "t": "li",
         "i": 11,
-        "c": "A test run stays in its project, even when another one becomes active meanwhile."
+        "c": "A new project’s overview says what to do next: connect your agent, let it write the first tests, run them and run them in CI, with prompts to copy that name the skill for each job."
       },
       {
         "t": "li",
         "i": 12,
+        "c": "A test run stays in its project, even when another one becomes active meanwhile."
+      },
+      {
+        "t": "li",
+        "i": 13,
         "c": [
           "Each project shows its app’s icon, found in the repository: the icon of an Expo ",
           {
             "t": "code",
-            "i": 13,
+            "i": 14,
             "c": "app.json"
           },
           ", the iOS app icon or Android’s launcher icon. Choose any other image file in the project’s overview."

@@ -527,6 +527,10 @@ function Docs() {
                     with <code className={code}>open_project</code>.
                   </li>
                   <li>
+                    A new project’s overview says what to do next: connect your agent, let it write the first tests, run
+                    them and run them in CI, with prompts to copy that name the skill for each job.
+                  </li>
+                  <li>
                     A test run stays in its project, even when another one becomes active meanwhile.
                   </li>
                   <li>
