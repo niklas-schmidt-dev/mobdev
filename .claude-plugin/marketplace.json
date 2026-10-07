@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
+  "name": "mobdev",
+  "owner": {
+    "name": "Niklas Schmidt",
+    "url": "https://mobdev.sh"
+  },
+  "description": "Mobdev for Claude Code: the MCP server that drives iPhones, iOS simulators and Android devices, and the skills that turn it into workflows.",
+  "plugins": [
+    {
+      "name": "mobdev",
+      "source": ".",
+      "description": "Mobdev's MCP server and skills: drive iPhones, iOS simulators and Android devices, run the dev loop, smoke tests, bug reproductions and App Store screenshots.",
+      "category": "development",
+      "tags": ["ios", "android", "mobile", "testing"]
+    }
+  ]
+}

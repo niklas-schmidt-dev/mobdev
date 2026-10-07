@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "mobdev",
+  "displayName": "Mobdev",
+  "description": "Drive iPhones, iOS simulators and Android devices from a Mac: Mobdev's MCP server plus skills for the dev loop, smoke tests, bug reproduction, App Store screenshots, onboarding audits and competitor research. Needs the Mobdev app (mobdev.sh/download).",
+  "author": {
+    "name": "Niklas Schmidt",
+    "url": "https://mobdev.sh"
+  },
+  "homepage": "https://mobdev.sh",
+  "repository": "https://github.com/niklas-schmidt-dev/mobdev",
+  "license": "MIT",
+  "keywords": ["ios", "iphone", "android", "simulator", "mobile", "testing", "mcp", "automation"],
+  "mcpServers": {
+    "mobdev": {
+      "command": "/Applications/Mobdev.app/Contents/MacOS/Mobdev",
+      "args": ["mcp"]
+    }
+  }
+}
