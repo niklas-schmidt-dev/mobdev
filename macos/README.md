@@ -95,6 +95,11 @@ Activity lists every agent action, and Settings (⌘,) holds the keyboard layout
   iPhone's USB screen interface, macOS's screen capture helper, Bluetooth, AssistiveTouch and
   Developer Mode, and offers the fix for each, such as restarting a stuck capture helper.
 - **Record** and **Run Flow…** (in the activity header) record and replay flows; see below.
+- **Inspect** (in the toolbar) lays an inspector over the screen: the element under the pointer is
+  outlined with its role, label and identifier, and a click copies the step that taps it, such as
+  `{"tap_element":{"id":"login"}}`, instead of tapping the device. Simulators, Android, and
+  iPhones with the UI tree on.
+- **Settings › Agents** lists apps agents may not open; see [Security and privacy](#security-and-privacy).
 
 ## Connect an agent
 
@@ -151,6 +156,10 @@ only device, or the connected iPhone when simulators or Android devices run next
 | `find_text` | `text` | |
 | `tap_text` | `text`, `index` | Taps a visible label |
 | `wait_for_text` | `text`, `timeout`, `gone` | |
+| `observe` | `image`, `contains` | The screen as numbered marks: UI tree elements, else recognized text; `image` draws them on a screenshot |
+| `tap_mark` | `mark` | Taps a mark from the last `observe` |
+| `scroll_until_visible` | `text`, `id`, `direction`, `max_scrolls` | Scrolls until it shows, stops at the end of the list |
+| `wait_for_idle` | `timeout`, `stable` | Until the screen stops changing, status bar ignored |
 | `ui_tree` | `contains`, `all` | Elements from the accessibility tree: role, label, identifier, value, position. Simulators, Android, and iPhones with the UI tree on |
 | `tap_element` | `id`, `text`, `index`, `timeout` | Taps an element by identifier or label, waiting up to 5 s for it |
 | `wait_for_element` | `id`, `text`, `timeout`, `gone` | Like `wait_for_text`, from the tree |
@@ -167,6 +176,20 @@ only device, or the connected iPhone when simulators or Android devices run next
 | `open_url` | `url` | Deep links, universal links, web pages; confirms iOS's "Open in …?" where there is a UI tree |
 | `logs` | `bundle_id`, `after`, `lines`, `contains` | Output of launched apps and how they ended |
 | `crash_reports` | `app`, `name`, `limit` | Lists reports; `name` reads one |
+| `set_location` | `latitude`, `longitude`, `route`, `speed`, `clear` | A simulated position, or a route the device follows |
+| `set_permission` | `bundle_id`, `permission`, `state` | Grant, revoke or reset location, photos, contacts, camera and more without the prompt |
+| `send_push` | `bundle_id`, `title`, `body`, `badge`, `data`, `payload` | A push notification to a simulator app |
+| `set_appearance` | `dark`, `text_size`, `increase_contrast`, `reduce_motion` | Dark mode, Dynamic Type and accessibility switches |
+| `set_language` | `language`, `bundle_id` | e.g. `de-DE`: the simulator's, or one Android app's |
+| `set_status_bar` | `preset`, `time`, `battery_level`, `battery_state`, `wifi_bars`, `cellular_bars`, `network` | `screenshot` gives 9:41 and full bars; `clear` resets |
+| `biometrics` | `action` (`match`/`fail`/`enroll`/`unenroll`) | Answers a Face ID, Touch ID or fingerprint prompt |
+| `reset_app` | `bundle_id`, `keychain` | Deletes an app's data as if just installed |
+| `clipboard` | `text` | Reads the clipboard, or sets it to `text` |
+| `set_orientation` | `orientation` | `portrait`, `landscape_left`, `landscape_right`, `portrait_upside_down` |
+| `start_recording` | `path` | Records the screen to an .mp4 until `stop_recording` |
+| `stop_recording` | | Ends the recording and says where it is |
+| `recent_steps` | `count`, `clear` | The newest actions that worked, as flow steps for `save_test` |
+| `run_shortcut` | `name` | Runs a shortcut from Apple's Shortcuts app |
 
 Text recognition uses Apple's Vision framework on the Mac; no screen content leaves the machine
 unless your agent sends it to its model. Each recognition runs in a fresh process (`Mobdev __text`),
@@ -174,9 +197,80 @@ and moves to the CPU when the Neural Engine fails. If it fails anyway, the text 
 UI tree on simulators, Android and iPhones with Mobdev Runner and say so. Without a tree, they say
 that recognition failed and suggest `screenshot`.
 
+### From the terminal
+
+`Mobdev call <tool>` runs one tool from a shell, for scripts and for agents that prefer a terminal
+to MCP; `Mobdev <tool> key=value …` is short for it and `Mobdev tools` lists the tools. Values are
+JSON where they parse as JSON and text otherwise:
+
+```sh
+M=/Applications/Mobdev.app/Contents/MacOS/Mobdev
+$M observe
+$M tap_mark mark=4
+$M type_text text="hello world" submit=true
+$M screenshot --image screen.png
+$M call set_location '{"latitude": 52.52, "longitude": 13.405}' --device "iPhone 17"
+```
+
+It goes through the running app, so it reaches iPhones too and shows in Activity; without the app,
+or with `--local`, it runs by itself on booted simulators and Android devices, like `Mobdev flow`.
+`--json` prints the whole result, `--image` saves a returned screenshot. It exits 0 when the tool
+succeeded, 1 when it reported an error and 2 when it could not run. `start_recording`, `tap_mark`
+and other calls that build on an earlier one need the app.
+
+### Observe, marks and waits
+
+`observe` is the cheapest way for an agent to see a screen: a numbered list of what can be read or
+tapped, from the UI tree where there is one, else from text recognition, such as
+`[4] Button "Sign in" id=login (295, 640)`. A tappable row without a label, as Android lists have,
+takes the text inside it. `image: true` adds a screenshot with the numbers drawn on it, which helps
+models that misjudge coordinates. `tap_mark` taps a mark by its number; call `observe` again once
+the screen changed. While a flow is being recorded, a tapped mark is saved as `tap_element` (or
+`tap_text`) so the flow does not depend on the numbers.
+
+`scroll_until_visible` scrolls until an element (`id`) or text shows and stops when the list no
+longer moves. `wait_for_idle` waits until the screen has not changed for `stable` seconds (the
+status bar does not count), instead of a fixed pause after an animation or a load.
+
+### Device state
+
+Tests and agents set up a situation directly instead of tapping through Settings:
+
+| | iOS Simulator | Android | iPhone |
+|---|---|---|---|
+| `set_location` | `simctl location`, routes too | emulators (`geo fix`); Mobdev moves along routes | `devicectl`, Developer Mode |
+| `set_permission` | `simctl privacy`: calendar, contacts, location, photos, microphone, motion, reminders, Siri (no camera or notifications) | `pm grant`/`revoke`, camera and notifications too, or any android.permission name | no |
+| `send_push` | `simctl push` with the APNs payload | a notification posted from the shell, not delivered to the app | no; pushes come through your APNs key |
+| `set_appearance` | `simctl ui`; Reduce Motion needs Xcode 27 | night mode, font scale, contrast, animations | `devicectl`, Developer Mode |
+| `set_language` | the whole simulator; relaunch the app | one app (Android 13 and later) | no |
+| `set_status_bar` | `simctl status_bar` | System UI demo mode | `devicectl`, Developer Mode |
+| `biometrics` | Face ID and Touch ID, enrolled or not | the emulator's fingerprint sensor (enroll once in Settings) | no |
+| `reset_app` | deletes the app's data, optionally the keychain | `pm clear` | no; reinstall instead |
+| `clipboard` | `simctl pbcopy`/`pbpaste` | no | `devicectl`, Developer Mode |
+| `set_orientation` | Xcode 27 | any | `devicectl`, Developer Mode |
+
+The iPhone column uses Xcode 27's `devicectl` and has been tried on simulators, not yet on an
+iPhone. For one launch of an iOS app in another language, `launch_app` with `arguments`
+`["-AppleLanguages", "(de)", "-AppleLocale", "de_DE"]` works on simulators and iPhones alike. A
+language set with `set_language` reaches apps when they start again; system alerts follow after the
+simulator restarts. A simulator's screenshot stays upright when it turns: the app shows sideways in
+it, and taps use the same picture, so they still land where the agent sees the element.
+
+### Recordings and recent steps
+
+`start_recording` records the screen to an .mp4 (in `recordings/` in Mobdev's folder unless
+`path` names one) until `stop_recording`, at about ten frames a second on simulators and iPhones;
+it stops by itself after 30 minutes. `recent_steps` returns the newest actions that worked on a
+device, by any agent or in the app, as flow steps: looks and failed calls are left out and typing
+is merged. Once an agent found a path through the app, it saves those steps with `save_test`.
+
+`run_shortcut` runs a shortcut from Apple's Shortcuts app by name, through a `shortcuts://` link on
+simulators and iPhones in Developer Mode, otherwise through Spotlight. Shortcuts can do what no
+tool reaches from outside, such as turning on a Focus or changing the brightness.
+
 ### Developer tools
 
-The last eight tools close the loop for apps you build: the agent builds with `xcodebuild`,
+The app tools, `list_apps` to `crash_reports`, close the loop for apps you build: the agent builds with `xcodebuild`,
 installs the build, launches it, drives it with the tools above and reads its output and crash
 reports. They use Xcode's `devicectl`, so they need Xcode on the Mac and **Developer Mode** on the
 iPhone (Settings > Privacy & Security > Developer Mode). Everything else works without either.
@@ -440,6 +534,10 @@ the Mac.
 - No telemetry, no account. Every agent action appears under **Activity** in the app.
 - Agents act on your real phone with your accounts. Keep a human in the loop for anything that
   sends messages, pays or deletes.
+- **Blocked apps** (Settings › Agents, or `MOBDEV_BLOCKED_APPS` with comma-separated names and
+  bundle IDs for `Mobdev flow`, `test` and `call`): `open_app` and `launch_app` refuse them, in flows
+  and tests too. A name also matches a bundle ID that contains it as a part. It prevents mistakes
+  and is not a sandbox: an agent can still tap the app's icon.
 
 ## Limits
 
