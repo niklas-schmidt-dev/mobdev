@@ -282,11 +282,15 @@
   "5d973795984549fc": "Installation",
   "93feded7f96bfd7a": "iPhone einrichten",
   "2b1d922a440a6e5c": "Agenten verbinden",
+  "64792f59c85b8038": "Im Terminal",
   "0246f296a9647801": "Tools",
+  "6540bc4928de5ace": "Gerätezustand",
   "fd71b8f02b0decc0": "Simulatoren und Android",
   "c904a627a968008d": "Bauen, starten und debuggen",
   "af71ec8d1bc09ba6": "Flows und CI",
   "42cce71308122e86": "Tests",
+  "655ace1b049d1c8e": "Prüfungen",
+  "9c00b962b302cf7c": "Eine App erkunden",
   "75d18dac06f4f037": "Skills",
   "01a394b897c45b5a": "Fernzugriff",
   "755fc95de75d13e3": "Eigenes Relay betreiben",
@@ -306,22 +310,50 @@
   "ddd038df170c14ab": "Wo eine Beschriftung steht",
   "eebc314143e05858": "Auf eine sichtbare Beschriftung tippen",
   "160bcf9c654c89a8": "Warten, bis ein Text erscheint oder verschwindet",
+  "d6edc3f5e2f3fe85": "Der Bildschirm als nummerierte Marken, günstiger als ein Screenshot; image zeichnet sie auf einen",
+  "2348533a2dffff97": "Eine Marke aus dem letzten observe antippen",
+  "e97c56872b216d2e": "Scrollen, bis etwas erscheint; hält am Ende der Liste an",
+  "1f0cb2041827c727": "Warten, bis sich der Bildschirm nicht mehr ändert",
+  "d0a651a2da2b92fe": "Lautstärke, Stumm, Wiedergabe/Pause; Sperren auf Simulatoren und Android",
+  "a3c7307f1f2a4367": "Den Bildschirm als .mp4 aufnehmen",
+  "f41a62a71376e00b": "Die Aufnahme beenden und sagen, wo sie liegt",
+  "7ac9020db1a7cd6e": "Die neuesten Aktionen, die geklappt haben, als Schritte für einen Test",
+  "bb53097697b33342": "Einen Kurzbefehl aus Apples Kurzbefehle-App ausführen",
   "d2cbdef90a410a0e": "Elemente aus dem Accessibility-Baum (Simulatoren, Android, iPhones mit eingeschaltetem UI-Baum)",
   "631ced74c82986c2": "Auf ein Element per Identifier oder Label tippen",
   "cde6ef43d109ddbf": "Warten, bis ein Element erscheint oder verschwindet",
-  "319fcd5a8366dc5a": "Einen Flow abspielen; stoppt beim ersten fehlgeschlagenen Schritt und kann ein Video speichern",
+  "cdc8646da3ae3f06": "Einen Flow abspielen (JSON oder Maestro-YAML); stoppt beim ersten fehlgeschlagenen Schritt und kann ein Video speichern",
+  "530259be5a78b2f6": "Den Bildschirm mit einem Referenzbild vergleichen; schlägt mit einem Differenzbild fehl",
+  "22fe354d9d87eade": "Fehlende Beschriftungen, zu kleine Tippflächen, schwacher Kontrast und unklare Beschriftungen",
+  "800b2afbc83d0e1b": "Apple Intelligence auf dem Mac eine Ja/Nein-Frage zum Bildschirm stellen",
+  "c8efe91c7f37fade": "Eine App selbstständig erkunden und jeden Absturz mit seinen Schritten festhalten",
+  "67537938978ed6ca": "Zu einem Bildschirm gehen, den crawl_app erfasst hat",
   "ef679b1a39cb3a6e": "Die Tests eines Projekts ausführen: jedes Ergebnis, der Bildschirm des ersten Fehlschlags, results.json und junit.xml",
   "1488e7f0ea8303a7": "Die Tests eines Projekts und seine neuesten Ergebnisse",
   "81f56d55045933fc": "Einen Test in ein Projekt schreiben; legt es bei Bedarf an",
   "b95b3c240b2d36e0": "Die Ergebnisse des neuesten Laufs mit Schritt, Screenshot und Video jedes Fehlschlags",
+  "af08407c2398abf1": "Ein simulierter Standort oder eine Route, der das Gerät folgt",
+  "0d4971d236379131": "Standort, Fotos, Kamera und mehr ohne Nachfrage erlauben, entziehen oder zurücksetzen",
+  "ff4d2767b050d628": "Eine Push-Mitteilung an eine App im Simulator",
+  "1abef698bbaeb36c": "Dunkelmodus, dynamische Schriftgröße und Bedienungshilfen",
+  "de4b4f96c2949011": "z. B. de-DE, für den Simulator oder eine Android-App",
+  "7ff77b3f846ad73e": "9:41 Uhr und volle Balken für Screenshots, oder zurücksetzen",
+  "d6958531506131da": "Eine Abfrage von Face ID, Touch ID oder Fingerabdruck beantworten",
+  "86249db27bf95865": "Die Daten einer App löschen, als wäre sie gerade installiert",
+  "22d298ff9b191f98": "Die Zwischenablage lesen oder setzen",
+  "f59079f4da39a60a": "Hoch- oder Querformat",
   "6661cfcb8d9efd9d": "Zur Entwicklung installierte Apps oder alle Apps",
-  "5021ac0468eaa4e6": "Einen Build vom Mac installieren: .app/.ipa, Simulator-.app oder .apk",
+  "4f86acfd95052ec5": "Einen Build vom Mac installieren oder einen, der über das Relay hochgeladen wurde: .app/.ipa, Simulator-.app oder .apk",
   "f2d9c22dc9b53669": "Eine zur Entwicklung installierte App entfernen",
   "3124ba2e88cb6894": "Eine App starten und ihre Ausgabe mitschneiden",
   "0a8a7f9c27843869": "Eine laufende App beenden",
   "0ac466474519ce04": "Einen Deep Link, Universal Link oder eine Webseite öffnen",
   "c251abb37649208f": "Ausgabe von print, NSLog und os_log und wie die App beendet wurde",
   "146352292b4cf39c": "Crash-Reports auflisten oder einen lesen: Exception, Grund, abgestürzter Thread",
+  "93fae913627ba671": "CPU, Speicher und auf Android Frames einer laufenden App; Budgets lassen den Aufruf fehlschlagen",
+  "965ce66b601a2102": "Kaltstartzeit über mehrere Läufe: schnellster, Median, langsamster",
+  "491ff4ed5c824653": "Eine React-Native- oder Expo-App über Metro neu laden, sonst über ihr Entwicklermenü",
+  "c135835721e02020": "Das Entwicklermenü einer React-Native- oder Expo-App öffnen",
   "e4911e502264cb64": "Auf dieser Seite",
   "b18ddcdea5477466": "Tool",
   "5772a96c29d1b1e0": "Argumente",
@@ -453,6 +485,11 @@
     "i": 1,
     "c": "Die App zeigt diese Konfigurationen mit den richtigen Pfaden unter „Connect“. Sie enthalten keine Geheimnisse."
   },
+  "03a318a41be05460": {
+    "t": "p",
+    "i": 1,
+    "c": "Claude-Code-Plugin, mit den Skills"
+  },
   "5ed837e9ec0985f9": {
     "t": "p",
     "i": 1,
@@ -469,6 +506,19 @@
         "c": "http://127.0.0.1:4686/mcp"
       },
       " mit dem Token aus „Settings › API“ in der App nutzen. Der Server spricht MCP 2026-07-28 und ältere Versionen bis zurück zu 2024-11-05."
+    ]
+  },
+  "b1bdfeed6ba99add": {
+    "t": "p",
+    "i": 1,
+    "c": [
+      "Jedes Tool läuft auch in einer Shell, für Skripte und für Agenten, die ein Terminal MCP vorziehen. ",
+      {
+        "t": "code",
+        "i": 2,
+        "c": "Mobdev tools"
+      },
+      " listet sie auf; Werte sind JSON, wo sie sich als JSON lesen lassen. Es geht über die laufende App und erreicht so auch iPhones, und mit gestarteten Simulatoren und Android-Geräten funktioniert es auch ohne sie."
     ]
   },
   "088892da2fcf568e": {
@@ -502,6 +552,59 @@
       ") eines aus. Ohne diese Angabe nimmt Mobdev das einzige Gerät oder, wenn daneben Simulatoren oder Android-Geräte laufen, das angeschlossene iPhone."
     ]
   },
+  "1f9bd7d2f66d13c0": {
+    "t": "p",
+    "i": 1,
+    "c": [
+      {
+        "t": "code",
+        "i": 2,
+        "c": "observe"
+      },
+      " ist für einen Agenten der günstigste Blick auf den Bildschirm: eine nummerierte Liste dessen, was sich lesen oder antippen lässt, etwa ",
+      {
+        "t": "code",
+        "i": 3,
+        "c": "[4] Button \"Sign in\" id=login"
+      },
+      ", aus dem UI-Baum oder, wo es keinen gibt, aus der Texterkennung. ",
+      {
+        "t": "code",
+        "i": 4,
+        "c": "tap_mark"
+      },
+      " tippt einen Eintrag über seine Nummer an. ",
+      {
+        "t": "code",
+        "i": 5,
+        "c": "wait_for_idle"
+      },
+      " ersetzt feste Pausen nach Animationen, und ",
+      {
+        "t": "code",
+        "i": 6,
+        "c": "scroll_until_visible"
+      },
+      " ersetzt geratene Wischgesten."
+    ]
+  },
+  "95fdc038237fb016": {
+    "t": "p",
+    "i": 1,
+    "c": [
+      {
+        "t": "strong",
+        "i": 2,
+        "c": "Inspect"
+      },
+      " in der Symbolleiste eines Geräts zeigt Kennung und Beschriftung des Elements unter dem Zeiger, und ein Klick kopiert den Schritt, der es antippt, fertig für einen Flow oder Test."
+    ]
+  },
+  "6fcdb7f4c6f9e8c0": {
+    "t": "p",
+    "i": 1,
+    "c": "Tests und Agenten stellen eine Situation direkt her, statt sich durch die Einstellungen zu tippen: einen Standort oder eine Route, Berechtigungen, eine Push-Mitteilung, Dunkelmodus und Schriftgröße, die Sprache, eine aufgeräumte Statusleiste für Screenshots, Face ID, die Daten einer App und die Ausrichtung. Simulatoren und Android können fast alles davon; ein iPhone im Entwicklermodus übernimmt über Xcode 27 Standort, Darstellung, Statusleiste, Zwischenablage und Ausrichtung."
+  },
   "6c762d7426ab8874": {
     "t": "p",
     "i": 1,
@@ -515,7 +618,7 @@
       ", und lassen sich mit denselben Tools steuern. Auf ihnen musst du nichts einrichten: kein Kabel, kein Bluetooth, kein Entwicklermodus."
     ]
   },
-  "9752b513b409e6bc": {
+  "ad4d7d8d8d31d6d9": {
     "t": "ul",
     "i": 1,
     "c": [
@@ -571,7 +674,7 @@
             "i": 10,
             "c": "escape"
           },
-          " wirkt als Zurück-Taste. Text wird als ASCII eingegeben, und ",
+          " wirkt als Zurück-Taste. Mobdev zeigt den Bildschirm und sendet Eingaben über den Server von scrcpy, den es mitbringt: Das Video ist schnell, und jeder Text lässt sich tippen, Emoji eingeschlossen. ",
           {
             "t": "code",
             "i": 11,
@@ -727,6 +830,43 @@
       " tippt auch Emoji. Der erste Build dauert ein bis zwei Minuten. Mit einem kostenlosen Apple Account vertraust du dem Entwickler einmal unter Einstellungen › Allgemein › VPN und Geräteverwaltung."
     ]
   },
+  "125a6744ca226996": [
+    {
+      "t": "h3",
+      "i": 1,
+      "c": "Leistung und React Native"
+    },
+    {
+      "t": "p",
+      "i": 2,
+      "c": [
+        {
+          "t": "code",
+          "i": 3,
+          "c": "performance"
+        },
+        " misst eine laufende App bis zu einer Minute lang, und ",
+        {
+          "t": "code",
+          "i": 4,
+          "c": "measure_launch"
+        },
+        " stoppt Kaltstarts so, wie Xcode und Android sie angeben. Beide funktionieren auf Simulatoren und Android; auf einem iPhone misst ",
+        {
+          "t": "code",
+          "i": 5,
+          "c": "measure_launch"
+        },
+        " den Bildschirm, bis er stillsteht. Budgets wie ",
+        {
+          "t": "code",
+          "i": 6,
+          "c": "max_ms"
+        },
+        " lassen den Schritt fehlschlagen, so bemerkt ein Test, wenn eine App langsamer oder schwerer geworden ist."
+      ]
+    }
+  ],
   "b9b9c97857392266": {
     "t": "p",
     "i": 1,
@@ -776,6 +916,68 @@
       " es angibt."
     ]
   },
+  "8aa8e70bd804faab": {
+    "t": "p",
+    "i": 1,
+    "c": [
+      "Steuerschritte schauen auf den Bildschirm, statt Wartezeiten zu raten: ",
+      {
+        "t": "code",
+        "i": 2,
+        "c": "if"
+      },
+      " führt Schritte aus, wenn etwas zu sehen ist oder auf einer Plattform, ",
+      {
+        "t": "code",
+        "i": 3,
+        "c": "repeat"
+      },
+      " wiederholt sie eine bestimmte Zahl von Malen oder bis etwas erscheint, und ",
+      {
+        "t": "code",
+        "i": 4,
+        "c": "retry"
+      },
+      " führt sie erneut aus, wenn einer fehlschlägt."
+    ]
+  },
+  "cfcbc8007d6982c0": {
+    "t": "p",
+    "i": 1,
+    "c": [
+      "Flows von ",
+      {
+        "t": "strong",
+        "i": 2,
+        "c": "Maestro"
+      },
+      " laufen unverändert: ",
+      {
+        "t": "code",
+        "i": 3,
+        "c": "run_flow"
+      },
+      ", ",
+      {
+        "t": "code",
+        "i": 4,
+        "c": "Mobdev flow"
+      },
+      " und Tests nehmen ",
+      {
+        "t": "code",
+        "i": 5,
+        "c": ".yaml"
+      },
+      "-Dateien, und ",
+      {
+        "t": "code",
+        "i": 6,
+        "c": "Mobdev convert"
+      },
+      " wandelt einen Flow ins jeweils andere Format um."
+    ]
+  },
   "7ade48dd70ec3ed9": {
     "t": "p",
     "i": 1,
@@ -805,6 +1007,11 @@
       },
       " als die Tools mit Texterkennung, denn die funktionieren auf den virtualisierten Macs von GitHub nicht."
     ]
+  },
+  "3771ab9bd78b101d": {
+    "t": "p",
+    "i": 1,
+    "c": "Auf GitHub erledigt die Mobdev-Action all das auf einem gehosteten Mac: Sie startet einen Simulator, installiert deinen Build, führt ein Testprojekt oder einen Flow aus, schreibt die Ergebnisse in die Job-Zusammenfassung und auf Wunsch in einen Kommentar zum Pull Request und bewahrt Videos und Screenshots als Artefakt auf."
   },
   "a8ffb6f7d9366935": {
     "t": "p",
@@ -885,11 +1092,125 @@
       " sowie ein Video und einen Screenshot je Test."
     ]
   },
-  "b52a625e5a15b378": {
+  "33e2bb5fe5628d43": {
     "t": "p",
     "i": 1,
     "c": [
-      "Skills geben deinem Agenten ganze Arbeitsabläufe auf Basis der Tools: den Kreislauf aus Bauen und Debuggen, Smoke-Tests, Onboarding-Audits und Konkurrenzanalysen. Sie funktionieren mit Claude Code, Codex, Cursor und anderen Agenten, die ",
+      "Wiederhole ",
+      {
+        "t": "code",
+        "i": 2,
+        "c": "--device"
+      },
+      ", um auf mehreren Geräten gleichzeitig zu testen, oder ergänze ",
+      {
+        "t": "code",
+        "i": 3,
+        "c": "--simulator \"iPhone 17\""
+      },
+      ", damit für den Lauf ein Simulator dieses Typs angelegt und danach wieder gelöscht wird. Jedes Gerät bekommt einen eigenen Ordner, und ",
+      {
+        "t": "code",
+        "i": 4,
+        "c": "summary.md"
+      },
+      " passt direkt in eine CI-Job-Zusammenfassung. Hat ein Agent einen Weg durch die App gefunden, gibt ihm ",
+      {
+        "t": "code",
+        "i": 5,
+        "c": "recent_steps"
+      },
+      " die Aktionen, die geklappt haben, zum Speichern mit ",
+      {
+        "t": "code",
+        "i": 6,
+        "c": "save_test"
+      },
+      "."
+    ]
+  },
+  "949bcf3475631db4": {
+    "t": "p",
+    "i": 1,
+    "c": "Drei Tools beurteilen den Bildschirm und lassen ihren Schritt fehlschlagen, wenn er nicht besteht. So prüft ein Test, wie ein Bildschirm aussieht, nicht nur, was darauf steht."
+  },
+  "c6eecc06c1d11f90": {
+    "t": "ul",
+    "i": 1,
+    "c": [
+      {
+        "t": "li",
+        "i": 2,
+        "c": [
+          {
+            "t": "code",
+            "i": 3,
+            "c": "assert_screenshot"
+          },
+          " vergleicht den Bildschirm mit einem Referenzbild. Der erste Lauf nimmt es auf; leg den Ordner ",
+          {
+            "t": "code",
+            "i": 4,
+            "c": "baselines"
+          },
+          " zu deinen Tests. Bei einem Fehlschlag bleibt ein Differenzbild mit markierten Änderungen. Die Statusleiste wird ausgelassen, und ",
+          {
+            "t": "code",
+            "i": 5,
+            "c": "mask"
+          },
+          " lässt mehr aus, etwa eine Uhr oder eine Karte."
+        ]
+      },
+      {
+        "t": "li",
+        "i": 6,
+        "c": [
+          {
+            "t": "code",
+            "i": 7,
+            "c": "accessibility_audit"
+          },
+          " findet Tasten ohne Beschriftung, Tippflächen, die kleiner sind, als iOS und Android empfehlen, Text unter den Kontrastwerten der WCAG und Beschriftungen, die wie Dateinamen oder Kennungen klingen."
+        ]
+      },
+      {
+        "t": "li",
+        "i": 8,
+        "c": [
+          {
+            "t": "code",
+            "i": 9,
+            "c": "assert_with_ai"
+          },
+          " stellt Apple Intelligence auf dem Mac eine Ja/Nein-Frage zum Bildschirm. Der Screenshot bleibt auf dem Mac, auf dem Apple Intelligence eingeschaltet sein muss."
+        ]
+      }
+    ]
+  },
+  "1270954770885374": {
+    "t": "p",
+    "i": 1,
+    "c": [
+      {
+        "t": "code",
+        "i": 2,
+        "c": "crawl_app"
+      },
+      " erkundet eine App selbstständig, ohne Modell: Es startet die App, tippt jedes Element an, das es noch nicht probiert hat, erfasst die Bildschirme mit Screenshots und hält jeden Absturz mit den Schritten fest, die ihn auslösen, als Flow zum Abspielen. Textfelder tippt es nie an, ebenso wenig alles, was nach Löschen, Bezahlen, Kaufen, Senden oder Abmelden klingt. ",
+      {
+        "t": "code",
+        "i": 3,
+        "c": "navigate_to"
+      },
+      " geht danach direkt zu einem erfassten Bildschirm, über seinen Titel."
+    ]
+  },
+  "2981c207065f0b60": {
+    "t": "p",
+    "i": 1,
+    "c": [
+      "Skills geben deinem Agenten ganze Arbeitsabläufe auf Basis der Tools: den Kreislauf aus Bauen und Debuggen, Smoke-Tests, das Nachstellen gemeldeter Fehler, Screenshots für den App Store und Google Play, React-Native- und Expo-Apps, Onboarding-Audits und Konkurrenzanalysen. Sie funktionieren mit Claude Code, Codex, Cursor und anderen Agenten, die ",
       {
         "t": "code",
         "i": 2,
@@ -958,6 +1279,32 @@
       ") wird aus einem Geheimnis abgeleitet, das deinen Mac nie verlässt. Wer ihn hat, kann deine Geräte steuern; „New Client Key“ in der App widerruft ihn. Widerrufst du das Zugangstoken im Dashboard, wird der Mac getrennt."
     ]
   },
+  "12696bc8ca44e2c8": [
+    {
+      "t": "h3",
+      "i": 1,
+      "c": "Builds von überall"
+    },
+    {
+      "t": "p",
+      "i": 2,
+      "c": [
+        "Ein Cloud-Agent oder ein CI-Job baut die App in seinem eigenen Container, lädt den Build über das Relay auf den Mac hoch und installiert ihn dort mit ",
+        {
+          "t": "code",
+          "i": 3,
+          "c": "install_app"
+        },
+        " und der ID des Uploads. Das Relay behält nichts; der Mac löscht den Build einen Tag nach seiner letzten Verwendung. Das Skript braucht nur eine Shell und curl; auf einem Mac erledigt ",
+        {
+          "t": "code",
+          "i": 4,
+          "c": "Mobdev upload"
+        },
+        " dasselbe."
+      ]
+    }
+  ],
   "d5d5541ae86ede6f": [
     {
       "t": "h3",
@@ -1092,7 +1439,7 @@
       " gesetzt, dürfen sich nur Macs verbinden, die das Token kennen."
     ]
   },
-  "8b0238933f22f5cb": {
+  "9978101bdfa6d692": {
     "t": "ul",
     "i": 1,
     "c": [
@@ -1123,6 +1470,11 @@
         "t": "li",
         "i": 6,
         "c": "Agenten handeln auf deinem echten Smartphone mit deinen Konten. Lass bei allem, was Nachrichten sendet, bezahlt oder löscht, einen Menschen mitentscheiden."
+      },
+      {
+        "t": "li",
+        "i": 7,
+        "c": "Unter „Settings › Agents“ trägst du Apps ein, die Agenten nie öffnen dürfen, etwa deine Bank. Das verhindert Versehen; eine Sandbox ist es nicht."
       }
     ]
   },

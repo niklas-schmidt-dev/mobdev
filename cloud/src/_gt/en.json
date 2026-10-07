@@ -282,11 +282,15 @@
   "5d973795984549fc": "Install",
   "93feded7f96bfd7a": "Set up the iPhone",
   "2b1d922a440a6e5c": "Connect an agent",
+  "64792f59c85b8038": "From the terminal",
   "0246f296a9647801": "Tools",
+  "6540bc4928de5ace": "Device state",
   "fd71b8f02b0decc0": "Simulators and Android",
   "c904a627a968008d": "Build, run and debug",
   "af71ec8d1bc09ba6": "Flows and CI",
   "42cce71308122e86": "Tests",
+  "655ace1b049d1c8e": "Checks",
+  "9c00b962b302cf7c": "Explore an app",
   "75d18dac06f4f037": "Skills",
   "01a394b897c45b5a": "Remote access",
   "755fc95de75d13e3": "Run your own relay",
@@ -306,22 +310,50 @@
   "ddd038df170c14ab": "Where a label is",
   "eebc314143e05858": "Tap a visible label",
   "160bcf9c654c89a8": "Wait for text to appear or disappear",
+  "d6edc3f5e2f3fe85": "The screen as numbered marks, cheaper than a screenshot; image draws them on one",
+  "2348533a2dffff97": "Tap a mark from the last observe",
+  "e97c56872b216d2e": "Scroll until something shows; stops at the end of the list",
+  "1f0cb2041827c727": "Wait until the screen stops changing",
+  "d0a651a2da2b92fe": "Volume, mute, play/pause; lock on simulators and Android",
+  "a3c7307f1f2a4367": "Record the screen to an .mp4",
+  "f41a62a71376e00b": "End the recording and say where it is",
+  "7ac9020db1a7cd6e": "The newest actions that worked, as steps for a test",
+  "bb53097697b33342": "Run a shortcut from Apple’s Shortcuts app",
   "d2cbdef90a410a0e": "Elements from the accessibility tree (simulators, Android, iPhones with the UI tree on)",
   "631ced74c82986c2": "Tap an element by identifier or label",
   "cde6ef43d109ddbf": "Wait for an element to appear or disappear",
-  "319fcd5a8366dc5a": "Replay a flow; stops at the first failing step and can save a video",
+  "cdc8646da3ae3f06": "Replay a flow (JSON or Maestro YAML); stops at the first failing step and can save a video",
+  "530259be5a78b2f6": "Compare the screen with a baseline picture; fails with a diff image",
+  "22fe354d9d87eade": "Missing labels, small tap targets, low contrast and unclear labels",
+  "800b2afbc83d0e1b": "Ask Apple Intelligence on the Mac a yes/no question about the screen",
+  "c8efe91c7f37fade": "Explore an app by itself and keep every crash with its steps",
+  "67537938978ed6ca": "Go to a screen that crawl_app mapped",
   "ef679b1a39cb3a6e": "Run a project's tests: every result, the first failure's screen, results.json and junit.xml",
   "1488e7f0ea8303a7": "A project's tests and its newest results",
   "81f56d55045933fc": "Write a test into a project, creating it when needed",
   "b95b3c240b2d36e0": "The newest run's results with each failure's step, screenshot and video",
+  "af08407c2398abf1": "A simulated position, or a route the device follows",
+  "0d4971d236379131": "Grant, revoke or reset location, photos, camera and more without the prompt",
+  "ff4d2767b050d628": "A push notification to a simulator app",
+  "1abef698bbaeb36c": "Dark mode, Dynamic Type and accessibility switches",
+  "de4b4f96c2949011": "e.g. de-DE, for the simulator or one Android app",
+  "7ff77b3f846ad73e": "9:41 and full bars for screenshots, or clear",
+  "d6958531506131da": "Answer a Face ID, Touch ID or fingerprint prompt",
+  "86249db27bf95865": "Delete an app’s data as if it had just been installed",
+  "22d298ff9b191f98": "Read the clipboard, or set it",
+  "f59079f4da39a60a": "Portrait or landscape",
   "6661cfcb8d9efd9d": "Apps installed for development, or every app",
-  "5021ac0468eaa4e6": "Install a build from the Mac: .app/.ipa, simulator .app or .apk",
+  "4f86acfd95052ec5": "Install a build from the Mac, or one uploaded through the relay: .app/.ipa, simulator .app or .apk",
   "f2d9c22dc9b53669": "Remove an app installed for development",
   "3124ba2e88cb6894": "Launch an app and capture what it prints",
   "0a8a7f9c27843869": "Stop a running app",
   "0ac466474519ce04": "Open a deep link, universal link or web page",
   "c251abb37649208f": "print, NSLog and os_log output, and how the app ended",
   "146352292b4cf39c": "List crash reports, or read one: exception, reason, crashed thread",
+  "93fae913627ba671": "CPU, memory and, on Android, frames of a running app; budgets fail the call",
+  "965ce66b601a2102": "Cold launch time over several runs: fastest, median, slowest",
+  "491ff4ed5c824653": "Reload a React Native or Expo app through Metro, else through its developer menu",
+  "c135835721e02020": "Open a React Native or Expo app’s developer menu",
   "e4911e502264cb64": "On this page",
   "b18ddcdea5477466": "Tool",
   "5772a96c29d1b1e0": "Arguments",
@@ -453,6 +485,11 @@
     "i": 1,
     "c": "The app shows these with the right paths under Connect. They contain no secret."
   },
+  "03a318a41be05460": {
+    "t": "p",
+    "i": 1,
+    "c": "Claude Code plugin, with the skills"
+  },
   "5ed837e9ec0985f9": {
     "t": "p",
     "i": 1,
@@ -469,6 +506,19 @@
         "c": "http://127.0.0.1:4686/mcp"
       },
       " with the token from Settings › API. The server speaks MCP 2026-07-28 and the earlier versions back to 2024-11-05."
+    ]
+  },
+  "b1bdfeed6ba99add": {
+    "t": "p",
+    "i": 1,
+    "c": [
+      "Every tool also runs from a shell, for scripts and for agents that prefer a terminal to MCP. ",
+      {
+        "t": "code",
+        "i": 2,
+        "c": "Mobdev tools"
+      },
+      " lists them; values are JSON where they parse as JSON. It goes through the running app, so it reaches iPhones too, and works on its own with booted simulators and Android devices."
     ]
   },
   "088892da2fcf568e": {
@@ -502,6 +552,59 @@
       ") to pick one. Without it, Mobdev uses the only device, or the connected iPhone when simulators or Android devices run next to it."
     ]
   },
+  "1f9bd7d2f66d13c0": {
+    "t": "p",
+    "i": 1,
+    "c": [
+      {
+        "t": "code",
+        "i": 2,
+        "c": "observe"
+      },
+      " is the cheapest way for an agent to look: a numbered list of what can be read or tapped, such as ",
+      {
+        "t": "code",
+        "i": 3,
+        "c": "[4] Button \"Sign in\" id=login"
+      },
+      ", from the UI tree or, where there is none, from text recognition. ",
+      {
+        "t": "code",
+        "i": 4,
+        "c": "tap_mark"
+      },
+      " taps one by its number. ",
+      {
+        "t": "code",
+        "i": 5,
+        "c": "wait_for_idle"
+      },
+      " replaces fixed pauses after animations, and ",
+      {
+        "t": "code",
+        "i": 6,
+        "c": "scroll_until_visible"
+      },
+      " replaces guessed swipes."
+    ]
+  },
+  "95fdc038237fb016": {
+    "t": "p",
+    "i": 1,
+    "c": [
+      {
+        "t": "strong",
+        "i": 2,
+        "c": "Inspect"
+      },
+      " in a device’s toolbar shows the identifier and label of the element under the pointer, and a click copies the step that taps it, ready for a flow or test."
+    ]
+  },
+  "6fcdb7f4c6f9e8c0": {
+    "t": "p",
+    "i": 1,
+    "c": "Tests and agents set up a situation directly instead of tapping through Settings: a location or route, permissions, a push notification, dark mode and text size, the language, a clean status bar for screenshots, Face ID, an app’s data and the orientation. Simulators and Android take almost all of it; an iPhone in Developer Mode takes the location, appearance, status bar, clipboard and orientation through Xcode 27."
+  },
   "6c762d7426ab8874": {
     "t": "p",
     "i": 1,
@@ -515,7 +618,7 @@
       ", and take the same tools. There is nothing to set up on them: no cable, no Bluetooth, no Developer Mode."
     ]
   },
-  "9752b513b409e6bc": {
+  "ad4d7d8d8d31d6d9": {
     "t": "ul",
     "i": 1,
     "c": [
@@ -570,7 +673,7 @@
             "i": 10,
             "c": "escape"
           },
-          " is Back. Text is typed as ASCII, and ",
+          " is Back. Mobdev shows the screen and sends input through scrcpy’s server, which it brings along: video is fast, and any text types, emoji included. ",
           {
             "t": "code",
             "i": 11,
@@ -726,6 +829,43 @@
       " also types emoji. The first build takes a minute or two. With a free Apple Account, trust the developer once under Settings › General › VPN & Device Management."
     ]
   },
+  "125a6744ca226996": [
+    {
+      "t": "h3",
+      "i": 1,
+      "c": "Performance and React Native"
+    },
+    {
+      "t": "p",
+      "i": 2,
+      "c": [
+        {
+          "t": "code",
+          "i": 3,
+          "c": "performance"
+        },
+        " samples a running app for up to a minute, and ",
+        {
+          "t": "code",
+          "i": 4,
+          "c": "measure_launch"
+        },
+        " times cold launches the way Xcode and Android report them. Both work on simulators and Android; on an iPhone, ",
+        {
+          "t": "code",
+          "i": 5,
+          "c": "measure_launch"
+        },
+        " times the screen until it stays still. Budgets such as ",
+        {
+          "t": "code",
+          "i": 6,
+          "c": "max_ms"
+        },
+        " fail the step, so a test catches an app that got slower or heavier."
+      ]
+    }
+  ],
   "b9b9c97857392266": {
     "t": "p",
     "i": 1,
@@ -775,6 +915,67 @@
       " argument says."
     ]
   },
+  "8aa8e70bd804faab": {
+    "t": "p",
+    "i": 1,
+    "c": [
+      "Control steps look at the screen instead of guessing waits: ",
+      {
+        "t": "code",
+        "i": 2,
+        "c": "if"
+      },
+      " runs steps when something is visible or on one platform, ",
+      {
+        "t": "code",
+        "i": 3,
+        "c": "repeat"
+      },
+      " runs them a number of times or until something shows, and ",
+      {
+        "t": "code",
+        "i": 4,
+        "c": "retry"
+      },
+      " runs them again when one fails."
+    ]
+  },
+  "cfcbc8007d6982c0": {
+    "t": "p",
+    "i": 1,
+    "c": [
+      {
+        "t": "strong",
+        "i": 2,
+        "c": "Maestro"
+      },
+      " flows run as they are: ",
+      {
+        "t": "code",
+        "i": 3,
+        "c": "run_flow"
+      },
+      ", ",
+      {
+        "t": "code",
+        "i": 4,
+        "c": "Mobdev flow"
+      },
+      " and tests take ",
+      {
+        "t": "code",
+        "i": 5,
+        "c": ".yaml"
+      },
+      " files, and ",
+      {
+        "t": "code",
+        "i": 6,
+        "c": "Mobdev convert"
+      },
+      " turns a flow into the other format."
+    ]
+  },
   "7ade48dd70ec3ed9": {
     "t": "p",
     "i": 1,
@@ -804,6 +1005,11 @@
       },
       " to the OCR tools, which do not work on GitHub’s virtualized Macs."
     ]
+  },
+  "3771ab9bd78b101d": {
+    "t": "p",
+    "i": 1,
+    "c": "On GitHub, the Mobdev action does all of it on a hosted Mac: it boots a simulator, installs your build, runs a test project or a flow, puts the results into the job summary and, if you want, a pull request comment, and keeps the videos and screenshots as an artifact."
   },
   "a8ffb6f7d9366935": {
     "t": "p",
@@ -884,11 +1090,125 @@
       " and a video and a screenshot per test."
     ]
   },
-  "b52a625e5a15b378": {
+  "33e2bb5fe5628d43": {
     "t": "p",
     "i": 1,
     "c": [
-      "Skills give your agent whole workflows on top of the tools: the build and debug loop, smoke tests, onboarding audits and competitor research. They work with Claude Code, Codex, Cursor and other agents that read ",
+      "Repeat ",
+      {
+        "t": "code",
+        "i": 2,
+        "c": "--device"
+      },
+      " to run on several devices at once, or add ",
+      {
+        "t": "code",
+        "i": 3,
+        "c": "--simulator \"iPhone 17\""
+      },
+      " to make a simulator of that type for the run and delete it afterwards. Each device gets its own folder, and ",
+      {
+        "t": "code",
+        "i": 4,
+        "c": "summary.md"
+      },
+      " is ready for a CI job summary. When an agent has found a path through the app, ",
+      {
+        "t": "code",
+        "i": 5,
+        "c": "recent_steps"
+      },
+      " hands it the actions that worked, to save with ",
+      {
+        "t": "code",
+        "i": 6,
+        "c": "save_test"
+      },
+      "."
+    ]
+  },
+  "949bcf3475631db4": {
+    "t": "p",
+    "i": 1,
+    "c": "Three tools judge the screen and fail their step when it does not pass, so a test checks how a screen looks, not only what is on it."
+  },
+  "c6eecc06c1d11f90": {
+    "t": "ul",
+    "i": 1,
+    "c": [
+      {
+        "t": "li",
+        "i": 2,
+        "c": [
+          {
+            "t": "code",
+            "i": 3,
+            "c": "assert_screenshot"
+          },
+          " compares the screen with a baseline picture. The first run records it; keep the ",
+          {
+            "t": "code",
+            "i": 4,
+            "c": "baselines"
+          },
+          " folder with your tests. A failure keeps a diff image with the changed regions marked. The status bar is left out, and ",
+          {
+            "t": "code",
+            "i": 5,
+            "c": "mask"
+          },
+          " leaves out more, such as a clock or a map."
+        ]
+      },
+      {
+        "t": "li",
+        "i": 6,
+        "c": [
+          {
+            "t": "code",
+            "i": 7,
+            "c": "accessibility_audit"
+          },
+          " finds buttons without a label, tap targets smaller than iOS and Android recommend, text below WCAG’s contrast ratios and labels that read like file names or identifiers."
+        ]
+      },
+      {
+        "t": "li",
+        "i": 8,
+        "c": [
+          {
+            "t": "code",
+            "i": 9,
+            "c": "assert_with_ai"
+          },
+          " asks Apple Intelligence on the Mac a yes/no question about the screen. The screenshot stays on the Mac, which needs Apple Intelligence turned on."
+        ]
+      }
+    ]
+  },
+  "1270954770885374": {
+    "t": "p",
+    "i": 1,
+    "c": [
+      {
+        "t": "code",
+        "i": 2,
+        "c": "crawl_app"
+      },
+      " explores an app by itself, without a model: it launches the app, taps every element it has not tried, maps the screens with screenshots and keeps every crash with the steps that cause it as a flow to replay. It never taps text fields or anything that reads like delete, pay, buy, send or sign out. ",
+      {
+        "t": "code",
+        "i": 3,
+        "c": "navigate_to"
+      },
+      " then goes straight to a mapped screen by its title."
+    ]
+  },
+  "2981c207065f0b60": {
+    "t": "p",
+    "i": 1,
+    "c": [
+      "Skills give your agent whole workflows on top of the tools: the build and debug loop, smoke tests, reproducing a reported bug, App Store and Google Play screenshots, React Native and Expo apps, onboarding audits and competitor research. They work with Claude Code, Codex, Cursor and other agents that read ",
       {
         "t": "code",
         "i": 2,
@@ -957,6 +1277,32 @@
       ") is derived from a secret that never leaves your Mac. Anyone with it can control the phone; “New Client Key” in the app revokes it. Revoking the access token in the dashboard disconnects the Mac."
     ]
   },
+  "12696bc8ca44e2c8": [
+    {
+      "t": "h3",
+      "i": 1,
+      "c": "Builds from anywhere"
+    },
+    {
+      "t": "p",
+      "i": 2,
+      "c": [
+        "A cloud agent or a CI job builds the app in its own container, uploads the build to the Mac through the relay and installs it there with ",
+        {
+          "t": "code",
+          "i": 3,
+          "c": "install_app"
+        },
+        " and the upload’s id. The relay keeps nothing; the Mac deletes the build a day after its last use. The script needs only a shell and curl; on a Mac, ",
+        {
+          "t": "code",
+          "i": 4,
+          "c": "Mobdev upload"
+        },
+        " does the same."
+      ]
+    }
+  ],
   "d5d5541ae86ede6f": [
     {
       "t": "h3",
@@ -1090,7 +1436,7 @@
       " set, only Macs that know the token may connect."
     ]
   },
-  "8b0238933f22f5cb": {
+  "9978101bdfa6d692": {
     "t": "ul",
     "i": 1,
     "c": [
@@ -1121,6 +1467,11 @@
         "t": "li",
         "i": 6,
         "c": "Agents act on your real phone with your accounts. Keep a person in the loop for anything that sends messages, pays or deletes."
+      },
+      {
+        "t": "li",
+        "i": 7,
+        "c": "Under Settings › Agents, list apps agents may never open, such as your bank. It prevents mistakes; it is not a sandbox."
       }
     ]
   },

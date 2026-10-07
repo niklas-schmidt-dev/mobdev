@@ -18,11 +18,15 @@ const sections = [
   ["install", msg("Install")],
   ["iphone", msg("Set up the iPhone")],
   ["agents", msg("Connect an agent")],
+  ["terminal", msg("From the terminal")],
   ["tools", msg("Tools")],
+  ["state", msg("Device state")],
   ["emulators", msg("Simulators and Android")],
   ["developer", msg("Build, run and debug")],
   ["flows", msg("Flows and CI")],
   ["tests", msg("Tests")],
+  ["checks", msg("Checks")],
+  ["crawl", msg("Explore an app")],
   ["skills", msg("Skills")],
   ["remote", msg("Remote access")],
   ["self-host", msg("Run your own relay")],
@@ -50,26 +54,62 @@ const tools = [
   ["find_text", "text", msg("Where a label is")],
   ["tap_text", "text, index", msg("Tap a visible label")],
   ["wait_for_text", "text, timeout, gone", msg("Wait for text to appear or disappear")],
+  ["observe", "image, contains", msg("The screen as numbered marks, cheaper than a screenshot; image draws them on one")],
+  ["tap_mark", "mark", msg("Tap a mark from the last observe")],
+  ["scroll_until_visible", "text, id, direction, max_scrolls", msg("Scroll until something shows; stops at the end of the list")],
+  ["wait_for_idle", "timeout, stable", msg("Wait until the screen stops changing")],
+  ["press_button", "button", msg("Volume, mute, play/pause; lock on simulators and Android")],
+  ["start_recording", "path", msg("Record the screen to an .mp4")],
+  ["stop_recording", "", msg("End the recording and say where it is")],
+  ["recent_steps", "count, clear", msg("The newest actions that worked, as steps for a test")],
+  ["run_shortcut", "name", msg("Run a shortcut from Apple’s Shortcuts app")],
   ["ui_tree", "contains, all", msg("Elements from the accessibility tree (simulators, Android, iPhones with the UI tree on)")],
   ["tap_element", "id, text, index, timeout", msg("Tap an element by identifier or label")],
   ["wait_for_element", "id, text, timeout, gone", msg("Wait for an element to appear or disappear")],
-  ["run_flow", "path, steps, video", msg("Replay a flow; stops at the first failing step and can save a video")],
+  ["run_flow", "path, steps, variables, video", msg("Replay a flow (JSON or Maestro YAML); stops at the first failing step and can save a video")],
+  ["assert_screenshot", "name, threshold, mask, update", msg("Compare the screen with a baseline picture; fails with a diff image")],
+  ["accessibility_audit", "image, fail_on, ignore", msg("Missing labels, small tap targets, low contrast and unclear labels")],
+  ["assert_with_ai", "question, expect", msg("Ask Apple Intelligence on the Mac a yes/no question about the screen")],
+  ["crawl_app", "bundle_id, max_actions, seconds, avoid", msg("Explore an app by itself and keep every crash with its steps")],
+  ["navigate_to", "bundle_id, screen", msg("Go to a screen that crawl_app mapped")],
   ["run_tests", "project, tests, variables, video", msg("Run a project's tests: every result, the first failure's screen, results.json and junit.xml")],
   ["list_tests", "project", msg("A project's tests and its newest results")],
   ["save_test", "project, name, steps, description, platforms, file", msg("Write a test into a project, creating it when needed")],
   ["test_result", "project, run", msg("The newest run's results with each failure's step, screenshot and video")],
 ];
 
+/** Set a device up directly instead of tapping through Settings. */
+const stateTools = [
+  ["set_location", "latitude, longitude, route, speed, clear", msg("A simulated position, or a route the device follows")],
+  ["set_permission", "bundle_id, permission, state", msg("Grant, revoke or reset location, photos, camera and more without the prompt")],
+  ["send_push", "bundle_id, title, body, badge, data, payload", msg("A push notification to a simulator app")],
+  ["set_appearance", "dark, text_size, increase_contrast, reduce_motion", msg("Dark mode, Dynamic Type and accessibility switches")],
+  ["set_language", "language, bundle_id", msg("e.g. de-DE, for the simulator or one Android app")],
+  ["set_status_bar", "preset, time, battery_level, …", msg("9:41 and full bars for screenshots, or clear")],
+  ["biometrics", "action", msg("Answer a Face ID, Touch ID or fingerprint prompt")],
+  ["reset_app", "bundle_id, keychain", msg("Delete an app’s data as if it had just been installed")],
+  ["clipboard", "text", msg("Read the clipboard, or set it")],
+  ["set_orientation", "orientation", msg("Portrait or landscape")],
+];
+
 /** Need Developer Mode on the iPhone and Xcode on the Mac. */
 const developerTools = [
   ["list_apps", "all", msg("Apps installed for development, or every app")],
-  ["install_app", "path", msg("Install a build from the Mac: .app/.ipa, simulator .app or .apk")],
+  ["install_app", "path, upload", msg("Install a build from the Mac, or one uploaded through the relay: .app/.ipa, simulator .app or .apk")],
   ["uninstall_app", "bundle_id", msg("Remove an app installed for development")],
   ["launch_app", "bundle_id, arguments, environment, restart", msg("Launch an app and capture what it prints")],
   ["stop_app", "bundle_id", msg("Stop a running app")],
   ["open_url", "url", msg("Open a deep link, universal link or web page")],
   ["logs", "bundle_id, after, lines, contains", msg("print, NSLog and os_log output, and how the app ended")],
   ["crash_reports", "app, name, limit", msg("List crash reports, or read one: exception, reason, crashed thread")],
+];
+
+/** Measure an app, and the React Native and Expo dev loop. */
+const performanceTools = [
+  ["performance", "bundle_id, seconds, max_cpu, max_memory_mb, max_janky_percent", msg("CPU, memory and, on Android, frames of a running app; budgets fail the call")],
+  ["measure_launch", "bundle_id, runs, method, max_ms, stable", msg("Cold launch time over several runs: fastest, median, slowest")],
+  ["reload_app", "port", msg("Reload a React Native or Expo app through Metro, else through its developer menu")],
+  ["dev_menu", "port", msg("Open a React Native or Expo app’s developer menu")],
 ];
 
 const code = "rounded bg-mist px-1.5 py-0.5 text-[15px]";
@@ -201,6 +241,10 @@ function Docs() {
               </T>
               <p className="text-[15px] font-semibold text-ink">Claude Code</p>
               <Code>{"claude mcp add --scope user mobdev -- /Applications/Mobdev.app/Contents/MacOS/Mobdev mcp"}</Code>
+              <T>
+                <p className="text-[15px] font-semibold text-ink">Claude Code plugin, with the skills</p>
+              </T>
+              <Code>{"/plugin marketplace add niklas-schmidt-dev/mobdev\n/plugin install mobdev@mobdev"}</Code>
               <p className="text-[15px] font-semibold text-ink">Codex (~/.codex/config.toml)</p>
               <Code>{'[mcp_servers.mobdev]\ncommand = "/Applications/Mobdev.app/Contents/MacOS/Mobdev"\nargs = ["mcp"]'}</Code>
               <T>
@@ -217,6 +261,20 @@ function Docs() {
               </T>
             </Section>
 
+            <Section id="terminal">
+              <T>
+                <p>
+                  Every tool also runs from a shell, for scripts and for agents that prefer a terminal to
+                  MCP. <code className={code}>Mobdev tools</code> lists them; values are JSON where they parse as JSON.
+                  It goes through the running app, so it reaches iPhones too, and works on its own with booted simulators
+                  and Android devices.
+                </p>
+              </T>
+              <Code>
+                {'M=/Applications/Mobdev.app/Contents/MacOS/Mobdev\n$M observe\n$M tap_mark mark=4\n$M type_text text="hello world" submit=true\n$M screenshot --image screen.png'}
+              </Code>
+            </Section>
+
             <Section id="tools">
               <T>
                 <p>
@@ -228,6 +286,37 @@ function Docs() {
                 </p>
               </T>
               <ToolTable rows={tools} />
+              <T>
+                <p>
+                  <code className={code}>observe</code> is the cheapest way for an agent to look: a numbered list of
+                  what can be read or tapped, such as <code className={code}>[4] Button "Sign in" id=login</code>, from
+                  the UI tree or, where there is none, from text recognition. <code className={code}>tap_mark</code> taps
+                  one by its number. <code className={code}>wait_for_idle</code> replaces fixed pauses after animations,
+                  and <code className={code}>scroll_until_visible</code> replaces guessed swipes.
+                </p>
+              </T>
+              <T>
+                <p>
+                  <strong>Inspect</strong> in a device’s toolbar shows the identifier and label of the element under the
+                  pointer, and a click copies the step that taps it, ready for a flow or test.
+                </p>
+              </T>
+            </Section>
+
+            <Section id="state">
+              <T>
+                <p>
+                  Tests and agents set up a situation directly instead of tapping through Settings: a location or route,
+                  permissions, a push notification, dark mode and text size, the language, a clean status bar for
+                  screenshots, Face ID, an app’s data and the orientation. Simulators and Android take almost all of it;
+                  an iPhone in Developer Mode takes the location, appearance, status bar, clipboard and orientation
+                  through Xcode 27.
+                </p>
+              </T>
+              <ToolTable rows={stateTools} />
+              <Code>
+                {'{"set_permission": {"bundle_id": "com.example.MyApp", "permission": "location"}}\n{"set_location": {"latitude": 52.52, "longitude": 13.405}}\n{"send_push": {"bundle_id": "com.example.MyApp", "title": "Order shipped", "data": {"order": 7}}}\n{"set_status_bar": {"preset": "screenshot"}}'}
+              </Code>
             </Section>
 
             <Section id="emulators">
@@ -250,9 +339,10 @@ function Docs() {
                     <strong>Android</strong> needs adb from the Android SDK, for example through Android Studio.
                     Emulators and phones with USB debugging appear while adb runs. Install
                     an <code className={code}>.apk</code>, <code className={code}>logs</code> follows logcat,
-                    and <code className={code}>press_key</code> with <code className={code}>escape</code> is Back. Text
-                    is typed as ASCII, and <code className={code}>open_app</code> matches package names: “Settings”
-                    opens com.android.settings.
+                    and <code className={code}>press_key</code> with <code className={code}>escape</code> is Back.
+                    Mobdev shows the screen and sends input through scrcpy’s server, which it brings along: video
+                    is fast, and any text types, emoji included. <code className={code}>open_app</code> matches
+                    package names: “Settings” opens com.android.settings.
                   </li>
                 </ul>
               </T>
@@ -308,6 +398,18 @@ function Docs() {
                   VPN &amp; Device Management.
                 </p>
               </T>
+              <T>
+                <h3 className="pt-2 text-[21px] font-semibold tracking-tight text-ink">Performance and React Native</h3>
+                <p>
+                  <code className={code}>performance</code> samples a running app for up to a minute,
+                  and <code className={code}>measure_launch</code> times cold launches the way Xcode and Android report
+                  them. Both work on simulators and Android; on an iPhone, <code className={code}>measure_launch</code> times
+                  the screen until it stays still. Budgets such as <code className={code}>max_ms</code> fail the step, so a
+                  test catches an app that got slower or heavier.
+                </p>
+              </T>
+              <ToolTable rows={performanceTools} />
+              <Code>{'{"measure_launch": {"bundle_id": "com.example.MyApp", "runs": 5, "max_ms": 1500}}\n{"performance": {"bundle_id": "com.example.MyApp", "seconds": 20, "max_memory_mb": 300}}'}</Code>
             </Section>
 
             <Section id="flows">
@@ -328,6 +430,24 @@ function Docs() {
               </Code>
               <T>
                 <p>
+                  Control steps look at the screen instead of guessing waits: <code className={code}>if</code> runs steps
+                  when something is visible or on one platform, <code className={code}>repeat</code> runs them a number of
+                  times or until something shows, and <code className={code}>retry</code> runs them again when one fails.
+                </p>
+              </T>
+              <Code>
+                {'{"if": {"visible": {"text": "Allow"}, "then": [{"tap_element": {"text": "Allow"}}]}}\n{"repeat": {"until_visible": {"id": "checkout"}, "max": 10, "steps": [{"scroll": {"direction": "down"}}]}}\n{"retry": {"times": 2, "steps": [{"tap_element": {"id": "pay"}}, {"wait_for_text": {"text": "Paid"}}]}}'}
+              </Code>
+              <T>
+                <p>
+                  <strong>Maestro</strong> flows run as they are: <code className={code}>run_flow</code>, <code className={code}>Mobdev flow</code> and
+                  tests take <code className={code}>.yaml</code> files, and <code className={code}>Mobdev convert</code> turns
+                  a flow into the other format.
+                </p>
+              </T>
+              <Code>{"Mobdev convert login.yaml > login.json   # Maestro to Mobdev\nMobdev convert login.json > login.yaml   # Mobdev to Maestro"}</Code>
+              <T>
+                <p>
                   <code className={code}>Mobdev flow</code> runs on booted simulators and Android devices, for scripts
                   and CI. It exits 0 when every step passed and 1 when one failed; <code className={code}>--artifacts</code> keeps
                   a video of the run (<code className={code}>run.mp4</code>), the activity, crash reports and a
@@ -338,6 +458,16 @@ function Docs() {
               </T>
               <Code>
                 {"/Applications/Mobdev.app/Contents/MacOS/Mobdev flow sign-in.json \\\n  --device \"$UDID\" --artifacts flow-artifacts"}
+              </Code>
+              <T>
+                <p>
+                  On GitHub, the Mobdev action does all of it on a hosted Mac: it boots a simulator, installs your
+                  build, runs a test project or a flow, puts the results into the job summary and, if you want, a pull
+                  request comment, and keeps the videos and screenshots as an artifact.
+                </p>
+              </T>
+              <Code>
+                {"- uses: niklas-schmidt-dev/mobdev/actions/test@main\n  with:\n    project: mobdev\n    comment: true"}
               </Code>
             </Section>
 
@@ -369,12 +499,66 @@ function Docs() {
               <Code>
                 {"/Applications/Mobdev.app/Contents/MacOS/Mobdev test mobdev/ \\\n  --device \"$UDID\" --artifacts test-artifacts"}
               </Code>
+              <T>
+                <p>
+                  Repeat <code className={code}>--device</code> to run on several devices at once,
+                  or add <code className={code}>--simulator "iPhone 17"</code> to make a simulator of that type for the
+                  run and delete it afterwards. Each device gets its own folder, and <code className={code}>summary.md</code> is
+                  ready for a CI job summary. When an agent has found a path through the
+                  app, <code className={code}>recent_steps</code> hands it the actions that worked, to save with <code className={code}>save_test</code>.
+                </p>
+              </T>
+            </Section>
+
+            <Section id="checks">
+              <T>
+                <p>
+                  Three tools judge the screen and fail their step when it does not pass, so a test checks how a screen
+                  looks, not only what is on it.
+                </p>
+              </T>
+              <Code>
+                {'{"assert_screenshot": {"name": "home", "mask": ["home.clock"]}}\n{"accessibility_audit": {"fail_on": "error"}}\n{"assert_with_ai": {"question": "Is any text cut off?", "expect": "no"}}'}
+              </Code>
+              <T>
+                <ul className="list-disc space-y-2 pl-5">
+                  <li>
+                    <code className={code}>assert_screenshot</code> compares the screen with a baseline picture. The first
+                    run records it; keep the <code className={code}>baselines</code> folder with your tests. A failure
+                    keeps a diff image with the changed regions marked. The status bar is left out,
+                    and <code className={code}>mask</code> leaves out more, such as a clock or a map.
+                  </li>
+                  <li>
+                    <code className={code}>accessibility_audit</code> finds buttons without a label, tap targets smaller
+                    than iOS and Android recommend, text below WCAG’s contrast ratios and labels that read like file
+                    names or identifiers.
+                  </li>
+                  <li>
+                    <code className={code}>assert_with_ai</code> asks Apple Intelligence on the Mac a yes/no question about
+                    the screen. The screenshot stays on the Mac, which needs Apple Intelligence turned on.
+                  </li>
+                </ul>
+              </T>
+            </Section>
+
+            <Section id="crawl">
+              <T>
+                <p>
+                  <code className={code}>crawl_app</code> explores an app by itself, without a model: it launches the
+                  app, taps every element it has not tried, maps the screens with screenshots and keeps every crash with
+                  the steps that cause it as a flow to replay. It never taps text fields or anything that reads like
+                  delete, pay, buy, send or sign out. <code className={code}>navigate_to</code> then goes straight to a
+                  mapped screen by its title.
+                </p>
+              </T>
+              <Code>{'{"crawl_app": {"bundle_id": "com.example.MyApp", "max_actions": 60}}\n{"navigate_to": {"bundle_id": "com.example.MyApp", "screen": "Settings"}}'}</Code>
             </Section>
 
             <Section id="skills">
               <T>
                 <p>
                   Skills give your agent whole workflows on top of the tools: the build and debug loop, smoke tests,
+                  reproducing a reported bug, App Store and Google Play screenshots, React Native and Expo apps,
                   onboarding audits and competitor research. They work with Claude Code, Codex, Cursor and other agents
                   that read <code className={code}>SKILL.md</code> files.
                 </p>
@@ -414,6 +598,18 @@ function Docs() {
                   token in the dashboard disconnects the Mac.
                 </p>
               </T>
+              <T>
+                <h3 className="pt-2 text-[21px] font-semibold tracking-tight text-ink">Builds from anywhere</h3>
+                <p>
+                  A cloud agent or a CI job builds the app in its own container, uploads the build to the Mac through
+                  the relay and installs it there with <code className={code}>install_app</code> and the upload’s id. The
+                  relay keeps nothing; the Mac deletes the build a day after its last use. The script needs only a shell
+                  and curl; on a Mac, <code className={code}>Mobdev upload</code> does the same.
+                </p>
+              </T>
+              <Code>
+                {'curl -fsSLO https://raw.githubusercontent.com/niklas-schmidt-dev/mobdev/main/scripts/mobdev-upload.sh\nexport MOBDEV_URL=https://relay.mobdev.sh/h/<mac-name> MOBDEV_KEY=mdc_…\nid=$(sh mobdev-upload.sh app-debug.apk)\n# install_app {"upload": "<id>", "device": "emulator-5554"}'}
+              </Code>
               <T>
                 <h3 className="pt-2 text-[21px] font-semibold tracking-tight text-ink">Limits of the hosted relay</h3>
                 <p>
@@ -468,6 +664,10 @@ function Docs() {
                   <li>
                     Agents act on your real phone with your accounts. Keep a person in the loop for anything that sends
                     messages, pays or deletes.
+                  </li>
+                  <li>
+                    Under Settings › Agents, list apps agents may never open, such as your bank. It prevents mistakes; it
+                    is not a sandbox.
                   </li>
                 </ul>
               </T>
