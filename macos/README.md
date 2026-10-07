@@ -476,7 +476,7 @@ Commit everything but `output/`. It brings its own `.gitignore`, so the reposito
 is, and it appears only when Mobdev first writes there. Only `mobdev.json` makes a folder a
 project; the other folders appear when something is saved into them.
 
-- **New Project…** (⇧⌘N, or under the projects in the sidebar) asks for the repository and writes
+- **New Project…** (⇧⌘N, or the + below the sidebar) asks for the repository and writes
   `mobdev/mobdev.json` into it. It fills in the bundle ID the repository declares: an Expo
   `app.json` or `app.config`, the Xcode project (or an XcodeGen `project.yml` or `Info.plist`),
   Gradle's `applicationId` or a Capacitor config, one that iOS and Android share first; the menu
@@ -491,7 +491,7 @@ project; the other folders appear when something is saved into them.
   tests, mapping the app, checking each change, reproducing a bug, store screenshots, an
   onboarding audit and CI, filled in with the project's folder, app and device and naming the
   skill that does the job.
-- **Rename…** (in the project's overview or its context menu) changes the name in its
+- **Rename…** (in the ⋯ menu of the project's overview or its context menu) changes the name in its
   `mobdev.json`, which test results and CI show too; the rest of the file stays as it is written.
 - The project you select is the **active** one. What is saved without a path lands there:
   recordings, `save_screenshot`, `save_flow`, `save_test`, crawls with the app's map, and named
