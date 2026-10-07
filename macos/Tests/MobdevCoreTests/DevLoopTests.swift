@@ -102,6 +102,8 @@ final class DevLoopPhone: PhoneBackend, @unchecked Sendable {
     let timedApps: TimedApps?
     let tree: [UIElement]?
     let input: InputRoute
+    /// Frames read since the launch that `TimedApps` last recorded.
+    private let framesSinceLaunch = Locked<(launch: Date?, count: Int)>((nil, 0))
 
     init(
         performance: AppPerformance? = nil, menu: String? = "Shook the simulator", timedApps: TimedApps? = nil,
@@ -132,12 +134,18 @@ final class DevLoopPhone: PhoneBackend, @unchecked Sendable {
         return status
     }
 
-    /// Home until activated, then 0.2 s each of two animation frames, then the app.
+    /// Home until activated, then three reads each of two animation frames, then the app.
     func frame() -> CGImage? {
         guard let timedApps else { return base.frame() }
         guard let activated = timedApps.activated.get() else { return Self.home }
-        let elapsed = Date().timeIntervalSince(activated)
-        return elapsed < 0.2 ? Self.animation1 : elapsed < 0.4 ? Self.animation2 : Self.app
+        // Counted in frames read rather than in time, so a test process that a CI runner starves
+        // still sees both animation frames before the app (2026-10-07).
+        let count = framesSinceLaunch.withLock { state -> Int in
+            if state.launch != activated { state = (activated, 0) }
+            state.count += 1
+            return state.count
+        }
+        return count <= 3 ? Self.animation1 : count <= 6 ? Self.animation2 : Self.app
     }
 
     func tap(at point: NormalizedPoint, hold: TimeInterval) async throws { try await base.tap(at: point, hold: hold) }
@@ -496,12 +504,15 @@ func closedPort() throws -> Int {
     @Test func measureLaunchTimesTheScreenWhereTheDeviceHasNoTiming() async throws {
         let apps = TimedApps()
         let tools = tools(DevLoopPhone(performance: nil, menu: nil, timedApps: apps, input: .direct("Simulator")))
+        let started = Date()
         let output = try await call(tools, "measure_launch", ["bundle_id": "com.example.app", "runs": 1, "stable": 0.6])
+        let elapsed = Date().timeIntervalSince(started) * 1000
         #expect(!output.isError, "\(output.text)")
         #expect(output.text.hasSuffix("Measured with the screen, from the launch animation until it stayed still for 0.6 s."))
         let median = try #require(output.data?["median_ms"]?.doubleValue)
-        // The animation runs 0.4 s after the launch; polling adds up to a frame each side.
-        #expect(median > 300 && median < 600, "\(median)")
+        // From the first animation frame to the app's: six frames read, with at least 30 ms
+        // between reads, and never longer than the whole call.
+        #expect(median >= 180 && median < elapsed, "\(median) of \(elapsed)")
         #expect(output.data?["method"] == "screen")
         let system = try await call(tools, "measure_launch", ["bundle_id": "com.example.app", "method": "system"])
         #expect(system.isError)
