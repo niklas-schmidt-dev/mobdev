@@ -111,6 +111,24 @@ import Testing
         #expect(simctl.calls.get().filter { $0.first == "/usr/bin/env" }.count == 1)
     }
 
+    /// On GitHub's runners the pid line arrived as "^D^H^Hdev.mobdev.fixture: 18379" through
+    /// `script`'s terminal; it still means the app runs.
+    @Test func aPidLineWithTerminalNoiseStillCountsAsTheStart() async throws {
+        let simctl = FakeSimctl()
+        simctl.listapps = Self.listapps
+        simctl.console = ["\u{04}\u{08}\u{08}dev.mobdev.fixture: 18379\r", "fixture: launched"]
+        let control = DeviceControl(
+            udid: "SIM-1", runner: simctl, reportsFolder: FileManager.default.temporaryDirectory, simulator: true,
+            simctl: true)
+        let started = Date()
+        let outcome = try await control.launch("dev.mobdev.fixture", arguments: [], environment: [:], restart: true)
+        #expect(outcome == .launched)
+        #expect(Date().timeIntervalSince(started) < 4)
+        #expect(control.logs.read(app: "dev.mobdev.fixture", after: nil, limit: 10, contains: nil).lines.map(\.text) == ["fixture: launched"])
+        #expect(control.logs.status(for: "dev.mobdev.fixture") == "running")
+        #expect(simctl.calls.get().filter { $0.first == "/usr/bin/env" }.count == 1)
+    }
+
     /// A simctl that cannot launch the app prints why and exits before its pid line. GitHub's
     /// slow simulators do that right after an install, so the launch is tried three times and
     /// then fails with simctl's reason instead of a "Launched" that shows the home screen.

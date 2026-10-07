@@ -802,10 +802,16 @@ private final class ConsoleLaunch: Sendable {
         }
     }
 
-    /// simctl's "dev.mobdev.fixture: 12345" once the app runs.
+    /// simctl's "dev.mobdev.fixture: 12345" once the app runs. The terminal `script` gives it
+    /// sometimes puts control characters in front (an end-of-transmission and backspaces were
+    /// seen on GitHub's runners, 2026-10-07), so those do not count.
     static func isSimctlStart(_ line: String, app: String) -> Bool {
-        guard line.hasPrefix(app + ": ") else { return false }
-        return !line.dropFirst(app.count + 2).isEmpty && line.dropFirst(app.count + 2).allSatisfy(\.isNumber)
+        let cleaned = line.drop { character in
+            character.isWhitespace || character.unicodeScalars.allSatisfy { CharacterSet.controlCharacters.contains($0) }
+        }
+        guard cleaned.hasPrefix(app + ": ") else { return false }
+        let pid = cleaned.dropFirst(app.count + 2).trimmingCharacters(in: .whitespacesAndNewlines)
+        return !pid.isEmpty && pid.allSatisfy(\.isNumber)
     }
 
     /// "The app terminated with the exit code 3." → "exited with code 3";
