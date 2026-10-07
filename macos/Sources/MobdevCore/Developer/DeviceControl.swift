@@ -276,7 +276,7 @@ public final class DeviceControl: AppBackend, @unchecked Sendable {
             else { throw DeveloperError("\(path.lastPathComponent) has no Info.plist with a bundle identifier.") }
             // A freshly booted simulator on a GitHub runner took over 60 s once (2026-10-02); 75 s
             // and the lookup below still fit the relays' 90 s request timeout.
-            _ = try await simctl(["install", udid, path.path], timeout: 75)
+            _ = try await simctl(["install", udid, path.path], timeout: Self.simctlInstallTimeout)
             return (try? await app(bundleID, timeout: 10))
                 ?? InstalledApp(bundleID: bundleID, name: bundleID, version: "", build: "", developer: true, location: nil)
         }
@@ -298,7 +298,7 @@ public final class DeviceControl: AppBackend, @unchecked Sendable {
         detach(bundleID)
         if usesSimctl {
             // As long as an install: a GitHub simulator took over 30 s to remove the example app.
-            _ = try await simctl(["uninstall", udid, bundleID], timeout: 75)
+            _ = try await simctl(["uninstall", udid, bundleID], timeout: Self.simctlInstallTimeout)
         } else {
             _ = try await call(["device", "uninstall", "app"], arguments: [bundleID])
         }
@@ -557,11 +557,14 @@ public final class DeviceControl: AppBackend, @unchecked Sendable {
         throw DeveloperError("simctl could not launch \(bundleID).")
     }
 
-    /// How often a launch simctl refuses is tried, how long its pid line is waited for (as long as
-    /// devicectl's launch line), and the pause between tries.
+    /// How often a launch simctl refuses is tried, how long its pid line is waited for, and the
+    /// pause between tries. A healthy simulator prints the line within a second; GitHub's took
+    /// over 45 seconds for a relaunch on a bad day (2026-10-07), so the wait is generous.
     static let simctlLaunchAttempts = 3
-    static let simctlStartWait: TimeInterval = 45
+    static let simctlStartWait: TimeInterval = 90
     static let simctlRetryPause: TimeInterval = 2
+    /// Installing and removing an app: GitHub's simulators took over 75 seconds for the example app.
+    static let simctlInstallTimeout: TimeInterval = 180
 
     // MARK: Crash reports
 
