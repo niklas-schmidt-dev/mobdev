@@ -508,16 +508,22 @@ public final class DeviceControl: AppBackend, @unchecked Sendable {
                 console.stop()
                 throw DeveloperError(launch.lastLines.isEmpty ? "The app did not start within 45 seconds." : launch.lastLines)
             }
-            // A simctl that cannot launch the app prints why and exits before its "<bundle>: <pid>"
-            // line. GitHub's slow simulators refuse a launch right after an install or while the
-            // old instance is still ending (2026-10-07), so such a launch is tried again.
+            // The app has launched once simctl prints its "<bundle>: <pid>" line. On GitHub's slow
+            // simulators that takes a while right after an install, and now and then simctl
+            // refuses the launch instead: it prints why and exits before the line (2026-10-07).
+            // Such a launch is tried again; one that never gets there is not "Launched".
             let deadline = Date().addingTimeInterval(Self.simctlStartWait)
             while !launch.sawStart, !launch.hasEnded, Date() < deadline {
                 try? await Task.sleep(nanoseconds: 250_000_000)
             }
-            if launch.hasEnded, !launch.sawStart {
+            if !launch.sawStart {
                 launch.detach()
                 console.stop()
+                logs.setStatus("did not start", for: bundleID)
+                guard launch.hasEnded else {
+                    throw DeveloperError(
+                        "The app did not start within \(Int(Self.simctlStartWait)) seconds: simctl reported no process.")
+                }
                 let reason = logs.read(app: bundleID, after: nil, limit: 2, contains: nil).lines.map(\.text)
                     .joined(separator: " ")
                 if attempt < Self.simctlLaunchAttempts {
@@ -540,10 +546,10 @@ public final class DeviceControl: AppBackend, @unchecked Sendable {
         throw DeveloperError("simctl could not launch \(bundleID).")
     }
 
-    /// How often a launch simctl refuses is tried, how long its pid line is waited for after the
-    /// launch counts as started, and the pause between tries.
+    /// How often a launch simctl refuses is tried, how long its pid line is waited for (as long as
+    /// devicectl's launch line), and the pause between tries.
     static let simctlLaunchAttempts = 3
-    static let simctlStartWait: TimeInterval = 5
+    static let simctlStartWait: TimeInterval = 45
     static let simctlRetryPause: TimeInterval = 2
 
     // MARK: Crash reports

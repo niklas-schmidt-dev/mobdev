@@ -129,6 +129,6 @@ import Testing
             #expect(String(describing: error).hasPrefix("simctl could not launch dev.mobdev.fixture in 3 tries: An error was encountered"))
         }
         #expect(simctl.calls.get().filter { $0.first == "/usr/bin/env" }.count == DeviceControl.simctlLaunchAttempts)
-        #expect(control.logs.status(for: "dev.mobdev.fixture") != "running")
+        #expect(control.logs.status(for: "dev.mobdev.fixture") == "did not start")
     }
 }
