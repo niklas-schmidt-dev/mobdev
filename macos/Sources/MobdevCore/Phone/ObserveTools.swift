@@ -283,8 +283,15 @@ extension PhoneTools {
         try requireTouch()
         var unchanged = 0
         for scrolls in 0...maxScrolls {
-            let (frame, size) = try currentFrame()
-            if let point = try await locate(id: id, text: text, in: frame) {
+            var (frame, size) = try currentFrame()
+            var found = try await locate(id: id, text: text, in: frame)
+            if found != nil, scrolls > 0 {
+                // A list keeps gliding after a scroll: the next tap must land where it stops.
+                _ = try? await waitForIdle(timeout: 3, stable: 0.4)
+                (frame, size) = try currentFrame()
+                found = try await locate(id: id, text: text, in: frame) ?? found
+            }
+            if let point = found {
                 return ToolOutput(
                     text: "\(what) is visible at \(coordinates(point, size))"
                         + (scrolls == 0 ? " without scrolling." : " after \(scrolls) scroll\(scrolls == 1 ? "" : "s")."),
@@ -305,8 +312,9 @@ extension PhoneTools {
             try await pause(0.7)
             if let before, let after = phone.frame().flatMap(FrameSignature.init), after.changed(from: before) < 0.002 {
                 unchanged += 1
-                // Twice, since a slow list may not have moved yet the first time.
-                if unchanged >= 2 {
+                // Three times: a slow list may not have moved yet, and an app that just started
+                // ignored the first swipes on a busy Mac (2026-10-07).
+                if unchanged >= 3 {
                     throw ToolFailure("\(what) is not on screen, and scrolling \(direction) no longer moves anything: the end is reached.")
                 }
             } else {

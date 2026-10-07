@@ -110,6 +110,10 @@ extension PhoneTools {
             let outcome = try await requireApps().launch(
                 bundleID, arguments: arguments, environment: environment, restart: restart)
             switch outcome {
+            case .launchedWithoutOutput:
+                return ToolOutput(
+                    text:
+                        "Launched \(bundleID), but devicectl could not attach to its output this time, so logs stays empty for this launch. To capture it, launch again with restart: true.")
             case .broughtToFront:
                 return ToolOutput(text: "\(bundleID) was already running with its output captured; brought it to the front.")
             case .launched where restart:

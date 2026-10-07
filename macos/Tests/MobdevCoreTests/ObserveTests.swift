@@ -86,14 +86,14 @@ import Testing
         #expect(phone.events.get().isEmpty)
     }
 
-    /// The fake screen never moves, so the end of the list is reached after two scrolls.
+    /// The fake screen never moves, so the end of the list is reached after three scrolls.
     @Test func scrollUntilVisibleStopsAtTheEnd() async throws {
         let (tools, phone) = tools()
         let output = try await tools.call(
             "scroll_until_visible", arguments: ["text": "Below the screen"], source: "test", screenshotByDefault: false)
         #expect(output.isError)
         #expect(output.text.contains("the end is reached"))
-        #expect(phone.events.get() == [.scroll(5), .scroll(5)])
+        #expect(phone.events.get() == [.scroll(5), .scroll(5), .scroll(5)])
     }
 
     @Test func aStillScreenIsIdle() async throws {

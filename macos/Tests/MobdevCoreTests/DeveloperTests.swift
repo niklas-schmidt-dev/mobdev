@@ -274,6 +274,23 @@ final class FakeDevicectl: CommandRunning, @unchecked Sendable {
         #expect(output.text.contains("Developer Mode is off"))
     }
 
+    /// devicectl's console could not follow the new process on a busy Mac (2026-10-07): tried twice,
+    /// then the app is launched without its output, and the tool says so.
+    @Test func aConsoleThatCannotAttachLaunchesWithoutOutput() async throws {
+        runner.console = (
+            ["ERROR: The process identifier of the launched application could not be determined. It may have already terminated."], 1
+        )
+        runner.answers["list devices"] = FakeDevicectl.success(["devices": []])
+        runner.answers["device process launch"] = FakeDevicectl.success([:])
+        let output = try await call(tools(), "launch_app", ["bundle_id": "dev.mobdev.fixture"])
+        #expect(!output.isError, "\(output.text)")
+        #expect(output.text.contains("could not attach"))
+        let launches = runner.calls(to: "device process launch")
+        #expect(launches.filter { $0.contains("--console") }.count == 2)
+        #expect(launches.last?.contains("--console") == false)
+        #expect(launches.last?.contains("--terminate-existing") == true)
+    }
+
     @Test func devicectlErrorsBecomeReadableMessages() async throws {
         runner.answers["device process openURL"] = FakeDevicectl.failure(
             "The device is locked.", reason: "Unlock the device and try again.")

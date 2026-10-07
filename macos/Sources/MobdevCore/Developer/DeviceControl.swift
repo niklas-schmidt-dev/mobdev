@@ -118,6 +118,8 @@ public enum LaunchOutcome: Sendable, Equatable {
     case launched
     /// It already ran with its output captured and was only brought to the front.
     case broughtToFront
+    /// Launched, but its output could not be followed this time.
+    case launchedWithoutOutput
 }
 
 /// A problem with developer tools, explained so the agent or user can fix it.
@@ -312,6 +314,36 @@ public final class DeviceControl: AppBackend, @unchecked Sendable {
         async throws -> LaunchOutcome
     {
         if usesSimctl { return try await launchWithSimctl(bundleID, arguments: arguments, environment: environment, restart: restart) }
+        do {
+            return try await consoleLaunch(bundleID, arguments: arguments, environment: environment, restart: restart)
+        } catch let error as DeveloperError where Self.couldNotAttach(error.description) {
+            // On a busy Mac, devicectl's console sometimes could not find the new process or its
+            // output (2026-10-07), while a launch without the console still worked: once more,
+            // then without capturing the output.
+            try await Task.sleep(nanoseconds: 1_000_000_000)
+            do {
+                return try await consoleLaunch(bundleID, arguments: arguments, environment: environment, restart: restart)
+            } catch let error as DeveloperError where Self.couldNotAttach(error.description) {
+                let variables = JSONValue.object(environment.mapValues(JSONValue.string)).compactString
+                _ = try await call(
+                    ["device", "process", "launch"],
+                    options: (restart ? ["--terminate-existing"] : []) + ["--environment-variables", variables],
+                    arguments: [bundleID] + arguments)
+                logs.setStatus("running, without its output: devicectl could not attach to it", for: bundleID)
+                return .launchedWithoutOutput
+            }
+        }
+    }
+
+    /// devicectl's console started the app but could not follow it.
+    static func couldNotAttach(_ message: String) -> Bool {
+        message.contains("process identifier of the launched application could not be determined")
+            || message.contains("Failed to get the file descriptor")
+    }
+
+    private func consoleLaunch(_ bundleID: String, arguments: [String], environment: [String: String], restart: Bool)
+        async throws -> LaunchOutcome
+    {
         let executable = try await devicectl()
         if !restart, let session = consoles.get()[bundleID], !session.launch.hasEnded {
             // A new console would capture nothing from a running app; keep the one that does.
