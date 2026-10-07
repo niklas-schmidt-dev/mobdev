@@ -1193,7 +1193,7 @@
       " mit und entsteht erst, wenn Mobdev zum ersten Mal etwas hineinschreibt."
     ]
   },
-  "ba3851a80d680cf1": {
+  "27b0c448c74bd77c": {
     "t": "ul",
     "i": 1,
     "c": [
@@ -1212,7 +1212,7 @@
             "i": 4,
             "c": "mobdev/mobdev.json"
           },
-          " in das Repository, das du auswählst, und ",
+          " in das Repository, das du auswählst, mit der Bundle ID, die es dort in einer Expo-Konfiguration, im Xcode-Projekt oder in Gradle findet, und ",
           {
             "t": "strong",
             "i": 5,

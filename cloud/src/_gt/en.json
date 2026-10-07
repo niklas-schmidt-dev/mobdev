@@ -1191,7 +1191,7 @@
       " and appears only when Mobdev first writes there."
     ]
   },
-  "ba3851a80d680cf1": {
+  "27b0c448c74bd77c": {
     "t": "ul",
     "i": 1,
     "c": [
@@ -1210,7 +1210,7 @@
             "i": 4,
             "c": "mobdev/mobdev.json"
           },
-          " into the repository you choose, and ",
+          " into the repository you choose, with the bundle ID it finds there in an Expo config, the Xcode project or Gradle, and ",
           {
             "t": "strong",
             "i": 5,

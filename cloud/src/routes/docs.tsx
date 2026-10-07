@@ -512,7 +512,8 @@ function Docs() {
                 <ul className="list-disc space-y-2 pl-5">
                   <li>
                     <strong>New Project…</strong> in the app writes <code className={code}>mobdev/mobdev.json</code> into
-                    the repository you choose, and <strong>Open Project…</strong> adds an existing one. Projects come first
+                    the repository you choose, with the bundle ID it finds there in an Expo config, the Xcode project or
+                    Gradle, and <strong>Open Project…</strong> adds an existing one. Projects come first
                     in the sidebar, each with its tests, flows, screenshots, app map, recordings and runs.
                   </li>
                   <li>
