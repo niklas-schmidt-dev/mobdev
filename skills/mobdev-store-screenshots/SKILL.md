@@ -50,22 +50,22 @@ For each locale:
    with `open_url`; wait for its content with `wait_for_element`, then `wait_for_idle` so no
    animation, spinner or keyboard is caught mid-way; check the content with `observe` (truncated
    or untranslated text is a finding to report, not to hide); then save the screenshot.
-4. Save full-size PNGs through Mobdev's HTTP API on the Mac that runs it; `full=1` keeps the
-   device's native resolution, which the stores need:
+4. Save it with `save_screenshot`, which writes a PNG at the device's native resolution, as the
+   stores need, into the project's `screenshots/` folder (see Projects in the `mobdev` skill; call
+   `list_projects` first, and ask before creating a project):
 
-   ```sh
-   TOKEN=$(cat ~/Library/Application\ Support/dev.mobdev.mac/token)
-   curl -s -H "Authorization: Bearer $TOKEN" \
-     "http://127.0.0.1:4686/v1/screenshot?format=png&full=1&device=<id>" \
-     -o "screenshots/de-DE/iphone-6.9/01-home.png"
+   ```json
+   {"save_screenshot": {"path": "de-DE/iphone-6.9/01-home", "device": "<id>"}}
    ```
 
-   On a simulator, `xcrun simctl io <udid> screenshot <file>.png` gives the same resolution; on
-   Android, `adb -s <serial> exec-out screencap -p > <file>.png`.
-
-Name files `screenshots/<locale>/<device>/<NN>-<screen>.png`, numbered in the store's order, with
-the device as its size (`iphone-6.9`, `ipad-13`, `android-phone`). Do a whole locale on every
+Name files `<locale>/<device>/<NN>-<screen>` inside `screenshots/`, numbered in the store's order,
+with the device as its size (`iphone-6.9`, `ipad-13`, `android-phone`). Do a whole locale on every
 device before the next one, so a missing translation shows early.
+
+To make the set again for a release, save the steps as a test in the project with `save_test`
+and `${LANGUAGE}` in the paths, such as `{"save_screenshot": {"path": "${LANGUAGE}/iphone-6.9/01-home"}}`.
+`Mobdev test mobdev/ --simulator "iPhone 17 Pro Max" --language en-US --language de-DE --test
+"Store screenshots"` then runs it in every language, on a simulator made for the run.
 
 ## 4. Check and finish
 
@@ -74,7 +74,8 @@ device before the next one, so a missing translation shows early.
 - Put the devices back: `set_status_bar` with `preset: "clear"`, `set_language` with the original
   language, and the appearance as it was.
 - Report a table of locale × device with the files, and any screen with clipped or untranslated
-  text, so the user can fix the app before uploading.
+  text, so the user can fix the app before uploading. The `screenshots/` folder is meant to be
+  committed with the project, so the user sees what changed between releases.
 
 Uploading to App Store Connect or Play Console is the user's step, or a tool such as fastlane
 `deliver` and `supply` that they run. Do not upload or submit for review without being asked.

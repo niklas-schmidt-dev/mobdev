@@ -25,20 +25,16 @@ device? It is not an exhaustive test. Read the `mobdev` skill first for driving 
 - Start from a known state. On simulators and Android: `reset_app` for a fresh start, and
   `set_permission` with `grant` for what the paths need, so system prompts do not get in the way
   (or `reset` when the prompt is part of a path).
-- Make a folder for evidence, e.g. `smoke/<date>/`. On the Mac that runs Mobdev, save full-size
-  screenshots with:
-
-  ```sh
-  TOKEN=$(cat ~/Library/Application\ Support/dev.mobdev.mac/token)
-  curl -s -H "Authorization: Bearer $TOKEN" "http://127.0.0.1:4686/v1/screenshot?format=png" -o smoke/01-launch.png
-  ```
-
-  Add `&device=<id>` when several devices are connected. `Mobdev screenshot --image
+- Make a folder for evidence, e.g. `smoke/<date>/`, and save full-size screenshots into it with
+  `save_screenshot` and an absolute `path` such as `<folder>/smoke/<date>/01-launch` (it adds
+  `.png`). A relative `path` goes into the project's versioned `screenshots/` instead, which is for
+  pictures meant to be kept, such as store screenshots. `Mobdev screenshot --image
   smoke/01-launch.jpg` saves the smaller JPEG the tool returns. The same test can run on a
   simulator or an Android emulator by passing its id as `device`, which is a cheap way to cover
   more screen sizes and both platforms.
-- `start_recording` with `path` set to e.g. `smoke/<date>/run.mp4` (an absolute path) records the
-  whole run; `stop_recording` at the end. The video shows what happened between screenshots.
+- `start_recording` records the whole run, into the project's `output/recordings` or to an
+  absolute `path` such as `smoke/<date>/run.mp4`; `stop_recording` at the end says where it is.
+  The video shows what happened between screenshots.
 
 ## 3. Run each path
 
@@ -53,9 +49,10 @@ call `crash_reports` for it and read the newest report. Relaunch and continue wi
 
 On simulators, Android and iPhones with the UI tree on, act with `tap_element` (or `observe` and
 `tap_mark`) and check with `wait_for_element` where the app has accessibility identifiers. When a path passes, offer to save
-it as a test with `save_test` into the app's project folder (ask where; `mobdev/` in the repository
-is a good default, see the `mobdev` skill), so the next smoke test runs it with `run_tests`, and CI
-with `Mobdev test`, without an agent.
+it as a test with `save_test` into the app's project (`list_projects` says which one your calls
+use; without one, ask before `create_project` with `mobdev/` in the repository, see the `mobdev`
+skill), so the next smoke test runs it with `run_tests`, and CI with `Mobdev test`, without an
+agent.
 
 ## 4. Report
 

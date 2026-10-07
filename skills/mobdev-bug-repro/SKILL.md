@@ -45,14 +45,15 @@ Write down, before touching a device:
 
 ## 3. Reproduce
 
-1. `start_recording` with an absolute `path` such as `bugs/<id>/repro.mp4`.
+1. `start_recording`, into the project's `output/recordings`, or with an absolute `path` such as
+   `bugs/<id>/repro.mp4` to keep it with the report.
 2. `launch_app` your build so its output is captured (or `open_app`), and keep the `cursor` that
    `logs` returns.
 3. Follow the reported steps exactly. Orient with `observe`, act with `tap_mark` or `tap_element`,
    find rows with `scroll_until_visible`, and wait with `wait_for_element`, `wait_for_text` or
    `wait_for_idle`, never fixed sleeps, so timing is not mistaken for the bug.
-4. When the bug shows, save a screenshot (full-size PNG through the HTTP API as in the
-   `mobdev-smoke-test` skill), then `stop_recording`.
+4. When the bug shows, save a full-size screenshot with `save_screenshot` and an absolute `path`
+   next to the recording, then `stop_recording`.
 5. Read `logs` with the cursor for errors and the lines just before the bug. If the app crashed,
    `crash_reports` with `app`, then with `name` for the exception and the crashed thread;
    `mobdev-dev-loop` shows how to symbolicate your own frames.
@@ -70,8 +71,9 @@ it once on another platform or system version when that tells the user how far t
 
 ## 5. Save it as a test
 
-Offer to save the minimal reproduction with `save_test` in the app's project folder (ask where;
-`mobdev/` in the repository is a good default). Write it as the expected behaviour: the steps,
+Offer to save the minimal reproduction with `save_test` in the app's project (`list_projects`
+says which one your calls use; without one, ask before `create_project` with `mobdev/` in the
+repository). Write it as the expected behaviour: the steps,
 then a `wait_for_element` or `wait_for_text` for what should happen, so the test fails while the
 bug exists and passes once it is fixed. Name the bug or issue in its `description`. Use
 `tap_element` and `wait_for_element` rather than coordinates or `tap_mark`, and put state the tools

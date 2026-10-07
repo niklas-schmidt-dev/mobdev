@@ -19,6 +19,8 @@ App Store apps.
    - `Pointer: snaps to items`: swipes would become taps. Ask the user to turn off Snap to Item in
      Settings > Accessibility > Touch > AssistiveTouch and keep Perform Touch Gestures on.
 2. With several iPhones, call `list_devices` and pass `device` (id or name) to every tool.
+3. When you will save anything (tests, flows, screenshots, recordings, crawls), call
+   `list_projects` to see which project your calls use; see [Projects](#projects).
 
 ## See the screen
 
@@ -117,8 +119,10 @@ iPhone ask first, and put back what you changed when you are done.
 
 ## Record evidence
 
-`start_recording` records the screen to an .mp4 on the Mac that runs Mobdev, in Mobdev's
-recordings folder unless you pass `path`; `stop_recording` ends it and says where the file is.
+`start_recording` records the screen to an .mp4 on the Mac that runs Mobdev, in the project's
+`output/recordings` (without a project in Mobdev's recordings folder) unless you pass `path`;
+`stop_recording` ends it and says where the file is. `save_screenshot` saves the screen as a
+full-resolution PNG into the project's `screenshots/`.
 Record a bug you reproduce or the proof that a fix works, and name the file in your report.
 A recording stops by itself after 30 minutes.
 
@@ -143,6 +147,23 @@ through the running app, so they reach iPhones too. Without the app they run on 
 or Android device, where `tap_mark` and the recording tools are not available, since every call is
 a process of its own.
 
+## Projects
+
+A project is a folder in the app's repository, usually `mobdev/`, that holds what you save for the
+app: `mobdev.json`, `tests/`, `flows/`, `baselines/`, `screenshots/` and `maps/`, all meant to be
+committed, and `output/` for runs, recordings, crawls and failed checks, which git ignores.
+
+- Your calls use the project of the folder you work in: `Mobdev mcp` and `Mobdev call` send it to
+  the app (a `mobdev/` in your working folder or a folder above it, or `MOBDEV_PROJECT`). Without
+  one they use the project active in the app. `list_projects` says which one your calls use.
+- What you save without a path lands there: `save_test`, `save_flow`, `save_screenshot`,
+  `start_recording`, `crawl_app` and named `assert_screenshot` baselines. The test tools take it
+  when you leave out `project`.
+- When there is no project, or the user names another app, ask before you make one. Then
+  `create_project` with the repository's `mobdev/` folder as `path` and the app's `bundle_id`.
+  `open_project` switches the app's active project, which the user sees; prefer passing `project`
+  to a single call.
+
 ## Flows
 
 `run_flow` replays a saved list of tool calls (`path` to a JSON file, or `steps` inline) on one
@@ -153,17 +174,18 @@ preferring `tap_element` and `wait_for_element` over coordinates so it survives 
 Never save `observe` or `tap_mark`: a mark's number is only valid for one look at the screen, so
 write `tap_element` with the mark's identifier or label. Pass `video` (an absolute .mp4 path on the
 Mac) to keep a recording of the run; it ends on the screen where the flow stopped.
+`save_flow` keeps a flow in the project's `flows/`, from where `run_flow` with `path` replays it.
 `Mobdev flow <file> --device <id> --artifacts <dir>` runs one without the app, in CI, and writes
 `run.mp4` and `summary.md` to the directory.
 
 ## Tests
 
-A project folder holds an app's tests: `tests/*.json`, each a flow with a `name`, a `description`
-and the `platforms` it runs on, and `mobdev.json` with the app's `bundle_id`, `builds` per
-platform, `before_each` steps (usually `launch_app` with `restart: true`), `variables` and
-`secrets`. `list_tests` shows a project with its newest results, `save_test` writes a test and
-creates the project when there is none, `run_tests` runs the tests on a device and returns every
-result with the first failure's screen, and `test_result` returns the newest results again.
+A project's tests are `tests/*.json`, each a flow with a `name`, a `description` and the
+`platforms` it runs on; `mobdev.json` holds the app's `bundle_id`, `builds` per platform,
+`before_each` steps (usually `launch_app` with `restart: true`), `variables` and `secrets`.
+`list_tests` shows the tests with their newest results, `save_test` writes a test, `run_tests` runs
+the tests on a device and returns every result with the first failure's screen, and `test_result`
+returns the newest results again. Each takes `project`, by default the project your calls use.
 
 To add a test, drive the app with the tools above until the path works, then save the calls that
 mattered: `tap_element` and `wait_for_element` over coordinates, `${NAME}` for data such as an
