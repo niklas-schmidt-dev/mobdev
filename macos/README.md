@@ -484,6 +484,8 @@ project; the other folders appear when something is saved into them.
   Project…** (⌘O) adds an existing project, also when you choose the repository, and offers to
   create one in a folder that has none. Projects come first in the sidebar; the active one shows its Tests, Flows,
   Screenshots, App Map, Recordings and Runs.
+- **Rename…** (in the project's overview or its context menu) changes the name in its
+  `mobdev.json`, which test results and CI show too; the rest of the file stays as it is written.
 - The project you select is the **active** one. What is saved without a path lands there:
   recordings, `save_screenshot`, `save_flow`, `save_test`, crawls with the app's map, and named
   `assert_screenshot` baselines. The test tools use it when `project` is left out, Record's

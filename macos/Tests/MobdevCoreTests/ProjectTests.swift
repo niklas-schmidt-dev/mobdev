@@ -393,6 +393,58 @@ import Testing
         #expect(!broken.completed)
     }
 
+    // MARK: Names
+
+    @Test func renamingChangesOnlyTheNameInMobdevJSON() throws {
+        let repo = try repository()
+        defer { try? FileManager.default.removeItem(at: repo) }
+        let folder = repo.appendingPathComponent("mobdev")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let file = folder.appendingPathComponent("mobdev.json")
+        func text() throws -> String { try String(contentsOf: file, encoding: .utf8) }
+
+        // A hand-written file keeps its layout; a "name" inside a step is no project name.
+        let written = """
+            {
+                "app": {"bundle_id": "com.acme.shop"},
+                "before_each": [{"open_app": {"name": "Settings"}}],
+                "name"  :  "mobile",
+                "variables": {"name": "x"}
+            }
+
+            """
+        try Data(written.utf8).write(to: file)
+        #expect(try TestProject.load(folder).name == "mobile")
+        let renamed = try TestProject.rename(folder, to: "  Titan \"Shop\" ü  ")
+        #expect(renamed.name == "Titan \"Shop\" ü")
+        #expect(try text() == written.replacingOccurrences(of: #""mobile""#, with: #""Titan \"Shop\" ü""#))
+        #expect(try TestProject.load(folder).beforeEach.first?.arguments["name"] == "Settings")
+        try TestProject.rename(folder, to: "Titan")
+        #expect(try TestProject.load(folder).name == "Titan")
+
+        // Without a name, it gets one at the top; a one-line file stays on one line.
+        try Data("{\n  \"before_each\": [{\"open_app\": {\"name\": \"Settings\"}}]\n}\n".utf8).write(to: file)
+        try TestProject.rename(folder, to: "First")
+        #expect(try text() == "{\n  \"name\": \"First\",\n  \"before_each\": [{\"open_app\": {\"name\": \"Settings\"}}]\n}\n")
+        try Data("{}\n".utf8).write(to: file)
+        try TestProject.rename(folder, to: "Empty")
+        #expect(try text() == "{\n  \"name\": \"Empty\"\n}\n")
+        try Data(#"{"app":{"bundle_id":"a.b"}}"#.utf8).write(to: file)
+        try TestProject.rename(folder, to: "Line")
+        #expect(try text() == #"{"name": "Line","app":{"bundle_id":"a.b"}}"#)
+        try Data(#"{"name":"A","app":{"bundle_id":"a.b"}}"#.utf8).write(to: file)
+        try TestProject.rename(folder, to: "B")
+        #expect(try text() == #"{"name":"B","app":{"bundle_id":"a.b"}}"#)
+
+        // No empty names, no change to a file Mobdev cannot read, and nothing without a project.
+        #expect(throws: ToolFailure.self) { try TestProject.rename(folder, to: "  ") }
+        #expect(try TestProject.load(folder).name == "B")
+        try Data(#"{"name": "A", "unknown": 1}"#.utf8).write(to: file)
+        #expect(throws: (any Error).self) { try TestProject.rename(folder, to: "C") }
+        #expect(try text() == #"{"name": "A", "unknown": 1}"#)
+        #expect(throws: (any Error).self) { try TestProject.rename(repo.appendingPathComponent("none"), to: "C") }
+    }
+
     // MARK: Icons
 
     /// A PNG of the given size at a path inside `root`, with its folders.

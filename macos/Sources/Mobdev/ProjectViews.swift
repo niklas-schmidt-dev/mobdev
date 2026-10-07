@@ -112,6 +112,7 @@ struct ProjectFiles {
 struct ProjectSidebarRows: View {
     @Environment(AppModel.self) private var model
     let folder: URL
+    @State private var renaming = false
 
     private var isActive: Bool { model.isActiveProject(folder) }
     private var exists: Bool { TestProject.isProject(folder) }
@@ -134,7 +135,10 @@ struct ProjectSidebarRows: View {
         }
         .tag(Pane.project(folder.path, .overview))
         .accessibilityValue(isActive ? "Active project" : "")
+        .modifier(ProjectRenameAlert(folder: folder, isPresented: $renaming))
         .contextMenu {
+            Button("Rename…") { renaming = true }
+                .disabled(!exists)
             Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([folder]) }
                 .disabled(!exists)
             Button("Open mobdev.json") { NSWorkspace.shared.open(folder.appendingPathComponent(TestProject.fileName)) }
@@ -152,6 +156,40 @@ struct ProjectSidebarRows: View {
                 .badge(section == .tests && model.runningTests.contains(folder.path) ? Text("Running") : nil)
                 .tag(Pane.project(folder.path, section))
             }
+        }
+    }
+}
+
+/// Rename… for a project: a field for its new name, which goes into its mobdev.json, so test
+/// results and CI show it too.
+struct ProjectRenameAlert: ViewModifier {
+    @Environment(AppModel.self) private var model
+    let folder: URL
+    @Binding var isPresented: Bool
+    @State private var name = ""
+
+    func body(content: Content) -> some View {
+        content
+            .alert("Rename Project", isPresented: $isPresented) {
+                TextField("Name", text: $name)
+                Button("Rename") { rename() }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("The name is saved in \(TestProject.fileName), so test results and CI show it too.")
+            }
+            .onChange(of: isPresented) { _, shown in
+                if shown { name = model.projectName(folder) }
+            }
+    }
+
+    private func rename() {
+        do {
+            try model.renameProject(folder, to: name)
+        } catch {
+            let alert = NSAlert()
+            alert.messageText = "Could Not Rename the Project"
+            alert.informativeText = String(describing: error)
+            alert.runModal()
         }
     }
 }
@@ -274,6 +312,7 @@ private struct ProjectOverview: View {
     @State private var deviceID = ""
     @State private var crawling = false
     @State private var message: String?
+    @State private var renaming = false
 
     var body: some View {
         ScrollView {
@@ -340,8 +379,11 @@ private struct ProjectOverview: View {
                     .buttonStyle(.link)
                 Button("Open mobdev.json") { NSWorkspace.shared.open(folder.appendingPathComponent(TestProject.fileName)) }
                     .buttonStyle(.link)
+                Button("Rename…") { renaming = true }
+                    .buttonStyle(.link)
             }
         }
+        .modifier(ProjectRenameAlert(folder: folder, isPresented: $renaming))
     }
 
     private var actions: some View {

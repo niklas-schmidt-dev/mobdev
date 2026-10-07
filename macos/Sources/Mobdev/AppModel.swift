@@ -773,6 +773,13 @@ final class AppModel {
         return ProjectList.normalized(project.folder)
     }
 
+    /// Gives a project another name, in its mobdev.json.
+    func renameProject(_ folder: URL, to name: String) throws {
+        try TestProject.rename(folder, to: name)
+        projectNames = Self.names(of: projects)
+        projectRevisions[ProjectList.normalized(folder).path, default: 0] += 1
+    }
+
     /// Forgets a project and its icon; its folder stays as it is.
     func removeProject(_ folder: URL) {
         tools.projects.remove(folder)

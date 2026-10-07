@@ -99,6 +99,123 @@ extension TestProject {
         return try load(folder)
     }
 
+    /// Gives a project another name. Only the name in its mobdev.json changes: the rest of the file
+    /// stays as it is written, and a file without a name gets one at the top.
+    @discardableResult
+    public static func rename(_ folder: URL, to name: String) throws -> TestProject {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { throw ToolFailure("A project needs a name.") }
+        guard trimmed.count <= 200 else { throw ToolFailure("A project's name has at most 200 characters.") }
+        let file = folder.appendingPathComponent(fileName)
+        guard let text = try? String(contentsOf: file, encoding: .utf8) else {
+            throw ToolFailure("Could not read \(file.path).")
+        }
+        _ = try load(folder)
+        let value = JSONValue.string(trimmed).compactString
+        var updated = text
+        if let range = topLevelValue(of: "name", in: text) {
+            updated.replaceSubrange(range, with: value)
+        } else if let brace = text.firstIndex(of: "{") {
+            let rest = text[text.index(after: brace)...]
+            let empty = rest.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("}")
+            let lines = text.contains("\n")
+            updated = String(text[...brace]) + (lines ? "\n  " : "") + "\"name\": \(value)" + (empty ? (lines ? "\n" : "") : ",") + rest
+        }
+        do {
+            try Data(updated.utf8).write(to: file, options: .atomic)
+            let project = try load(folder)
+            guard project.name == trimmed else { throw ToolFailure("\(fileName) did not take the new name.") }
+            return project
+        } catch {
+            try? Data(text.utf8).write(to: file, options: .atomic)
+            throw error as? ToolFailure ?? ToolFailure("Could not write \(file.path): \(error.localizedDescription)")
+        }
+    }
+
+    /// Where the value of a key of the outermost object is in a JSON text; nil without the key.
+    static func topLevelValue(of key: String, in text: String) -> Range<String.Index>? {
+        var depth = 0
+        var expectsKey = false
+        var index = text.startIndex
+        while index < text.endIndex {
+            let character = text[index]
+            if character == "\"" {
+                let end = stringEnd(in: text, from: index)
+                if depth == 1, expectsKey {
+                    expectsKey = false
+                    let content = text[text.index(after: index)..<text.index(before: end)]
+                    if content == key {
+                        guard let colon = text[end...].firstIndex(where: { !$0.isWhitespace }), text[colon] == ":",
+                            let start = text[text.index(after: colon)...].firstIndex(where: { !$0.isWhitespace })
+                        else { return nil }
+                        return start..<valueEnd(in: text, from: start)
+                    }
+                }
+                index = end
+                continue
+            }
+            switch character {
+            case "{", "[":
+                depth += 1
+                expectsKey = character == "{" && depth == 1
+            case "}", "]":
+                depth -= 1
+            case "," where depth == 1:
+                expectsKey = true
+            default:
+                break
+            }
+            index = text.index(after: index)
+        }
+        return nil
+    }
+
+    /// The index after the string that starts with the quote at `start`.
+    private static func stringEnd(in text: String, from start: String.Index) -> String.Index {
+        var index = text.index(after: start)
+        while index < text.endIndex {
+            if text[index] == "\\" {
+                index = text.index(after: index)
+                if index < text.endIndex { index = text.index(after: index) }
+                continue
+            }
+            if text[index] == "\"" { return text.index(after: index) }
+            index = text.index(after: index)
+        }
+        return text.endIndex
+    }
+
+    /// The end of the JSON value that starts at `start`, without the space after it.
+    private static func valueEnd(in text: String, from start: String.Index) -> String.Index {
+        var depth = 0
+        var index = start
+        var last = start
+        while index < text.endIndex {
+            let character = text[index]
+            if character == "\"" {
+                index = stringEnd(in: text, from: index)
+                last = index
+                if depth == 0 { return index }
+                continue
+            }
+            switch character {
+            case "{", "[":
+                depth += 1
+            case "}", "]":
+                if depth == 0 { return last }
+                depth -= 1
+                if depth == 0 { return text.index(after: index) }
+            case "," where depth == 0:
+                return last
+            default:
+                break
+            }
+            index = text.index(after: index)
+            if !character.isWhitespace { last = index }
+        }
+        return last
+    }
+
     /// The folder for outputs of `kind`, created with `output/.gitignore` the first time.
     public static func output(_ kind: ProjectOutput, in project: URL) throws -> URL {
         let output = project.appendingPathComponent(outputFolderName, isDirectory: true)
