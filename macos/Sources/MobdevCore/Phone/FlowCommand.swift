@@ -77,9 +77,10 @@ public enum FlowCommand {
         let home = CommandSupport.home(artifacts: options.artifacts)
         defer { if home.temporary { try? FileManager.default.removeItem(at: home.url) } }
 
+        let file = URL(fileURLWithPath: (options.file as NSString).expandingTildeInPath).absoluteURL
         let flow: Flow
         do {
-            flow = try Flow.load(URL(fileURLWithPath: (options.file as NSString).expandingTildeInPath))
+            flow = try Flow.load(file)
         } catch {
             output(String(describing: error))
             return 2
@@ -93,14 +94,18 @@ public enum FlowCommand {
         output("Running \"\(flow.name)\" (\(flow.steps.count) steps) on \(device.name) (\(device.id))")
         let video = options.artifacts != nil && options.video ? home.url.appendingPathComponent("run.mp4") : nil
         let result: FlowResult
+        // Named baselines live next to the flow file; a failed comparison's files go to the artifacts.
+        let checks = CheckContext(root: file.deletingLastPathComponent(), artifacts: options.artifacts != nil ? home.url : nil)
         do {
-            result = try await Flow.recording(device, to: video) {
-                try await connection.tools.run(flow, on: device.id, source: "cli") { index, step, stepOutput, seconds in
-                    let mark = stepOutput.isError ? "✗" : "✓"
-                    let text = stepOutput.isError
-                        ? stepOutput.text
-                        : (stepOutput.text.split(separator: "\n").first.map(String.init) ?? "")
-                    output(String(format: "%@ %d. %@ (%.1f s): %@", mark, index + 1, step.summary, seconds, text))
+            result = try await CheckContext.$current.withValue(checks) {
+                try await Flow.recording(device, to: video) {
+                    try await connection.tools.run(flow, on: device.id, source: "cli") { index, step, stepOutput, seconds in
+                        let mark = stepOutput.isError ? "✗" : "✓"
+                        let text = stepOutput.isError
+                            ? stepOutput.text
+                            : (stepOutput.text.split(separator: "\n").first.map(String.init) ?? "")
+                        output(String(format: "%@ %d. %@ (%.1f s): %@", mark, index + 1, step.summary, seconds, text))
+                    }
                 }
             }
         } catch {

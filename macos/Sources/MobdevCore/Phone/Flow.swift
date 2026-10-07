@@ -129,16 +129,22 @@ extension PhoneTools {
 
     func runFlowTool(_ args: Arguments, source: String) async throws -> ToolOutput {
         let flow: Flow
+        // Named baselines of a flow file live next to it.
+        var checks = CheckContext.current
         if args.has("path") {
             let path = (try args.string("path") as NSString).expandingTildeInPath
-            flow = try Flow.load(URL(fileURLWithPath: path))
+            let file = URL(fileURLWithPath: path)
+            flow = try Flow.load(file)
+            checks = CheckContext(root: file.deletingLastPathComponent(), artifacts: nil)
         } else if let steps = args.value["steps"], !steps.isNull {
             flow = try Flow.parse(steps)
         } else {
             throw ToolFailure("Pass path or steps.")
         }
         let video = try args.has("video") ? Flow.videoURL(try args.string("video")) : nil
-        let result = await Flow.recording(phone, to: video) { await run(flow, source: source) }
+        let result = await CheckContext.$current.withValue(checks) {
+            await Flow.recording(phone, to: video) { await run(flow, source: source) }
+        }
         return ToolOutput(text: result.text, data: result.json, isError: !result.passed)
     }
 
@@ -350,16 +356,22 @@ public final class FlowRecorder: Sendable {
         return finished?.steps ?? []
     }
 
-    /// Calls that only look, and so replay nothing. Waits are kept: they are what a flow checks.
+    /// Calls that only look, and so replay nothing. Waits and assertions are kept: they are what a
+    /// flow checks.
     static let skipped: Set<String> = [
         "status", "screenshot", "read_screen", "find_text", "ui_tree", "list_apps", "logs", "crash_reports",
         "list_devices", "run_flow", "run_tests", "observe", "start_recording", "stop_recording", "recent_steps",
         "crawl_app",
     ]
 
+    /// Whether a call only looks. An accessibility audit checks something only with fail_on.
+    static func onlyLooks(_ tool: String, _ arguments: [String: JSONValue]) -> Bool {
+        skipped.contains(tool) || tool == "accessibility_audit" && (arguments["fail_on"] ?? .null).isNull
+    }
+
     /// A successful tool call. Consecutive typing merges into one step.
     public func record(_ tool: String, _ arguments: [String: JSONValue]) {
-        guard !Self.skipped.contains(tool) else { return }
+        guard !Self.onlyLooks(tool, arguments) else { return }
         var arguments = arguments
         arguments["screenshot"] = nil
         arguments["device"] = nil

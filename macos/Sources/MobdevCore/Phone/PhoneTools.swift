@@ -62,6 +62,8 @@ public final class PhoneTools: Sendable {
     let observed = Locked<ObservedMarks?>(nil)
     /// The screen recording `start_recording` started.
     let recording = Locked<ActiveRecording?>(nil)
+    /// Answers `assert_with_ai`: Apple Intelligence unless a test replaces it.
+    let judge: any ScreenJudge
 
     public convenience init(phone: PhoneBackend, activity: ActivityLog, settleDelay: TimeInterval = 0.6) {
         self.init(phone: phone, activity: activity, settleDelay: settleDelay) { try TextRecognizer.read($0, query: $1) }
@@ -69,13 +71,14 @@ public final class PhoneTools: Sendable {
 
     init(
         phone: PhoneBackend, activity: ActivityLog, settleDelay: TimeInterval,
-        unreadableGrace: TimeInterval = PhoneTools.unreadableGrace,
+        unreadableGrace: TimeInterval = PhoneTools.unreadableGrace, judge: any ScreenJudge = AppleIntelligenceJudge(),
         readText: @escaping @Sendable (CGImage, String?) throws -> [TextMatch]
     ) {
         self.phone = phone
         self.activity = activity
         self.settleDelay = settleDelay
         self.unreadableGrace = unreadableGrace
+        self.judge = judge
         self.readText = readText
         history.start()
     }
@@ -106,6 +109,9 @@ public final class PhoneTools: Sendable {
         `send_push`, `set_appearance`, `set_language`, `set_status_bar`, `biometrics`, `reset_app`, \
         `clipboard` and `set_orientation` (simulators and Android; some on iPhones with Developer Mode). \
         `start_recording` and `stop_recording` keep a video of the screen. \
+        Checks fail a flow or test step when the screen does not pass: `assert_screenshot` compares it with \
+        a baseline picture, `accessibility_audit` finds missing labels, small targets and low contrast, and \
+        `assert_with_ai` asks Apple Intelligence on the Mac a yes/no question about it. \
         `run_flow` replays a saved list of tool calls and stops at the first failing step. \
         A project folder with tests/*.json holds an app's tests: `list_tests` shows them, `save_test` writes \
         one, `run_tests` runs them on a device with a video and a screenshot of each failure, and \
@@ -230,7 +236,7 @@ public final class PhoneTools: Sendable {
                         "gone": ["type": "boolean"],
                     ], required: ["text"]), readOnly: true),
         ] + observeDefinitions + treeDefinitions + appDefinitions + settingsDefinitions + recordingDefinitions
-            + sessionDefinitions + crawlDefinitions + flowDefinitions + testDefinitions
+            + sessionDefinitions + crawlDefinitions + checkDefinitions + flowDefinitions + testDefinitions
     }()
 
     public static func definition(named name: String) -> ToolDefinition? {
@@ -458,6 +464,7 @@ public final class PhoneTools: Sendable {
             if let output = try await runSettingsTool(name, args) { return output }
             if let output = try await runRecordingTool(name, args) { return output }
             if let output = try await runSessionTool(name, args) { return output }
+            if let output = try await runCheckTool(name, args) { return output }
             return try await runAppTool(name, args)
         }
     }

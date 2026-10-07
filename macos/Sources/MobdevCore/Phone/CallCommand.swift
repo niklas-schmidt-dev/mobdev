@@ -19,8 +19,9 @@ public enum CallCommand {
         Runs one Mobdev tool. Values are JSON where they parse as JSON (numbers, true, false,
         arrays, objects) and text otherwise: Mobdev type_text text="hello world" submit=true.
           --device  the device from list_devices; needed when several are connected
-          --image   where to save the screenshot the tool returns (.png or .jpg); for screenshot,
-                    observe with image=true, and actions with screenshot=true
+          --image   where to save the picture the tool returns (.png or .jpg): for screenshot,
+                    observe and accessibility_audit with image=true, actions with screenshot=true,
+                    and the diff of a failed assert_screenshot
           --json    print the whole result as JSON
           --local   run here on a booted simulator or Android device, not through the app
                     (always so for a Mobdev built with swift build, outside the app)
@@ -122,7 +123,8 @@ public enum CallCommand {
                     return 2
                 }
             } else {
-                output("The tool returned no screenshot to save. Pass screenshot=true for actions, image=true for observe.")
+                output(
+                    "The tool returned no screenshot to save. Pass screenshot=true for actions, image=true for observe and accessibility_audit.")
             }
         }
         if options.json {
@@ -176,9 +178,15 @@ public enum CallCommand {
         defer { connection.emulators.stop() }
         var arguments = options.arguments
         arguments["device"] = .string(connection.device.id)
+        // Named baselines go to baselines/ in the current folder, since this process's own
+        // Mobdev folder is temporary.
+        let checks = CheckContext(
+            root: URL(fileURLWithPath: FileManager.default.currentDirectoryPath, isDirectory: true), artifacts: nil)
         do {
-            let result = try await connection.tools.call(
-                options.tool, arguments: .object(arguments), source: "cli", screenshotByDefault: false)
+            let result = try await CheckContext.$current.withValue(checks) {
+                try await connection.tools.call(
+                    options.tool, arguments: .object(arguments), source: "cli", screenshotByDefault: false)
+            }
             var body: [String: JSONValue] = ["ok": .bool(!result.isError), "text": .string(result.text)]
             if let data = result.data { body["data"] = data }
             if let image = result.image {

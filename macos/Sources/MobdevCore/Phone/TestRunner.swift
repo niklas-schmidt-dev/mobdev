@@ -71,6 +71,9 @@ public struct TestRunResult: Sendable, Codable, Equatable {
         public var video: String?
         /// What the project's app printed during a failed test, its newest lines.
         public var log: [String]?
+        /// Files the test's checks wrote, such as the diff and the actual screen of a failed
+        /// `assert_screenshot`. Nil when there are none, and in results from before checks.
+        public var files: [String]? = nil
 
         /// "✓ Sign in (4.2 s)", "✗ Checkout (1.0 s): step 3 of 5, tap_element {…}: …", "– Pay: not for android".
         public var line: String {
@@ -96,6 +99,7 @@ public struct TestRunResult: Sendable, Codable, Equatable {
             var lines: [String] = []
             if let screenshot { lines.append("  Screenshot: \(screenshot)") }
             if let video { lines.append("  Video: \(video)") }
+            for file in files ?? [] { lines.append("  File: \(file)") }
             if let log, !log.isEmpty {
                 lines.append("  The app printed:")
                 lines += log.suffix(TestRunResult.shownLogLines).map { "    \($0)" }
@@ -465,9 +469,15 @@ extension PhoneTools {
         // Where the app's output stands now, so a failure shows only what it printed during the test.
         let cursor = bundleID.flatMap { logs?.read(app: $0, after: nil, limit: 1, contains: nil).cursor }
         let flow = Flow(name: test.name, steps: prepared)
-        let result = await Flow.recording(phone, to: video ? folder.appendingPathComponent("run.mp4") : nil) {
-            await run(flow, source: source)
+        // Checks find the project's baselines and leave their files in the test's folder.
+        let checks = CheckContext(root: project.folder, artifacts: folder)
+        let result = await CheckContext.$current.withValue(checks) {
+            await Flow.recording(phone, to: video ? folder.appendingPathComponent("run.mp4") : nil) {
+                await run(flow, source: source)
+            }
         }
+        let files = checks.files.get()
+        if !files.isEmpty { outcome.files = files }
         outcome.seconds = result.seconds
         outcome.steps = result.steps.enumerated().map { index, step in
             .init(summary: written[index].summary, text: variables.redact(step.text), passed: step.passed, seconds: step.seconds)

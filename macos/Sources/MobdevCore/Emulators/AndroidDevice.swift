@@ -10,6 +10,8 @@ public final class AndroidDevice: Device, @unchecked Sendable {
     private let details: Locked<Details>
     /// The size of the last screenshot, which is also the coordinate space of `input`.
     private let lastSize = Locked<(width: Int, height: Int)?>(nil)
+    /// Pixels per dp from `wm density`, once read.
+    private let density = Locked<Double?>(nil)
     private let appBackend: AndroidApps
     private let deviceSettings: AndroidSettings
 
@@ -100,6 +102,26 @@ public final class AndroidDevice: Device, @unchecked Sendable {
         guard let value = line?.split(separator: ":").last?.trimmingCharacters(in: .whitespaces) else { return nil }
         let parts = value.split(separator: "x").compactMap { Int($0) }
         return parts.count == 2 && parts[0] > 0 && parts[1] > 0 ? (parts[0], parts[1]) : nil
+    }
+
+    /// `wm density` in dots per inch over Android's 160 dpi for one dp, read once.
+    public func screenScale() async -> Double? {
+        if let known = density.get() { return known }
+        guard let text = try? await adb.shell(id, "wm density", timeout: 10), let dpi = Self.parseDensity(text) else {
+            return nil
+        }
+        density.set(dpi / 160)
+        return dpi / 160
+    }
+
+    /// "Physical density: 420", with an "Override density" line winning when present.
+    static func parseDensity(_ text: String) -> Double? {
+        let lines = text.split(separator: "\n")
+        let line = lines.first { $0.hasPrefix("Override density:") } ?? lines.first { $0.hasPrefix("Physical density:") }
+        guard let value = line?.split(separator: ":").last.flatMap({ Double($0.trimmingCharacters(in: .whitespacesAndNewlines)) }),
+            value > 0
+        else { return nil }
+        return value
     }
 
     public func frame() -> CGImage? {

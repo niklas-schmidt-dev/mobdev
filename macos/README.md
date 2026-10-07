@@ -163,6 +163,9 @@ only device, or the connected iPhone when simulators or Android devices run next
 | `ui_tree` | `contains`, `all` | Elements from the accessibility tree: role, label, identifier, value, position. Simulators, Android, and iPhones with the UI tree on |
 | `tap_element` | `id`, `text`, `index`, `timeout` | Taps an element by identifier or label, waiting up to 5 s for it |
 | `wait_for_element` | `id`, `text`, `timeout`, `gone` | Like `wait_for_text`, from the tree |
+| `assert_screenshot` | `name` or `path`, `threshold`, `mask`, `compare_status_bar`, `update` | Compares the screen with a baseline picture and fails with a diff; records the baseline when there is none (see [Checks](#checks)) |
+| `accessibility_audit` | `image`, `fail_on`, `ignore` | Missing labels, small tap targets, low text contrast, duplicate and unclear labels, from the UI tree |
+| `assert_with_ai` | `question`, `expect` | Asks Apple Intelligence on the Mac a yes/no question about the screen |
 | `run_flow` | `path`, `steps`, `video` | Replays a flow and stops at the first failing step; `video` saves a recording (.mp4) |
 | `run_tests` | `project`, `tests`, `variables`, `video` | Runs a project's tests on this device: every result, the first failure's screen, results.json and junit.xml |
 | `list_tests` | `project` | A project's tests and its newest results |
@@ -478,8 +481,9 @@ iOS, and the other way round.
 
   It prints a line per test and exits 0 when every test passed, 1 when one failed and 2 when the
   tests could not start. `--artifacts` gets `results.json`, `junit.xml`, a video and, after a
-  failure, a screenshot of every test in its own folder, the activity log and copied crash
-  reports. A failed test also carries what the app printed during it and how the app ended. `--test <name>` runs one test (repeatable), `--var NAME=value` sets a variable,
+  failure, a screenshot (and the files of a failed check, such as a screenshot diff) of every test
+  in its own folder, the activity log and copied crash reports. A failed test also carries what the
+  app printed during it and how the app ended. `--test <name>` runs one test (repeatable), `--var NAME=value` sets a variable,
   `--no-video` and `--wait` work as for `Mobdev flow`. iPhones need the running app: call
   `run_tests` over MCP or the HTTP API.
 
@@ -487,6 +491,84 @@ iOS, and the other way round.
 [`.github/workflows/flows.yml`](../.github/workflows/flows.yml) runs it on GitHub's `macos-26`
 runners next to the flow; a job for your app looks like the one above with `Mobdev test` in place
 of `Mobdev flow`, and `junit.xml` in the artifacts.
+
+### Checks
+
+Three tools judge the screen and fail their step when it does not pass, so a test can check how a
+screen looks, not only what is on it:
+
+```json
+{
+  "name": "Home looks right",
+  "steps": [
+    {"wait_for_element": {"id": "home.title"}},
+    {"assert_screenshot": {"name": "home", "mask": ["home.clock"]}},
+    {"accessibility_audit": {"fail_on": "error"}},
+    {"assert_with_ai": {"question": "Is any text cut off or drawn over other text?", "expect": "no"}}
+  ]
+}
+```
+
+**`assert_screenshot`** compares the screen with a baseline picture (visual regression).
+
+- `name` resolves to `baselines/<ios|android>/<width>x<height>/<name>.png`: in the project while
+  its tests run (`run_tests`, the Tests window, `Mobdev test`), next to the flow file (`run_flow`
+  with `path`, `Mobdev flow`), in the current folder for `Mobdev assert_screenshot` without the
+  app, and otherwise in Mobdev's folder (`~/Library/Application Support/dev.mobdev.mac/baselines`).
+  The size is the device's screen in pixels, so every model and orientation has its own baselines.
+  `path` names a PNG instead; a full-resolution screenshot of the same shape works too.
+- Without a baseline it waits until the screen is still, records it, passes and says so. **Commit
+  the `baselines` folder** with your tests. A CI run without them records them and passes, so
+  record them on a run you trust, check them in, and `update: true` replaces one after an
+  intended change.
+- The comparison works at screenshot size (long edge 1280 px). A pixel counts as changed when its
+  color differs by more than about 10% (in YIQ, as pixelmatch measures it), it is not the baseline
+  moved by up to a pixel (antialiasing, scaling), and at least three of its neighbors changed too
+  (compression noise, one-pixel lines). The step fails when more than `threshold` of the compared
+  pixels changed: by default 0.0005, 0.05%, about a 20×20 px square; 0 allows none. Changed text
+  or a button moved by a few points fails; the same screen drawn again does not. Before it fails,
+  it waits for the screen to settle and compares once more.
+- The status bar (the top 7%) is left out unless `compare_status_bar` is true. `mask` leaves out
+  more: `[x, y, width, height]` in screenshot pixels, or an element's id or label (recognized text
+  where there is no UI tree), e.g. a clock, an avatar or a map.
+- A failure writes `<name>-diff.png` (changed pixels red, tolerated differences yellow, masked
+  areas blue, a box around each changed region) and `<name>-actual.png`: into the test's folder of
+  the run, where `results.json` lists them as the test's `files`, or next to the baseline outside
+  a test. The tool returns the diff and the changed regions; a later pass removes the files next
+  to the baseline.
+
+**`accessibility_audit`** checks the screen from the UI tree (simulators, Android, iPhones with
+Mobdev Runner):
+
+| Rule | Error | Warning |
+|---|---|---|
+| `missing_label` | Something to tap without a label and without text inside, such as an icon-only button | A field without a label or placeholder |
+| `small_target` | Smaller than 24×24 pt or dp, WCAG 2.2's minimum | Smaller than 44×44 pt (iOS) or 48×48 dp (Android) |
+| `low_contrast` | Text below 3:1 | Text below 4.5:1, WCAG AA for normal text |
+| `duplicate_label` | | Different targets with the same label |
+| `unclear_label` | A file name, such as `ic_close.png` | An identifier, such as `close_button`, `btnBack` or `chevron.right`, or just "button" |
+
+- Contrast is measured in the screenshot inside each text and button: the most common color is the
+  background, the most different color that still covers a little of the area is the text (or a
+  button's icon). Disabled elements and busy backgrounds such as photos are left out.
+- Sizes use the screen's scale: `wm density` on Android; on iOS 3 pixels per point for iPhones
+  at least 1000 px wide, 2 for iPads and older iPhones.
+- Issues come top to bottom, an element's together. `image: true` returns the screenshot with a
+  numbered box per element, red when it has an error. `fail_on: "error"` (or `"warning"`) makes the
+  call fail when there are such issues, which is what a test wants; `ignore` skips rules.
+- Apple's and Google's standard controls do not always reach 4.5:1 or 44 pt (iOS's blue on white
+  is about 3.5:1), so take warnings as advice and fail on errors.
+
+**`assert_with_ai`** asks Apple Intelligence on the Mac a yes/no question about the screen and
+fails when the answer is not `expect` (default `yes`) or the model is unsure; the reason comes
+with the result. On macOS 27 the model looks at the screenshot; where it takes no images (macOS
+26), it reads the screen's elements and says so. Nothing leaves the Mac. It needs a Mac with Apple
+Intelligence turned on and its model downloaded, and says which is missing otherwise. A call takes
+a few seconds. The on-device model is small: ask about one visible thing at a time, and prefer
+`wait_for_element` for anything a tree can tell.
+
+A recorded flow keeps the checks; `accessibility_audit` only with `fail_on`, since without it the
+call only looks.
 
 ## HTTP API
 

@@ -77,6 +77,8 @@ public protocol PhoneBackend: Sendable {
     var settings: DeviceSettings? { get }
     /// What is in front: an app's name on simulators, its package on Android. Nil when unknown.
     func frontmostApp() async throws -> String?
+    /// Pixels of `frame()` per point on iOS, per dp on Android. Nil: estimated from the screen size.
+    func screenScale() async -> Double?
 }
 
 /// A wheel as a swipe, for devices without one: each step moves the content by a little over 5% of
@@ -100,4 +102,5 @@ extension PhoneBackend {
     public func uiTree() async throws -> [UIElement]? { nil }
     public var settings: DeviceSettings? { nil }
     public func frontmostApp() async throws -> String? { nil }
+    public func screenScale() async -> Double? { nil }
 }

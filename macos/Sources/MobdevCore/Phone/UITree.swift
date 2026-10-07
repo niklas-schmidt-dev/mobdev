@@ -241,7 +241,7 @@ extension PhoneTools {
             "This iPhone has no UI tree yet. It needs Mobdev Runner, a small UI test that Mobdev builds with Xcode and runs on the iPhone: turn on Developer Mode on the iPhone (Settings › Privacy & Security), then in the Mobdev app open the iPhone's info and click Turn On under UI Tree. Until then use read_screen and tap_text.")
     }
 
-    private func tree() async throws -> [UIElement] {
+    func tree() async throws -> [UIElement] {
         guard let elements = try await phone.uiTree() else { throw noTree }
         return elements
     }

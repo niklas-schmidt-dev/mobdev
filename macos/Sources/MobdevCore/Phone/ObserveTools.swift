@@ -140,7 +140,7 @@ extension PhoneTools {
     }
 
     /// The UI tree's useful elements, else the recognized lines, in reading order and numbered.
-    private func currentMarks(in frame: CGImage) async throws -> (marks: [ScreenMark], fromTree: Bool) {
+    func currentMarks(in frame: CGImage) async throws -> (marks: [ScreenMark], fromTree: Bool) {
         if let elements = try? await phone.uiTree(), let marks = Self.marks(from: elements), !marks.isEmpty {
             return (marks, true)
         }
@@ -195,7 +195,7 @@ extension PhoneTools {
         }
     }
 
-    private func describe(_ mark: ScreenMark, _ size: (width: Int, height: Int)) -> String {
+    func describe(_ mark: ScreenMark, _ size: (width: Int, height: Int)) -> String {
         var parts = ["[\(mark.number)] \(mark.role)"]
         if !mark.label.isEmpty { parts.append("\"\(mark.label)\"") }
         if !mark.identifier.isEmpty { parts.append("id=\(mark.identifier)") }
@@ -218,8 +218,11 @@ extension PhoneTools {
         ]
     }
 
-    /// The screenshot with a numbered box around every mark.
-    static func marked(_ frame: CGImage, marks: [ScreenMark]) -> EncodedImage? {
+    /// The screenshot with a numbered box around every mark, in `color` or else by number, and
+    /// with `badge` or else the number in its corner.
+    static func marked(
+        _ frame: CGImage, marks: [ScreenMark], color: ((ScreenMark) -> CGColor)? = nil, badge: ((ScreenMark) -> String)? = nil
+    ) -> EncodedImage? {
         let image = ImageTools.scaled(frame, longEdge: ScreenGeometry.screenshotLongEdge)
         let width = image.width, height = image.height
         guard
@@ -235,7 +238,7 @@ extension PhoneTools {
         ]
         let font = CTFontCreateWithName("Helvetica-Bold" as CFString, max(14, CGFloat(width) / 36), nil)
         for mark in marks {
-            let color = colors[mark.number % colors.count]
+            let color = color?(mark) ?? colors[mark.number % colors.count]
             // Core Graphics counts from the bottom.
             let box = CGRect(
                 x: mark.frame.minX * Double(width), y: Double(height) - mark.frame.maxY * Double(height),
@@ -247,7 +250,8 @@ extension PhoneTools {
                 NSAttributedString.Key(kCTFontAttributeName as String): font,
                 NSAttributedString.Key(kCTForegroundColorAttributeName as String): CGColor(gray: 1, alpha: 1),
             ]
-            let line = CTLineCreateWithAttributedString(NSAttributedString(string: "\(mark.number)", attributes: attributes))
+            let line = CTLineCreateWithAttributedString(
+                NSAttributedString(string: badge?(mark) ?? "\(mark.number)", attributes: attributes))
             var ascent: CGFloat = 0, descent: CGFloat = 0, leading: CGFloat = 0
             let textWidth = CGFloat(CTLineGetTypographicBounds(line, &ascent, &descent, &leading))
             // A badge in the box's top-left corner, kept on the picture.
