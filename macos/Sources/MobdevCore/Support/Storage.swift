@@ -145,6 +145,8 @@ public struct AppSettings: Codable, Equatable, Sendable {
     /// The icon chosen for a project, by the project's folder: an image file, or "" for none.
     /// Projects without an entry show the app icon found in their repository.
     public var projectIcons: [String: String] = [:]
+    /// An agent has called Mobdev on this Mac, which a new project's Get Started steps tick off.
+    public var agentConnected = false
     /// Apps agents may not open or launch, by name or bundle ID, such as a banking app.
     public var blockedApps: [String] = []
 
@@ -180,6 +182,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         }
         activeProject = (try? container.decodeIfPresent(String.self, forKey: .activeProject)) ?? nil
         projectIcons = (try? container.decodeIfPresent([String: String].self, forKey: .projectIcons)) ?? [:]
+        agentConnected = (try? container.decodeIfPresent(Bool.self, forKey: .agentConnected)) ?? false
         blockedApps = (try? container.decodeIfPresent([String].self, forKey: .blockedApps)) ?? []
     }
 

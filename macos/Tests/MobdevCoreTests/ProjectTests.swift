@@ -563,6 +563,43 @@ import Testing
         #expect(given.data?["found_bundle_ids"] == nil)
     }
 
+    // MARK: Getting started
+
+    @Test func promptsNameTheProjectTheAppAndTheDevice() throws {
+        let repo = try repository()
+        defer { try? FileManager.default.removeItem(at: repo) }
+        try FileManager.default.createDirectory(at: repo.appendingPathComponent("apps/mobile"), withIntermediateDirectories: true)
+        let folder = try project(in: repo.appendingPathComponent("apps/mobile/mobdev"))
+        let context = ProjectPrompts.Context(project: folder, bundleID: "com.acme.shop", device: "iPhone 17")
+        #expect(context.relativeFolder == "apps/mobile/mobdev")
+
+        let prompts = ProjectPrompts.all(context)
+        #expect(prompts.map(\.id) == ["first-tests", "map-app", "dev-loop", "reproduce-bug", "store-screenshots", "onboarding-audit", "ci"])
+        #expect(Set(prompts.map(\.id)).count == prompts.count)
+        let first = ProjectPrompts.firstTests(context)
+        #expect(first.skill == "mobdev-smoke-test")
+        #expect(first.text.contains("The Mobdev project for this app is \(folder.path). Launch the app com.acme.shop on iPhone 17, explore"))
+        #expect(!first.text.contains("\n"))
+        #expect(ProjectPrompts.continuousIntegration(context).text.contains("with project: apps/mobile/mobdev)"))
+        // Every skill a prompt names exists.
+        let skills = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("../../../skills").standardizedFileURL
+        for skill in prompts.compactMap(\.skill) {
+            #expect(FileManager.default.fileExists(atPath: skills.appendingPathComponent("\(skill)/SKILL.md").path), "\(skill)")
+        }
+
+        // Without an app or a device, the first prompt sets the app up and asks for any booted device.
+        let bare = ProjectPrompts.firstTests(ProjectPrompts.Context(project: folder, bundleID: nil, device: nil))
+        #expect(bare.text.contains("First find the app's bundle ID (or Android package) and how to build it"))
+        #expect(bare.text.contains("Launch the app on a booted iOS simulator or Android emulator"))
+
+        // A workflow that runs Mobdev counts as CI; another workflow does not.
+        #expect(!ProjectPrompts.runsInCI(repo))
+        try write("on: push\njobs: {build: {runs-on: ubuntu-latest}}\n", to: ".github/workflows/build.yml", in: repo)
+        #expect(!ProjectPrompts.runsInCI(repo))
+        try write("jobs:\n  test:\n    steps:\n      - uses: niklas-schmidt-dev/mobdev/actions/test@main\n", to: ".github/workflows/mobdev.yaml", in: repo)
+        #expect(ProjectPrompts.runsInCI(repo))
+    }
+
     // MARK: Settings and the test home
 
     @Test func settingsMoveTheOldTestProjects() throws {

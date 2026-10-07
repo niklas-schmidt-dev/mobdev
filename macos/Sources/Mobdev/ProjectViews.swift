@@ -318,6 +318,7 @@ private struct ProjectOverview: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 header
+                ProjectGettingStarted(folder: folder, project: project, runTests: model.readyDevice(deviceID).map { _ in runAllTests })
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 190, maximum: 260), spacing: 14)], spacing: 14) {
                     ForEach(ProjectSection.allCases.dropFirst()) { section in
                         Button { storedPane = Pane.project(folder.path, section).rawValue } label: {
@@ -335,6 +336,8 @@ private struct ProjectOverview: View {
                     }
                 }
                 actions
+                ProjectAgentPrompts(folder: folder, project: project)
+                    .padding(.top, 8)
             }
             .padding(28)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -391,11 +394,7 @@ private struct ProjectOverview: View {
             Text("Run").font(.title3.weight(.semibold))
             HStack(spacing: 10) {
                 DevicePicker(deviceID: $deviceID)
-                Button("Run Tests", systemImage: "play.fill") {
-                    guard let project, let device = model.readyDevice(deviceID) else { return }
-                    model.runTests(project, on: device)
-                    storedPane = Pane.project(folder.path, .tests).rawValue
-                }
+                Button("Run Tests", systemImage: "play.fill", action: runAllTests)
                 .disabled(
                     model.readyDevice(deviceID) == nil || project?.tests.isEmpty != false || model.runningTests.contains(folder.path))
                 Button(crawling ? "Crawling…" : "Crawl App", systemImage: "map") { crawl() }
@@ -404,6 +403,13 @@ private struct ProjectOverview: View {
             }
             if let message { Text(message).font(.callout).foregroundStyle(.secondary).textSelection(.enabled) }
         }
+    }
+
+    /// Runs the project's tests on the chosen device and shows them.
+    private func runAllTests() {
+        guard let project, let device = model.readyDevice(deviceID) else { return }
+        model.runTests(project, on: device)
+        storedPane = Pane.project(folder.path, .tests).rawValue
     }
 
     private func crawl() {

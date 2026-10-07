@@ -484,6 +484,13 @@ project; the other folders appear when something is saved into them.
   Project…** (⌘O) adds an existing project, also when you choose the repository, and offers to
   create one in a folder that has none. Projects come first in the sidebar; the active one shows its Tests, Flows,
   Screenshots, App Map, Recordings and Runs.
+- A new project's overview says what to do next. **Get Started** walks through four steps that
+  tick themselves off: connect your agent (the Claude Code plugin, or the MCP config for Codex,
+  Cursor and others, plus `npx skills add niklas-schmidt-dev/mobdev`), let it write the first
+  tests, run them, and run them in CI. **Ask Your Agent** below has prompts to copy for writing
+  tests, mapping the app, checking each change, reproducing a bug, store screenshots, an
+  onboarding audit and CI, filled in with the project's folder, app and device and naming the
+  skill that does the job.
 - **Rename…** (in the project's overview or its context menu) changes the name in its
   `mobdev.json`, which test results and CI show too; the rest of the file stays as it is written.
 - The project you select is the **active** one. What is saved without a path lands there:

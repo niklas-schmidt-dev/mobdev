@@ -285,6 +285,11 @@ final class AppModel {
         .sorted { $0.entry.date > $1.entry.date }
         let recent = merged
         if recent != activity { activity = recent }
+        // The app's own calls are "app"; an agent's come over MCP, the HTTP API or the relay.
+        if !settings.agentConnected, recent.contains(where: { $0.entry.source != "app" }) {
+            settings.agentConnected = true
+            save()
+        }
         for index in devices.indices {
             let count = all.first { $0.id == devices[index].id }?.activity.all.count ?? 0
             if devices[index].activityCount != count { devices[index].activityCount = count }
@@ -772,6 +777,9 @@ final class AppModel {
         tools.projects.add(project.folder, activate: true)
         return ProjectList.normalized(project.folder)
     }
+
+    /// An agent has called Mobdev on this Mac.
+    var agentConnected: Bool { settings.agentConnected }
 
     /// Gives a project another name, in its mobdev.json.
     func renameProject(_ folder: URL, to name: String) throws {
