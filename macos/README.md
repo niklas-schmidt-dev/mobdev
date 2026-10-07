@@ -837,7 +837,7 @@ stream at `/v1/live` ([protocol](../relay/README.md#live-view)).
 
 Live view is off until you turn it on, on each Mac: a screen can show messages, codes and other
 private data, and the Mac decides whether anyone may watch it. While someone watches, the device's
-page shows **Watched in the browser now** and Remote Access lists who (you in the dashboard, a share
+page shows **Watched live now** and Remote Access lists who (you in the dashboard, a share
 link by its name, an agent with the client key), each with **Stop**. Every viewer who comes or goes
 is logged in the device's activity, and taps and typing from the browser show there as "Browser".
 Turning the setting off ends every live view at once. Frames are JPEGs of 800 px on the long edge

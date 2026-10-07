@@ -66,7 +66,7 @@ struct RemoteView: View {
                         } label: {
                             Label {
                                 Text(session.deviceName)
-                                Text("Watched in the browser now by \(LiveStreams.describe(session.viewers))")
+                                Text("Watched live now by \(LiveStreams.describe(session.viewers))")
                             } icon: {
                                 Image(systemName: "eye.fill").foregroundStyle(.red)
                             }

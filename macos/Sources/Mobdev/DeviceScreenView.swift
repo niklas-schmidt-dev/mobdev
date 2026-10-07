@@ -101,7 +101,7 @@ private struct LiveViewBadge: View {
                 Image(systemName: "eye.fill")
                     .foregroundStyle(.red)
                     .accessibilityHidden(true)
-                Text("Watched in the browser now")
+                Text("Watched live now")
                     .font(.callout.weight(.medium))
                 Button("Stop") { model.stopLiveView(id) }
                     .buttonStyle(.glass)
@@ -114,7 +114,7 @@ private struct LiveViewBadge: View {
             .glassEffect(.regular, in: .capsule)
             .help("Watched by \(LiveStreams.describe(viewers))")
             .accessibilityElement(children: .combine)
-            .accessibilityLabel("Watched in the browser now by \(LiveStreams.describe(viewers))")
+            .accessibilityLabel("Watched live now by \(LiveStreams.describe(viewers))")
             .padding(.top, 14)
             .transition(.move(edge: .top).combined(with: .opacity))
         }
