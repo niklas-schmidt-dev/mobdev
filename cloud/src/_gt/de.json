@@ -1193,7 +1193,7 @@
       " mit und entsteht erst, wenn Mobdev zum ersten Mal etwas hineinschreibt."
     ]
   },
-  "9ebe031fbc87fb7c": {
+  "ba3851a80d680cf1": {
     "t": "ul",
     "i": 1,
     "c": [
@@ -1255,6 +1255,19 @@
         "t": "li",
         "i": 11,
         "c": "Ein Testlauf bleibt in seinem Projekt, auch wenn währenddessen ein anderes aktiv wird."
+      },
+      {
+        "t": "li",
+        "i": 12,
+        "c": [
+          "Jedes Projekt zeigt das Icon seiner App, gefunden im Repository: das Icon aus einer Expo-",
+          {
+            "t": "code",
+            "i": 13,
+            "c": "app.json"
+          },
+          ", das iOS-App-Icon oder das Launcher-Icon von Android. In der Übersicht des Projekts wählst du jede andere Bilddatei."
+        ]
       }
     ]
   },

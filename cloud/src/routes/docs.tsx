@@ -528,6 +528,11 @@ function Docs() {
                   <li>
                     A test run stays in its project, even when another one becomes active meanwhile.
                   </li>
+                  <li>
+                    Each project shows its app’s icon, found in the repository: the icon of an
+                    Expo <code className={code}>app.json</code>, the iOS app icon or Android’s launcher icon. Choose any other
+                    image file in the project’s overview.
+                  </li>
                 </ul>
               </T>
             </Section>
