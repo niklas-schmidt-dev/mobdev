@@ -142,6 +142,9 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var projects: [String] = []
     /// The project that gets what agents and the app produce when no path is given.
     public var activeProject: String?
+    /// The icon chosen for a project, by the project's folder: an image file, or "" for none.
+    /// Projects without an entry show the app icon found in their repository.
+    public var projectIcons: [String: String] = [:]
     /// Apps agents may not open or launch, by name or bundle ID, such as a banking app.
     public var blockedApps: [String] = []
 
@@ -176,6 +179,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
             projects = (try? legacy.decodeIfPresent([String].self, forKey: .testProjects)) ?? []
         }
         activeProject = (try? container.decodeIfPresent(String.self, forKey: .activeProject)) ?? nil
+        projectIcons = (try? container.decodeIfPresent([String: String].self, forKey: .projectIcons)) ?? [:]
         blockedApps = (try? container.decodeIfPresent([String].self, forKey: .blockedApps)) ?? []
     }
 

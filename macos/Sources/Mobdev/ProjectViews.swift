@@ -128,7 +128,7 @@ struct ProjectSidebarRows: View {
                     }
                 }
             } icon: {
-                Image(systemName: isActive ? "folder.fill" : "folder")
+                ProjectIconView(folder: folder, size: 16, active: isActive)
             }
             .opacity(exists ? 1 : 0.5)
         }
@@ -139,6 +139,7 @@ struct ProjectSidebarRows: View {
                 .disabled(!exists)
             Button("Open mobdev.json") { NSWorkspace.shared.open(folder.appendingPathComponent(TestProject.fileName)) }
                 .disabled(!exists)
+            Menu("Icon") { ProjectIconMenuItems(folder: folder) }
             Divider()
             Button("Remove from List") { model.removeProject(folder) }
         }
@@ -301,6 +302,23 @@ private struct ProjectOverview: View {
     }
 
     private var header: some View {
+        HStack(alignment: .top, spacing: 14) {
+            Menu {
+                ProjectIconMenuItems(folder: folder)
+            } label: {
+                ProjectIconView(folder: folder, size: 56)
+            }
+            .menuStyle(.button)
+            .buttonStyle(.plain)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .help("Choose the project's icon")
+            .accessibilityLabel("Project icon")
+            details
+        }
+    }
+
+    private var details: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(project?.name ?? folder.lastPathComponent).font(.title2.weight(.semibold))
             HStack(spacing: 6) {

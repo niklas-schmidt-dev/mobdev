@@ -393,6 +393,61 @@ import Testing
         #expect(!broken.completed)
     }
 
+    // MARK: Icons
+
+    /// A PNG of the given size at a path inside `root`, with its folders.
+    func png(_ relative: String, in root: URL, size: Int = 32) throws {
+        let url = root.appendingPathComponent(relative)
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try ImageTools.encode(Canvas.image(width: size, height: size), png: true)!.data.write(to: url)
+    }
+
+    @Test func iconsAreFoundWhereMobileAndWebAppsKeepThem() throws {
+        let repo = try repository()
+        defer { try? FileManager.default.removeItem(at: repo) }
+        let folder = try project(in: repo.appendingPathComponent("mobdev"))
+        #expect(ProjectIcons.repository(of: folder) == repo)
+        #expect(ProjectIcons.candidates(in: repo).isEmpty)
+
+        // An Expo app, its iOS and Android projects, a web app and things that are no app icon.
+        try Data(#"{"expo": {"name": "App", "icon": "./assets/images/icon.png", "android": {"icon": "./assets/android.png"}}}"#.utf8)
+            .write(to: { try FileManager.default.createDirectory(at: repo.appendingPathComponent("apps/mobile"), withIntermediateDirectories: true); return repo.appendingPathComponent("apps/mobile/app.json") }())
+        try png("apps/mobile/assets/images/icon.png", in: repo)
+        try png("apps/mobile/assets/android.png", in: repo)
+        let set = "apps/mobile/ios/App/Images.xcassets/AppIcon.appiconset"
+        try png("\(set)/icon-40.png", in: repo, size: 40)
+        try png("\(set)/icon-1024.png", in: repo, size: 1024)
+        try png("\(set)/icon-180.png", in: repo, size: 180)
+        try png("apps/mobile/ios/App/Images.xcassets/AppIcon-Dev.appiconset/dev.png", in: repo, size: 1024)
+        let res = "apps/mobile/android/app/src/main/res"
+        try png("\(res)/mipmap-hdpi/ic_launcher.png", in: repo)
+        try png("\(res)/mipmap-xxxhdpi/ic_launcher_round.webp", in: repo)
+        try png("\(res)/mipmap-xxxhdpi/ic_launcher.webp", in: repo)
+        try png("apps/web/public/favicon.svg", in: repo)
+        try png("apps/mobile/node_modules/expo/assets/icon.png", in: repo)
+        try png("apps/mobile/ios/build/Build/AppIcon.appiconset/big.png", in: repo, size: 2048)
+        try png("mobdev/output/crawls/x/screens/s1.png", in: repo)
+        try png("mobdev/screenshots/en-US/01-home.png", in: repo)
+
+        let names = ProjectIcons.candidates(in: repo).map { $0.path.replacingOccurrences(of: repo.path + "/", with: "") }
+        #expect(
+            names == [
+                "apps/mobile/assets/images/icon.png", "apps/mobile/assets/android.png",
+                "\(set)/icon-1024.png", "apps/mobile/ios/App/Images.xcassets/AppIcon-Dev.appiconset/dev.png",
+                "\(res)/mipmap-xxxhdpi/ic_launcher.webp", "\(res)/mipmap-xxxhdpi/ic_launcher_round.webp",
+                "\(res)/mipmap-hdpi/ic_launcher.png",
+                "apps/web/public/favicon.svg",
+            ])
+
+        // A project outside any repository looks in the folder that holds it.
+        let loose = FileManager.default.temporaryDirectory.appendingPathComponent("mobdev-loose-\(UUID().uuidString)/mobdev")
+        try FileManager.default.createDirectory(at: loose, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: loose.deletingLastPathComponent()) }
+        #expect(ProjectIcons.repository(of: loose) == ProjectList.normalized(loose.deletingLastPathComponent()))
+        #expect(ProjectIcons.isImage(URL(fileURLWithPath: "/a/b.SVG")))
+        #expect(!ProjectIcons.isImage(URL(fileURLWithPath: "/a/b.pdf")))
+    }
+
     // MARK: Settings and the test home
 
     @Test func settingsMoveTheOldTestProjects() throws {
@@ -409,6 +464,10 @@ import Testing
             AppSettings.self, from: Data(#"{"projects": ["/c"], "testProjects": ["/a"], "activeProject": "/c"}"#.utf8))
         #expect(both.projects == ["/c"])
         #expect(both.activeProject == "/c")
+        #expect(both.projectIcons.isEmpty)
+        var icons = both
+        icons.projectIcons = ["/c": "/c/icon.png", "/d": ""]
+        #expect(try JSONDecoder().decode(AppSettings.self, from: JSONEncoder().encode(icons)).projectIcons == icons.projectIcons)
     }
 
     @Test func testsNeverWriteIntoTheInstalledAppsFolder() {

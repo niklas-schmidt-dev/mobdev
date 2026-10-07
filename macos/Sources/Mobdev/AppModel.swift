@@ -773,8 +773,34 @@ final class AppModel {
         return ProjectList.normalized(project.folder)
     }
 
-    /// Forgets a project; its folder stays as it is.
-    func removeProject(_ folder: URL) { tools.projects.remove(folder) }
+    /// Forgets a project and its icon; its folder stays as it is.
+    func removeProject(_ folder: URL) {
+        tools.projects.remove(folder)
+        if settings.projectIcons.removeValue(forKey: ProjectList.normalized(folder).path) != nil { save() }
+    }
+
+    /// The icon chosen for a project: the app icon found in its repository, an image file, or none.
+    enum ProjectIconChoice: Hashable {
+        case automatic, file(URL), none
+    }
+
+    func projectIconChoice(_ folder: URL) -> ProjectIconChoice {
+        switch settings.projectIcons[ProjectList.normalized(folder).path] {
+        case nil: .automatic
+        case ""?: .none
+        case let path?: .file(URL(fileURLWithPath: path))
+        }
+    }
+
+    func setProjectIcon(_ folder: URL, _ choice: ProjectIconChoice) {
+        let key = ProjectList.normalized(folder).path
+        switch choice {
+        case .automatic: settings.projectIcons[key] = nil
+        case .none: settings.projectIcons[key] = ""
+        case .file(let url): settings.projectIcons[key] = url.standardizedFileURL.path
+        }
+        save()
+    }
 
     /// Whether the New Project sheet is open, from the File menu or the sidebar.
     var showsNewProject = false

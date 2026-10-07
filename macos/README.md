@@ -491,6 +491,12 @@ project; the other folders appear when something is saved into them.
   the relay use the active project.
 - A test run, and a flow file from a project, stay in their project, also when another one becomes
   active meanwhile.
+- Each project shows its app's icon, found in the repository the way T3 Code finds a project's
+  favicon: the icon of an Expo `app.json`, the iOS `AppIcon` (its largest picture), Android's
+  `ic_launcher` at the highest density, else a favicon or logo where web apps keep one, also in
+  a monorepo's `apps/…`. Click the icon in the project's overview, or **Icon** in its context
+  menu, to choose another image found there, any image file (PNG, JPEG, SVG, ICO, WebP, HEIC…)
+  or no icon. The choice stays in the app's settings on this Mac.
 - Agents find the projects with `list_projects`, switch with `open_project` and make one with
   `create_project`.
 - Without a project, everything goes to Mobdev's folder, as before.
