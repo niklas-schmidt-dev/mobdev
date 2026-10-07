@@ -804,6 +804,14 @@ final class AppModel {
 
     /// Whether the New Project sheet is open, from the File menu or the sidebar.
     var showsNewProject = false
+    /// The repository the New Project sheet starts with, such as one Open Project… found no project in.
+    var newProjectRepository: URL?
+
+    /// Opens the New Project sheet, with a repository chosen when one is given.
+    func showNewProject(in repository: URL? = nil) {
+        newProjectRepository = repository
+        showsNewProject = true
+    }
 
     /// Project folders whose tests run right now.
     private(set) var runningTests: Set<String> = []

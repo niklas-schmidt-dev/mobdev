@@ -158,7 +158,8 @@ struct ProjectSidebarRows: View {
 
 /// New Project… and Open Project…, under the projects in the sidebar and in the File menu.
 struct ProjectActions {
-    /// Opens a project folder, or a repository with a mobdev/ folder, and shows it.
+    /// Opens a project folder, or a repository with a mobdev/ folder, and shows it. A folder
+    /// without a project, such as an app's repository, can get one right away.
     @MainActor static func open(_ model: AppModel, show: (Pane) -> Void) {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
@@ -170,9 +171,12 @@ struct ProjectActions {
             show(.project(folder.path, .overview))
         } catch {
             let alert = NSAlert()
-            alert.messageText = "Not a Project"
-            alert.informativeText = String(describing: error)
-            alert.runModal()
+            alert.messageText = "No Project in \(url.lastPathComponent)"
+            alert.informativeText =
+                "\(url.path) has no mobdev.json, and no mobdev folder with one. Create a project there to keep the app's tests, flows and screenshots with its code."
+            alert.addButton(withTitle: "Create Project Here…")
+            alert.addButton(withTitle: "Cancel")
+            if alert.runModal() == .alertFirstButtonReturn { model.showNewProject(in: url) }
         }
     }
 }
@@ -225,7 +229,7 @@ struct NoProjectView: View {
                 "A project is a folder in your app's repository, usually mobdev/. It holds the app's tests, flows, screenshots and map, versioned with your code, and keeps runs and recordings in an ignored output folder. Agents save into it too."
             )
         } actions: {
-            Button("New Project…") { model.showsNewProject = true }
+            Button("New Project…") { model.showNewProject() }
                 .buttonStyle(.glassProminent)
             Button("Open Project…") { ProjectActions.open(model) { storedPane = $0.rawValue } }
         }
@@ -765,6 +769,9 @@ struct NewProjectSheet: View {
     @State private var name = ""
     @State private var bundleID = ""
     @State private var problem: String?
+    /// Bundle IDs and package names the repository declares, the likeliest first.
+    @State private var found: [AppIdentifiers.Found] = []
+    @State private var searching = false
 
     private var target: URL? {
         let trimmed = folderName.trimmingCharacters(in: .whitespaces)
@@ -785,20 +792,49 @@ struct NewProjectSheet: View {
                     }
                     TextField("Folder", text: $folderName, prompt: Text(TestProject.defaultFolderName))
                     TextField("Name", text: $name, prompt: Text(repository?.lastPathComponent ?? "My App"))
-                    TextField("Bundle ID", text: $bundleID, prompt: Text("com.example.MyApp (optional)"))
+                    LabeledContent("Bundle ID") {
+                        HStack(spacing: 6) {
+                            TextField("Bundle ID", text: $bundleID, prompt: Text(searching ? "Looking in the repository…" : "com.example.MyApp (optional)"))
+                                .labelsHidden()
+                            if !found.isEmpty {
+                                Menu {
+                                    ForEach(found, id: \.id) { item in
+                                        Button("\(item.id) – \(item.platforms.joined(separator: ", "))") { bundleID = item.id }
+                                    }
+                                } label: {
+                                    Image(systemName: "chevron.up.chevron.down")
+                                }
+                                .menuStyle(.borderlessButton)
+                                .menuIndicator(.hidden)
+                                .fixedSize()
+                                .help("Bundle IDs and package names found in the repository")
+                                .accessibilityLabel("Found bundle IDs")
+                            }
+                        }
+                    }
                 } header: {
                     Text("New Project")
                 } footer: {
-                    Text(
-                        target.map { "Creates \($0.appendingPathComponent(TestProject.fileName).path). Tests, flows, screenshots and the app map go next to it and are versioned with your code; runs and recordings go to an ignored output folder." }
-                            ?? "Choose the app's repository. The project goes into a folder in it, usually mobdev."
-                    )
+                    VStack(alignment: .leading, spacing: 6) {
+                        if let origin = bundleIDOrigin { Text(origin) }
+                        Text(
+                            target.map { "Creates \($0.appendingPathComponent(TestProject.fileName).path). Tests, flows, screenshots and the app map go next to it and are versioned with your code; runs and recordings go to an ignored output folder." }
+                                ?? "Choose the app's repository. The project goes into a folder in it, usually mobdev."
+                        )
+                    }
                 }
                 if let problem {
                     Text(problem).foregroundStyle(.red)
                 }
             }
             .formStyle(.grouped)
+            .task(id: repository) { await findBundleIDs() }
+            .onAppear {
+                if let start = model.newProjectRepository {
+                    repository = start
+                    model.newProjectRepository = nil
+                }
+            }
             HStack {
                 Spacer()
                 Button("Cancel", role: .cancel) { dismiss() }.keyboardShortcut(.cancelAction)
@@ -818,6 +854,32 @@ struct NewProjectSheet: View {
         panel.canCreateDirectories = true
         panel.message = "Choose your app's repository. The project is created in a folder inside it."
         if panel.runModal() == .OK { repository = panel.url }
+    }
+
+    /// Where the bundle ID in the field comes from, when the repository declares it: "The bundle ID
+    /// of iOS and Android in apps/mobile/app.json."
+    private var bundleIDOrigin: String? {
+        guard let item = found.first(where: { $0.id == bundleID.trimmingCharacters(in: .whitespaces) }),
+            let source = item.sources.first, let colon = source.firstIndex(of: ":")
+        else { return nil }
+        let path = source[source.index(after: colon)...].trimmingCharacters(in: .whitespaces)
+        // The app is in English, so not ListFormatter, which follows the Mac's language.
+        let platforms = item.platforms.count > 1
+            ? item.platforms.dropLast().joined(separator: ", ") + " and " + (item.platforms.last ?? "")
+            : item.platforms.joined()
+        return "The bundle ID of \(platforms) in \(path)" + (found.count > 1 ? "; the menu has \(found.count - 1) more found in the repository." : ".")
+    }
+
+    /// Fills in the likeliest bundle ID of the chosen repository, unless one was typed.
+    private func findBundleIDs() async {
+        found = []
+        guard let repository else { return }
+        searching = true
+        let result = await Task.detached(priority: .userInitiated) { AppIdentifiers.find(in: repository) }.value
+        searching = false
+        guard repository == self.repository else { return }
+        found = result
+        if bundleID.trimmingCharacters(in: .whitespaces).isEmpty, let first = result.first { bundleID = first.id }
     }
 
     private func create() {

@@ -171,7 +171,7 @@ only device, or the connected iPhone when simulators or Android devices run next
 | `run_flow` | `path`, `steps`, `variables`, `video` | Replays a flow (JSON or Maestro YAML) and stops at the first failing step; `video` saves a recording (.mp4) |
 | `run_tests` | `project`, `tests`, `variables`, `video`, `language` | Runs a project's tests on this device: every result, the first failure's screen, results.json and junit.xml |
 | `list_projects` | | The projects Mobdev knows, which is active, and which one your calls use |
-| `create_project` | `path`, `name`, `bundle_id`, `builds` | Makes a project, such as `~/code/my-app/mobdev`, and makes it active |
+| `create_project` | `path`, `name`, `bundle_id`, `builds` | Makes a project, such as `~/code/my-app/mobdev`, and makes it active; without `bundle_id` it takes the repository's only app, or lists them |
 | `open_project` | `project` | Makes a project active: its folder, a repository with `mobdev/`, or its name |
 | `list_tests` | `project` | A project's tests and its newest results |
 | `save_test` | `project`, `name`, `steps`, `description`, `platforms`, `file` | Writes a test into the project, creating it when needed |
@@ -477,8 +477,12 @@ is, and it appears only when Mobdev first writes there. Only `mobdev.json` makes
 project; the other folders appear when something is saved into them.
 
 - **New Project…** (⇧⌘N, or under the projects in the sidebar) asks for the repository and writes
-  `mobdev/mobdev.json` into it. **Open Project…** (⌘O) adds an existing project, also when you
-  choose the repository. Projects come first in the sidebar; the active one shows its Tests, Flows,
+  `mobdev/mobdev.json` into it. It fills in the bundle ID the repository declares: an Expo
+  `app.json` or `app.config`, the Xcode project (or an XcodeGen `project.yml` or `Info.plist`),
+  Gradle's `applicationId` or a Capacitor config, one that iOS and Android share first; the menu
+  next to the field lists every one found, without test targets and dependencies. **Open
+  Project…** (⌘O) adds an existing project, also when you choose the repository, and offers to
+  create one in a folder that has none. Projects come first in the sidebar; the active one shows its Tests, Flows,
   Screenshots, App Map, Recordings and Runs.
 - The project you select is the **active** one. What is saved without a path lands there:
   recordings, `save_screenshot`, `save_flow`, `save_test`, crawls with the app's map, and named

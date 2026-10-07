@@ -131,7 +131,7 @@ private struct Sidebar: View {
                 ForEach(model.projects, id: \.path) { folder in
                     ProjectSidebarRows(folder: folder)
                 }
-                Button { model.showsNewProject = true } label: {
+                Button { model.showNewProject() } label: {
                     Label("New Project…", systemImage: "plus")
                 }
                 .buttonStyle(.plain)

@@ -70,7 +70,11 @@ public enum ProjectTools {
                     [
                         "path": ["type": "string", "description": "The new project's folder, inside an existing folder"],
                         "name": ["type": "string", "description": "The app's name; default the repository's folder name"],
-                        "bundle_id": ["type": "string", "description": "The app's bundle ID or Android package"],
+                        "bundle_id": [
+                            "type": "string",
+                            "description":
+                                "The app's bundle ID or Android package. Default the one the repository declares (Expo app.json or app.config, Xcode project, Gradle applicationId, Capacitor); when it declares several, the result lists them",
+                        ],
                         "builds": [
                             "type": "object", "additionalProperties": ["type": "string"],
                             "description":
@@ -208,14 +212,27 @@ public enum ProjectTools {
             throw ToolFailure("path must be an absolute path on the Mac that runs Mobdev, like ~/code/my-app/mobdev.")
         }
         let folder = ProjectList.normalized(URL(fileURLWithPath: path))
+        // Without bundle_id, the repository's own: taken when there is one, listed when there are several.
+        let found = args.has("bundle_id") ? [] : AppIdentifiers.find(in: ProjectIcons.repository(of: folder))
+        let bundleID = args.has("bundle_id") ? try args.string("bundle_id") : (found.count == 1 ? found[0].id : nil)
         let project = try TestProject.create(
             at: folder, name: args.has("name") ? try args.string("name", maxLength: 200) : nil,
-            bundleID: args.has("bundle_id") ? try args.string("bundle_id") : nil, builds: try args.stringDictionary("builds"))
+            bundleID: bundleID, builds: try args.stringDictionary("builds"))
         projects.add(folder, activate: true)
-        return ToolOutput(
-            text:
-                "Created the project \(project.name) in \(folder.path) and made it active. Save tests with save_test and flows with save_flow; recordings, screenshots, crawls and runs land there too.",
-            data: project.json)
+        var text =
+            "Created the project \(project.name) in \(folder.path) and made it active. Save tests with save_test and flows with save_flow; recordings, screenshots, crawls and runs land there too."
+        if found.count == 1 {
+            text += " Its app is \(found[0].id), from \(found[0].sources[0])."
+        } else if found.count > 1 {
+            let list = found.prefix(5).map { "\($0.id) (\($0.platforms.joined(separator: ", ")))" }.joined(separator: ", ")
+            text += " The repository names several apps: \(list). Set the one to test as app.bundle_id in mobdev.json."
+        }
+        var data = project.json
+        if !found.isEmpty, case .object(var object) = data {
+            object["found_bundle_ids"] = .array(found.map { .string($0.id) })
+            data = .object(object)
+        }
+        return ToolOutput(text: text, data: data)
     }
 
     private static func openProject(_ args: Arguments, projects: ProjectList) throws -> ToolOutput {

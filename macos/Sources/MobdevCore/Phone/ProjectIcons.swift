@@ -51,14 +51,13 @@ public enum ProjectIcons {
         var appIconSets: [URL] = []
         var launchers: [URL] = []
         var common: [(rank: Int, depth: Int, url: URL)] = []
-        let prefix = root.path + "/"
         walk(root) { url, isFolder in
             if isFolder {
                 if url.pathExtension == "appiconset" { appIconSets.append(url) }
                 return
             }
             let name = url.lastPathComponent
-            let relative = url.path.hasPrefix(prefix) ? String(url.path.dropFirst(prefix.count)) : name
+            let relative = relativePath(url, in: root) ?? name
             if let rank = commonFiles.firstIndex(where: { relative == $0 || relative.hasSuffix("/" + $0) }) {
                 common.append((rank, relative.split(separator: "/").count, url))
             }
@@ -82,12 +81,24 @@ public enum ProjectIcons {
         return Array(unique.prefix(12))
     }
 
+    /// A path inside the repository relative to it, also when one of them names /tmp or /var
+    /// and the other /private/tmp or /private/var.
+    static func relativePath(_ url: URL, in root: URL) -> String? {
+        let path = url.path
+        for base in [root.path, "/private" + root.path, String(root.path.trimmingPrefix("/private"))] {
+            if path.hasPrefix(base + "/") { return String(path.dropFirst(base.count + 1)) }
+        }
+        return nil
+    }
+
     /// Whether a file can be a project's icon, by its extension.
     public static func isImage(_ url: URL) -> Bool { fileExtensions.contains(url.pathExtension.lowercased()) }
 
     // MARK: Search
 
-    private static func walk(_ root: URL, visit: (URL, Bool) -> Void) {
+    /// Visits the files and folders of a repository, without dependencies, build output and
+    /// hidden folders, up to `maxDepth` levels and `maxEntries` entries.
+    static func walk(_ root: URL, visit: (URL, Bool) -> Void) {
         guard
             let walker = FileManager.default.enumerator(
                 at: root, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles, .skipsPackageDescendants])

@@ -448,6 +448,69 @@ import Testing
         #expect(!ProjectIcons.isImage(URL(fileURLWithPath: "/a/b.pdf")))
     }
 
+    // MARK: Bundle IDs
+
+    func write(_ text: String, to relative: String, in root: URL) throws {
+        let url = root.appendingPathComponent(relative)
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data(text.utf8).write(to: url)
+    }
+
+    @Test func bundleIDsAreFoundWhereAppsDeclareThem() async throws {
+        let repo = try repository()
+        defer { try? FileManager.default.removeItem(at: repo) }
+        #expect(AppIdentifiers.find(in: repo).isEmpty)
+
+        // An Expo app with native folders, a widget, tests, and dependencies that must not count.
+        try write(
+            #"{"expo": {"name": "App", "ios": {"bundleIdentifier": "com.acme.shop"}, "android": {"package": "com.acme.shop"}}}"#,
+            to: "apps/mobile/app.json", in: repo)
+        try write(
+            """
+            PRODUCT_BUNDLE_IDENTIFIER = com.acme.shop;
+            PRODUCT_BUNDLE_IDENTIFIER = "com.acme.shop";
+            PRODUCT_BUNDLE_IDENTIFIER = com.acme.shop.widget;
+            PRODUCT_BUNDLE_IDENTIFIER = com.acme.shopTests;
+            PRODUCT_BUNDLE_IDENTIFIER = com.acme.shop.UITests;
+            PRODUCT_BUNDLE_IDENTIFIER = "$(PRODUCT_BUNDLE_IDENTIFIER)";
+            """, to: "apps/mobile/ios/Shop.xcodeproj/project.pbxproj", in: repo)
+        try write(
+            #"android { namespace = "com.acme.shop"; defaultConfig { applicationId = "com.acme.shop" } }"#,
+            to: "apps/mobile/android/app/build.gradle.kts", in: repo)
+        try write(#"android { namespace "com.acme.camera" }"#, to: "apps/mobile/modules/camera/android/build.gradle", in: repo)
+        try write(#"defaultConfig { applicationId "com.facebook.react.sample" }"#, to: "node_modules/react-native/build.gradle", in: repo)
+        try write("PRODUCT_BUNDLE_IDENTIFIER = org.cocoapods.Pods;", to: "apps/mobile/ios/Pods/Pods.xcodeproj/project.pbxproj", in: repo)
+        try write(#"export default { appId: 'com.acme.web', appName: 'Web' }"#, to: "apps/web/capacitor.config.ts", in: repo)
+        let plist = try PropertyListSerialization.data(
+            fromPropertyList: ["CFBundleIdentifier": "com.acme.mac", "LSMinimumSystemVersion": "14.0"], format: .xml, options: 0)
+        try plist.write(to: { try FileManager.default.createDirectory(at: repo.appendingPathComponent("mac"), withIntermediateDirectories: true); return repo.appendingPathComponent("mac/Info.plist") }())
+
+        let found = AppIdentifiers.find(in: repo)
+        #expect(found.map(\.id) == ["com.acme.shop", "com.acme.web", "com.acme.shop.widget", "com.acme.camera"])
+        #expect(found[0].platforms == ["iOS", "Android"])
+        #expect(found[0].sources.first == "iOS: apps/mobile/app.json")
+        #expect(found[0].sources.contains("Android: apps/mobile/android/app/build.gradle.kts"))
+        #expect(found[1].platforms == ["Capacitor"])
+
+        // create_project takes the repository's only app, and lists them when there are several.
+        let tools = files(ProjectList())
+        let created = try await call(tools, "create_project", ["path": .string(repo.appendingPathComponent("mobdev").path)])
+        #expect(created.text.contains("The repository names several apps: com.acme.shop (iOS, Android), com.acme.web (Capacitor)"))
+        #expect(try TestProject.load(repo.appendingPathComponent("mobdev")).app.bundleID == nil)
+        #expect(created.data?["found_bundle_ids"]?.arrayValue?.first == "com.acme.shop")
+
+        let single = try repository()
+        defer { try? FileManager.default.removeItem(at: single) }
+        try write(#"defaultConfig { applicationId "dev.mobdev.solo" }"#, to: "android/app/build.gradle", in: single)
+        let solo = try await call(tools, "create_project", ["path": .string(single.appendingPathComponent("mobdev").path)])
+        #expect(solo.text.hasSuffix("Its app is dev.mobdev.solo, from Android: android/app/build.gradle."))
+        #expect(try TestProject.load(single.appendingPathComponent("mobdev")).app.bundleID == "dev.mobdev.solo")
+        let given = try await call(
+            tools, "create_project", ["path": .string(single.appendingPathComponent("other").path), "bundle_id": "dev.mobdev.given"])
+        #expect(try TestProject.load(single.appendingPathComponent("other")).app.bundleID == "dev.mobdev.given")
+        #expect(given.data?["found_bundle_ids"] == nil)
+    }
+
     // MARK: Settings and the test home
 
     @Test func settingsMoveTheOldTestProjects() throws {

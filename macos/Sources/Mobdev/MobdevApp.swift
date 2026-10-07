@@ -54,7 +54,7 @@ struct MobdevApp: App {
                 }
             }
             CommandGroup(replacing: .newItem) {
-                Button("New Project…") { model.showsNewProject = true }
+                Button("New Project…") { model.showNewProject() }
                     .keyboardShortcut("n", modifiers: [.command, .shift])
                 Button("Open Project…") {
                     ProjectActions.open(model) { UserDefaults.standard.set($0.rawValue, forKey: "selectedPane") }
