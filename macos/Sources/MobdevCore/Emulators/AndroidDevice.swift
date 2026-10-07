@@ -585,7 +585,10 @@ final class AndroidApps: AppBackend, @unchecked Sendable {
         let component = try await launcherActivity(package)
         detach(package)
         if restart { _ = try await adb.shell(serial, "am force-stop \(package)") }
-        let output = try await adb.shell(serial, "am start -W -n \(ADB.quote(component))", timeout: 45)
+        // After a force-stop the task can remain with another package's activity on top (Settings'
+        // search); clearing it makes the intent start the app instead of reaching that activity.
+        let flags = restart ? "--activity-clear-task " : ""
+        let output = try await adb.shell(serial, "am start -W \(flags)-n \(ADB.quote(component))", timeout: 45)
         if output.contains("Error:") { throw DeveloperError(output.trimmingCharacters(in: .whitespacesAndNewlines)) }
         var pid: Int?
         for _ in 0..<20 {

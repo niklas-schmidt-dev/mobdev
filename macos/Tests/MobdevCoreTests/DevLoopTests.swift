@@ -374,6 +374,24 @@ func closedPort() throws -> Int {
         #expect(AndroidApps.launchTiming(output) == LaunchTiming(milliseconds: 523, state: "COLD"))
         #expect(AndroidApps.launchTiming("Status: ok\nWaitTime: 610\nComplete") == LaunchTiming(milliseconds: 610))
         #expect(AndroidApps.launchTiming("Error: Activity not started, unable to resolve Intent") == nil)
+        // Recorded on an Android 16 emulator when Settings' search, another package, was on top.
+        let delivered = """
+            Starting: Intent { cmp=com.android.settings/.Settings }
+            Warning: Activity not started, intent has been delivered to currently running top-most instance.
+            Status: ok
+            LaunchState: UNKNOWN (0)
+            Activity: com.google.android.settings.intelligence/.modules.search.activity.SearchActivity
+            TotalTime: 0
+            WaitTime: 6
+            Complete
+            """
+        #expect(AndroidApps.launchTiming(delivered) == nil)
+    }
+
+    @Test func noFramesMeansNoFrameTimes() {
+        let stats = AndroidApps.frameStats(
+            "Total frames rendered: 0\nJanky frames: 0 (0.00%)\n50th percentile: 4950ms\n99th percentile: 4950ms\n")
+        #expect(stats == FrameStats(total: 0, janky: 0, jankyPercent: 0, p50: nil, p90: nil, p95: nil, p99: nil))
     }
 
     @Test func androidColdLaunchForceStopsAndStartsTheLauncherActivity() async throws {
@@ -388,7 +406,7 @@ func closedPort() throws -> Int {
         #expect(try await apps.coldLaunch("com.example.app") == LaunchTiming(milliseconds: 412, state: "COLD"))
         let calls = runner.calls.get()
         #expect(calls.contains("-s emulator-5590 shell am force-stop com.example.app"))
-        #expect(calls.last == "-s emulator-5590 shell am start -W -n 'com.example.app/.MainActivity'")
+        #expect(calls.last == "-s emulator-5590 shell am start -W --activity-clear-task -n 'com.example.app/.MainActivity'")
         await #expect(throws: DeveloperError.self) { try await apps.coldLaunch("not a package") }
     }
 

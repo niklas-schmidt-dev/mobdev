@@ -110,7 +110,8 @@ extension AndroidApps: AppPerformance {
     }
 
     /// `dumpsys gfxinfo <package>` since the reset: "Total frames rendered: 120", "Janky frames: 12
-    /// (10.00%)", "50th percentile: 8ms". Nil when the app drew nothing or the output has no stats.
+    /// (10.00%)", "50th percentile: 8ms". Nil when the output has no stats; no frame times when the
+    /// app drew nothing.
     static func frameStats(_ text: String) -> FrameStats? {
         func value(_ prefix: String) -> Substring? {
             text.split(separator: "\n").lazy.map { $0.trimmingCharacters(in: .whitespaces)[...] }
@@ -125,10 +126,11 @@ extension AndroidApps: AppPerformance {
         let percent = jankyText.firstRange(of: "(").flatMap { open in
             Double(jankyText[open.upperBound...].prefix { $0.isNumber || $0 == "." })
         } ?? (total > 0 ? Double(janky) / Double(total) * 100 : 0)
+        // Without frames gfxinfo still prints percentiles, all 4950 ms, its histogram's last bucket.
+        func time(_ prefix: String) -> Double? { total > 0 ? milliseconds(prefix) : nil }
         return FrameStats(
-            total: total, janky: janky, jankyPercent: percent, p50: milliseconds("50th percentile:"),
-            p90: milliseconds("90th percentile:"), p95: milliseconds("95th percentile:"),
-            p99: milliseconds("99th percentile:"))
+            total: total, janky: janky, jankyPercent: percent, p50: time("50th percentile:"),
+            p90: time("90th percentile:"), p95: time("95th percentile:"), p99: time("99th percentile:"))
     }
 
     /// The "TOTAL PSS: 98765" of newer `dumpsys meminfo` summaries, or the first number of the
@@ -152,9 +154,16 @@ extension AndroidApps: AppPerformance {
         let component = try await launcherActivity(package)
         _ = try await adb.shell(serial, "am force-stop \(package)")
         try await Task.sleep(nanoseconds: 500_000_000)
-        let output = try await adb.shell(serial, "am start -W -n \(ADB.quote(component))", timeout: 60)
+        // The task can outlive the process with another app's activity on top, such as Settings'
+        // search, which belongs to another package. Without clearing it the intent goes to that
+        // activity and nothing launches.
+        let output = try await adb.shell(
+            serial, "am start -W --activity-clear-task -n \(ADB.quote(component))", timeout: 60)
         guard let timing = Self.launchTiming(output) else {
-            let reason = output.split(separator: "\n").first { $0.contains("Error") || $0.contains("Status") }
+            let lines = output.split(separator: "\n")
+            let reason =
+                lines.first { $0.contains("Error") || $0.contains("Warning") }
+                ?? lines.first { $0.contains("Status") }
             throw DeveloperError(
                 "am start -W did not report a launch time for \(package)"
                     + (reason.map { ": \($0.trimmingCharacters(in: .whitespaces))" } ?? "."))
