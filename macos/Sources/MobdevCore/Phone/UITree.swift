@@ -203,11 +203,13 @@ extension PhoneTools {
 
     /// Reads the tree every half second until `accepted` holds, and returns that tree; nil when time
     /// runs out. A tree that cannot be read yet, as while an app launches, counts as not accepted;
-    /// it is waited for up to `unreadableGrace` longer, and its error is thrown if it never could be
-    /// read. A device without a tree fails at once.
+    /// it is waited for up to `unreadableGrace` longer, counted from the first unreadable read past
+    /// the timeout so a stalled machine cannot use the grace up before the first read (GitHub's
+    /// runners paused the test process for 15 s, 2026-10-07), and its error is thrown if it never
+    /// could be read. A device without a tree fails at once.
     private func poll(for timeout: TimeInterval, until accepted: ([UIElement]) -> Bool) async throws -> [UIElement]? {
         let deadline = Date().addingTimeInterval(timeout)
-        let lastChance = deadline.addingTimeInterval(Self.unreadableGrace)
+        var lastChance: Date?
         var unreadable: (any Error)?
         while true {
             do {
@@ -220,9 +222,11 @@ extension PhoneTools {
                 unreadable = error
             }
             let now = Date()
-            if now >= deadline, unreadable == nil || now >= lastChance {
-                if let unreadable { throw unreadable }
-                return nil
+            if now >= deadline {
+                guard unreadable != nil else { return nil }
+                let chance = lastChance ?? now.addingTimeInterval(Self.unreadableGrace)
+                lastChance = chance
+                if now >= chance { throw unreadable! }
             }
             try await pause(0.5)
         }
