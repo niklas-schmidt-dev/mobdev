@@ -24,12 +24,40 @@ import Testing
     @Test func openURLConfirmsTheOpenInPrompt() async throws {
         let apps = FakeApps()
         let phone = FakePhone(lines: [], apps: apps, tree: prompt)
+        // The prompt, then the app's own screen once Open was tapped.
+        phone.laterTree.set((afterReads: 1, tree: []))
         let output = try await tools(phone).call(
             "open_url", arguments: ["url": "mobdevfixture://hello"], source: "test", screenshotByDefault: false)
         #expect(!output.isError)
         #expect(output.text == "Opened mobdevfixture://hello. iOS asked whether to open it in the app; Mobdev tapped Open.")
         #expect(apps.opened.get().map(\.absoluteString) == ["mobdevfixture://hello"])
         #expect(phone.events.get() == [.tap(NormalizedPoint(x: 0.625, y: 0.5625), 0.08)])
+    }
+
+    /// A slow simulator swallowed the first tap, so Open is tapped again while the prompt stays,
+    /// and a prompt that outlasts every tap is reported instead of being called confirmed.
+    @Test func openURLTapsAgainWhileThePromptStays() async throws {
+        let phone = FakePhone(lines: [], apps: FakeApps(), tree: prompt)
+        let output = try await tools(phone).call(
+            "open_url", arguments: ["url": "mobdevfixture://stuck"], source: "test", screenshotByDefault: false)
+        #expect(output.isError)
+        #expect(output.text.contains("Mobdev tapped Open 3 times, but the prompt is still there"))
+        #expect(phone.events.get().count == PhoneTools.openPromptTaps)
+    }
+
+    /// Where simctl opens the URL, the prompt is expected and waited for well past a moment: on
+    /// GitHub's slow simulators it showed up seconds after the URL was opened.
+    @Test func openURLWaitsLongerForAnExpectedPrompt() async throws {
+        let own = [element("Button", "Ping", CGRect(x: 0.4, y: 0.4, width: 0.2, height: 0.05), tappable: true)]
+        let phone = FakePhone(lines: [], apps: FakeApps(mayPromptToOpenURL: true), tree: own)
+        // The app's own screen for 15 tree reads, almost four seconds, then the prompt.
+        phone.laterTree.set((afterReads: 15, tree: prompt))
+        let started = Date()
+        let output = try await tools(phone).call(
+            "open_url", arguments: ["url": "mobdevfixture://late"], source: "test", screenshotByDefault: false)
+        #expect(output.text.hasSuffix("Mobdev tapped Open 3 times, but the prompt is still there. Tap its Open button, e.g. with tap_element."))
+        #expect(phone.events.get().first == .tap(NormalizedPoint(x: 0.625, y: 0.5625), 0.08))
+        #expect(Date().timeIntervalSince(started) > 3)
     }
 
     @Test func openURLLeavesOtherScreensAlone() async throws {

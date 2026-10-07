@@ -3,7 +3,7 @@
   "steps": [
     {"install_app": {"path": "fixture/MobdevFixture.app"}},
     {"launch_app": {"bundle_id": "dev.mobdev.fixture", "restart": true}},
-    {"wait_for_element": {"id": "fixture.ping", "timeout": 30}},
+    {"wait_for_element": {"id": "fixture.ping", "timeout": 60}},
     {"tap_element": {"id": "fixture.field"}},
     {"type_text": {"text": "hello from CI", "submit": true}},
     {"tap_element": {"text": "Ping"}},

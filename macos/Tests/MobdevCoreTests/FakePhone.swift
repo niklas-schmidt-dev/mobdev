@@ -28,6 +28,10 @@ final class FakePhone: PhoneBackend, @unchecked Sendable {
     let tree: [UIElement]?
     /// How many reads fail first, like a busy simulator's.
     let unreadableReads = Locked(0)
+    /// A tree that replaces `tree` from the read after `afterReads` on, like a prompt that
+    /// appears a moment later.
+    let laterTree = Locked<(afterReads: Int, tree: [UIElement])?>(nil)
+    private let treeReads = Locked(0)
 
     /// Text lines drawn at (x, y) in pixels from the top-left of a 1179×2556 screen.
     init(
@@ -48,6 +52,11 @@ final class FakePhone: PhoneBackend, @unchecked Sendable {
             return count > 0
         }
         if unreadable { throw DeveloperError("The simulator's app has no size yet.") }
+        let read = treeReads.withLock { count -> Int in
+            count += 1
+            return count
+        }
+        if let later = laterTree.get(), read > later.afterReads { return later.tree }
         return tree
     }
 
@@ -124,10 +133,13 @@ final class FakeApps: AppBackend, @unchecked Sendable {
     let platform: AppPlatform
     let app: String
     let opened = Locked<[URL]>([])
+    /// Like simctl, which makes iOS ask before a custom scheme opens.
+    let mayPromptToOpenURL: Bool
 
-    init(platform: AppPlatform = .simulator, app: String = "dev.mobdev.fixture") {
+    init(platform: AppPlatform = .simulator, app: String = "dev.mobdev.fixture", mayPromptToOpenURL: Bool = false) {
         self.platform = platform
         self.app = app
+        self.mayPromptToOpenURL = mayPromptToOpenURL
     }
 
     func activate(_ bundleID: String) async throws {}

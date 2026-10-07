@@ -129,10 +129,17 @@ extension PhoneTools {
                 throw ToolFailure("url must be a full URL with a scheme, e.g. myapp://settings or https://example.com.")
             }
             try await requireApps().open(url)
-            if await confirmOpenPrompt(for: url) {
+            switch await confirmOpenPrompt(for: url) {
+            case .confirmed:
                 return ToolOutput(text: "Opened \(text). iOS asked whether to open it in the app; Mobdev tapped Open.")
+            case .stayed:
+                return ToolOutput(
+                    text:
+                        "Opened \(text). iOS asked whether to open it in the app; Mobdev tapped Open \(Self.openPromptTaps) times, but the prompt is still there. Tap its Open button, e.g. with tap_element.",
+                    isError: true)
+            case nil:
+                return ToolOutput(text: "Opened \(text).")
             }
-            return ToolOutput(text: "Opened \(text).")
         case "logs":
             return try readLogs(args)
         case "crash_reports":
@@ -143,29 +150,53 @@ extension PhoneTools {
     }
 
     /// How long iOS gets to show "Open in “App”?" after a custom-scheme URL was opened from outside
-    /// the app. GitHub's simulators show it, a developer's often does not, so the wait is short.
+    /// the app: a moment where the backend does not expect one (devicectl), and much longer where
+    /// it does (simctl), since GitHub's slow simulators showed it only seconds later (2026-10-07).
     static let openPromptWait: TimeInterval = 2.5
+    static let openPromptExpectedWait: TimeInterval = 20
+
+    /// How often Open is tapped before the prompt is given up on: a slow simulator swallowed the
+    /// first tap (2026-10-07).
+    static let openPromptTaps = 3
+
+    enum OpenPrompt {
+        /// Tapped Open and the prompt went away.
+        case confirmed
+        /// The prompt is still there after every tap.
+        case stayed
+    }
 
     /// Taps Open in iOS's "Open in “App”?" prompt when it appears for a custom URL scheme on a
-    /// device with a UI tree. Left alone, the prompt stays over SpringBoard, hides the app from
-    /// the tree and fails every later step. Web links open without one. True when it was tapped.
-    private func confirmOpenPrompt(for url: URL) async -> Bool {
-        guard let scheme = url.scheme?.lowercased(), scheme != "http", scheme != "https" else { return false }
-        let deadline = Date().addingTimeInterval(Self.openPromptWait)
+    /// device with a UI tree, again if the prompt stays. Left alone, the prompt stays over
+    /// SpringBoard, hides the app from the tree and fails every later step. Web links open
+    /// without one. Nil when no prompt appeared or the device has no tree.
+    private func confirmOpenPrompt(for url: URL) async -> OpenPrompt? {
+        guard let scheme = url.scheme?.lowercased(), scheme != "http", scheme != "https" else { return nil }
+        let wait = phone.apps?.mayPromptToOpenURL == true ? Self.openPromptExpectedWait : Self.openPromptWait
+        let deadline = Date().addingTimeInterval(wait)
+        var tree: [UIElement]
         while true {
-            guard let tree = try? await phone.uiTree() else { return false }
-            if let open = Self.openPromptButton(in: tree) {
-                guard (try? requireTouch()) != nil, (try? await phone.tap(at: open.center, hold: 0.08)) != nil else { return false }
-                // Until the prompt is gone, so the next step sees the app.
-                let gone = Date().addingTimeInterval(Self.openPromptWait)
-                while Date() < gone, let after = try? await phone.uiTree(), Self.openPromptButton(in: after) != nil {
-                    try? await pause(0.25)
-                }
-                return true
+            guard let current = try? await phone.uiTree() else { return nil }
+            if Self.openPromptButton(in: current) != nil {
+                tree = current
+                break
             }
-            if Date() >= deadline { return false }
+            if Date() >= deadline { return nil }
             try? await pause(0.25)
         }
+        for _ in 1...Self.openPromptTaps {
+            guard let open = Self.openPromptButton(in: tree) else { return .confirmed }
+            guard (try? requireTouch()) != nil, (try? await phone.tap(at: open.center, hold: 0.08)) != nil else { return .stayed }
+            // Until the prompt is gone, so the next step sees the app; otherwise tap once more.
+            let gone = Date().addingTimeInterval(Self.openPromptWait)
+            while Date() < gone {
+                try? await pause(0.25)
+                guard let after = try? await phone.uiTree() else { return .confirmed }
+                if Self.openPromptButton(in: after) == nil { return .confirmed }
+                tree = after
+            }
+        }
+        return .stayed
     }
 
     /// The prompt's Open button: a tappable "Open" next to a title that starts with "Open in".

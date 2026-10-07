@@ -3,7 +3,7 @@
   "app": {"bundle_id": "dev.mobdev.fixture", "builds": {"simulator": "../flows/fixture/MobdevFixture.app"}},
   "before_each": [
     {"launch_app": {"bundle_id": "dev.mobdev.fixture", "restart": true}},
-    {"wait_for_element": {"id": "fixture.ping", "timeout": 30}}
+    {"wait_for_element": {"id": "fixture.ping", "timeout": 60}}
   ],
   "variables": {"GREETING": "hello from a test"}
 }

@@ -142,6 +142,9 @@ public enum AppPlatform: Sendable, Equatable {
 public protocol AppBackend: Sendable {
     var logs: AppLogs { get }
     var platform: AppPlatform { get }
+    /// iOS may ask "Open in “App”?" when this backend opens a custom URL scheme, as it does for
+    /// simctl; the tools then wait longer for the prompt.
+    var mayPromptToOpenURL: Bool { get }
     /// Brings an installed app to the front, starting it if needed, without capturing its output.
     func activate(_ bundleID: String) async throws
     /// Developer apps, or every app with `all`.
@@ -162,6 +165,10 @@ public protocol AppBackend: Sendable {
     func crashReports() async throws -> [CrashReportFile]
     /// Copies a report to the Mac and parses it.
     func crashReport(named name: String) async throws -> (report: CrashReport?, file: URL)
+}
+
+extension AppBackend {
+    public var mayPromptToOpenURL: Bool { false }
 }
 
 /// Xcode's `devicectl` for one device. Needs Xcode on the Mac and Developer Mode on an iPhone.
@@ -290,7 +297,8 @@ public final class DeviceControl: AppBackend, @unchecked Sendable {
         }
         detach(bundleID)
         if usesSimctl {
-            _ = try await simctl(["uninstall", udid, bundleID])
+            // As long as an install: a GitHub simulator took over 30 s to remove the example app.
+            _ = try await simctl(["uninstall", udid, bundleID], timeout: 75)
         } else {
             _ = try await call(["device", "uninstall", "app"], arguments: [bundleID])
         }
@@ -427,6 +435,9 @@ public final class DeviceControl: AppBackend, @unchecked Sendable {
         }
         _ = try await call(["device", "process", "openURL"], arguments: [url.absoluteString])
     }
+
+    /// `simctl openurl` makes iOS ask before a custom scheme opens; devicectl's openURL does not.
+    public var mayPromptToOpenURL: Bool { usesSimctl }
 
     // MARK: simctl
 
