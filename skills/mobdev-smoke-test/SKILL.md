@@ -22,6 +22,9 @@ device? It is not an exhaustive test. Read the `mobdev` skill first for driving 
 - `status` must say Ready.
 - Your own app with Developer Mode: `install_app` the build, then `launch_app` so `logs` captures
   its output. Any other app: `open_app` by name.
+- Start from a known state. On simulators and Android: `reset_app` for a fresh start, and
+  `set_permission` with `grant` for what the paths need, so system prompts do not get in the way
+  (or `reset` when the prompt is part of a path).
 - Make a folder for evidence, e.g. `smoke/<date>/`. On the Mac that runs Mobdev, save full-size
   screenshots with:
 
@@ -30,22 +33,26 @@ device? It is not an exhaustive test. Read the `mobdev` skill first for driving 
   curl -s -H "Authorization: Bearer $TOKEN" "http://127.0.0.1:4686/v1/screenshot?format=png" -o smoke/01-launch.png
   ```
 
-  Add `&device=<id>` when several devices are connected. The same test can run on a simulator or
-  an Android emulator by passing its id as `device`, which is a cheap way to cover more screen
-  sizes and both platforms.
+  Add `&device=<id>` when several devices are connected. `Mobdev screenshot --image
+  smoke/01-launch.jpg` saves the smaller JPEG the tool returns. The same test can run on a
+  simulator or an Android emulator by passing its id as `device`, which is a cheap way to cover
+  more screen sizes and both platforms.
+- `start_recording` with `path` set to e.g. `smoke/<date>/run.mp4` (an absolute path) records the
+  whole run; `stop_recording` at the end. The video shows what happened between screenshots.
 
 ## 3. Run each path
 
-For every step: act, wait for the expected screen with `wait_for_text`, confirm with `read_screen`
-or `screenshot`, save a screenshot, and note what you saw. A step fails when the expected text or
-screen does not appear within a reasonable wait, an error message shows, the app leaves the
-foreground, or `logs` reports that it exited or crashed.
+For every step: act, wait for the expected screen with `wait_for_element` or `wait_for_text`
+(`wait_for_idle` when the screen only has to settle), confirm with `observe` or `screenshot`, save
+a screenshot, and note what you saw. `scroll_until_visible` finds rows further down a list. A step
+fails when the expected text or screen does not appear within a reasonable wait, an error message
+shows, the app leaves the foreground, or `logs` reports that it exited or crashed.
 
 After each path, check `logs` with the last `cursor` for errors and warnings. When the app crashed,
 call `crash_reports` for it and read the newest report. Relaunch and continue with the next path.
 
-On simulators, Android and iPhones with the UI tree on, act with `tap_element` and check with
-`wait_for_element` where the app has accessibility identifiers. When a path passes, offer to save
+On simulators, Android and iPhones with the UI tree on, act with `tap_element` (or `observe` and
+`tap_mark`) and check with `wait_for_element` where the app has accessibility identifiers. When a path passes, offer to save
 it as a test with `save_test` into the app's project folder (ask where; `mobdev/` in the repository
 is a good default, see the `mobdev` skill), so the next smoke test runs it with `run_tests`, and CI
 with `Mobdev test`, without an agent.
@@ -56,8 +63,8 @@ Write `smoke/<date>/report.md` (or HTML if the user prefers):
 
 - Build, device, iOS version (`list_devices`), date.
 - A table: path, expected, actual, result (pass, fail or blocked), evidence file.
-- For each failure: the steps to reproduce, the screenshot, relevant log lines and the crash
-  summary.
+- For each failure: the steps to reproduce, the screenshot, the video and about when in it the
+  failure shows, relevant log lines and the crash summary.
 - What you did not test and why.
 
 End with a one-line verdict: ready or not, and the most important failure.

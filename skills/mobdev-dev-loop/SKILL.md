@@ -1,6 +1,6 @@
 ---
 name: mobdev-dev-loop
-description: Build an iOS or Android app, install it on a real iPhone, an iOS simulator or an Android emulator or phone, run it, drive its UI and read its logs and crash reports with Mobdev. Use when developing or debugging a mobile app on a device - "run it on my iPhone", "try it in the simulator", "test it on Android", "why does it crash", "check the logs", deep links, or verifying a fix end to end.
+description: Build an iOS or Android app, install it on a real iPhone, an iOS simulator or an Android emulator or phone, run it, drive its UI and read its logs and crash reports with Mobdev. Use when developing or debugging a mobile app on a device - "run it on my iPhone", "try it in the simulator", "test it on Android", "why does it crash", "check the logs", deep links, push notifications, permissions, location, or verifying a fix end to end.
 ---
 
 # Build, run and debug on a real iPhone
@@ -38,8 +38,10 @@ and crash reports. Read the `mobdev` skill for driving the UI.
    app prints: `print`, `NSLog`, `Logger` and `os_log`. Pass `arguments` (for example
    `["-UITestMode", "YES"]`) and `environment` when the app reads them.
 
-4. **Drive and check the UI** with `read_screen`, `tap_text`, `type_text`, `screenshot` and
-   `wait_for_text`. Use `open_url` for deep links (`myapp://orders/42`) and universal links.
+4. **Drive and check the UI** with `observe` and `tap_mark`, `tap_element`, `type_text` and
+   `scroll_until_visible`. Wait with `wait_for_element` or `wait_for_text` for what should appear,
+   or `wait_for_idle` for the screen to settle, never a fixed sleep. Use `open_url` for deep links
+   (`myapp://orders/42`) and universal links.
 
 5. **Read the output:** `logs` with `bundle_id`. Keep the returned `cursor` and pass it as `after`
    next time to see only new lines. `contains` filters. Temporary markers such as
@@ -48,7 +50,25 @@ and crash reports. Read the `mobdev` skill for driving the UI.
 6. **Change code, rebuild, `install_app`, `launch_app`.** Repeat until the behaviour is right.
 
 `stop_app` stops the app. `uninstall_app` removes it with its data, which gives a true first launch
-on the next install. It only removes apps installed for development.
+on the next install. It only removes apps installed for development. On simulators and Android,
+`reset_app` deletes the data without reinstalling.
+
+## Set up the scenario
+
+Put the device in the state the feature needs before you launch, instead of tapping through
+Settings or waiting for a real event. Simulators and Android take all of these; iPhones with
+Developer Mode and Xcode 27 some (the `mobdev` skill lists them):
+
+- First launch or onboarding: `reset_app`, then `launch_app`.
+- Permission prompts: `set_permission` with `reset` so the app asks again, or `grant` to skip the
+  prompt, or `revoke` to test the denied path.
+- Push handling: `send_push` with `title`, `body` and `data` (or a whole `payload`) on a simulator,
+  as if it came from APNs.
+- Location features: `set_location` with a coordinate, or a `route` to move along.
+- Localization and accessibility: `set_language` (then `launch_app` again), `set_appearance` with
+  `dark`, `text_size`, `increase_contrast` or `reduce_motion`, `set_orientation`.
+- Face ID or fingerprint: `biometrics` with `match` or `fail` while the prompt shows.
+- Paste flows: `clipboard` with `text`; `clipboard` alone reads what the app copied.
 
 ## Simulators and Android
 
@@ -92,6 +112,12 @@ The loop is the same; only the build differs.
 ## Good habits
 
 - Verify on the device, not only by compiling: a passing build is not a working feature.
-- Report what you checked on the phone and what you could not, such as push notifications or
-  purchases that need real accounts.
-- Leave the phone as you found it. Uninstall test builds only if the user wants that.
+- Show it: `start_recording` before the steps that prove a fix and `stop_recording` after, and give
+  the user the video's path.
+- Report what you checked on the phone and what you could not, such as push notifications on an
+  iPhone (a simulator takes `send_push`) or purchases that need real accounts.
+- Once a path works, offer to keep it as a test with `save_test` (see the `mobdev` skill), so the
+  next change is checked without an agent.
+- Leave the phone as you found it: undo state you changed (`set_status_bar` with `preset: "clear"`,
+  `set_location` with `clear: true`, the appearance and language), and uninstall test builds only
+  if the user wants that.
