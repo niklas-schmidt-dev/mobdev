@@ -78,7 +78,8 @@ private struct AgentSettings: View {
                 }
                 .onDeleteCommand { remove() }
                 HStack {
-                    TextField("App name or bundle ID", text: $newApp, prompt: Text("e.g. Sparkasse or com.apple.mobilemail"))
+                    TextField("App name or bundle ID", text: $newApp, prompt: Text("App name or bundle ID"))
+                        .labelsHidden()
                         .onSubmit(add)
                     Button("Add", action: add).disabled(newApp.trimmingCharacters(in: .whitespaces).isEmpty)
                     Button("Remove", action: remove).disabled(selection == nil)

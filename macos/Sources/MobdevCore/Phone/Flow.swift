@@ -397,7 +397,7 @@ public final class FlowRecorder: Sendable {
 
     /// Arguments for tap_element naming the smallest tappable element under the point, when its
     /// identifier (or else its label) picks it alone.
-    static func element(at point: NormalizedPoint, in tree: [UIElement]) -> [String: JSONValue]? {
+    public static func element(at point: NormalizedPoint, in tree: [UIElement]) -> [String: JSONValue]? {
         let under = tree.filter { $0.tappable && $0.frame.contains(CGPoint(x: point.x, y: point.y)) }
         guard let element = under.min(by: { $0.frame.width * $0.frame.height < $1.frame.width * $1.frame.height })
         else { return nil }

@@ -7,6 +7,8 @@ struct DeviceScreenView: View {
     @Environment(AppModel.self) private var model
     let id: String
     @AppStorage("showDevicePanel") private var showPanel = true
+    /// Whether the element inspector lies over the screen.
+    @State private var inspecting = false
 
     /// The panel floats over the stage instead of being an inspector column: resizing the column
     /// animated the whole stage and its video layer frame by frame, which made the window flicker.
@@ -30,12 +32,16 @@ struct DeviceScreenView: View {
             Group {
                 if model.state(id)?.isEmulated == true {
                     if let size = status?.frameSize {
-                        EmulatorStage(id: id, frameSize: CGSize(width: size.width, height: size.height), panel: showPanel)
+                        EmulatorStage(
+                            id: id, frameSize: CGSize(width: size.width, height: size.height), panel: showPanel,
+                            inspecting: inspecting)
                     } else {
                         ProgressView("Waiting for the screen…")
                     }
                 } else if let size = status?.frameSize, model.hardware(id)?.capture.session != nil {
-                    PhoneStage(id: id, frameSize: CGSize(width: size.width, height: size.height), panel: showPanel)
+                    PhoneStage(
+                        id: id, frameSize: CGSize(width: size.width, height: size.height), panel: showPanel,
+                        inspecting: inspecting)
                 } else {
                     ConnectPhone(id: id)
                 }
@@ -55,6 +61,7 @@ struct DeviceScreenView: View {
             }
         }
         .animation(.smooth(duration: 0.4), value: showPanel)
+        .onChange(of: id) { inspecting = false }
         .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
         .toolbar {
             ToolbarItemGroup {
@@ -64,6 +71,12 @@ struct DeviceScreenView: View {
                 Button("Screenshot", systemImage: "camera") { model.saveScreenshot(id) }
                     .disabled(status?.frameSize == nil)
                     .help("Save a screenshot")
+                Toggle("Inspect", systemImage: "scope", isOn: $inspecting)
+                    .disabled(status?.frameSize == nil)
+                    .help(
+                        inspecting
+                            ? "Stop inspecting and control the device again"
+                            : "Inspect elements: see identifiers and labels, click to copy the step that taps one")
             }
             ToolbarSpacer(.fixed)
             ToolbarItem {
@@ -229,6 +242,7 @@ private struct PhoneStage: View {
     let frameSize: CGSize
     /// Whether the panel is shown beside the screen.
     let panel: Bool
+    let inspecting: Bool
     @State private var focused = false
 
     var body: some View {
@@ -254,6 +268,9 @@ private struct PhoneStage: View {
                     }
                 )
                 .frame(width: screen.width, height: screen.height)
+                .overlay {
+                    if inspecting { ElementInspector(id: id, screen: screen, frameSize: frameSize) }
+                }
                 .clipShape(.rect(cornerRadius: radius, style: .continuous))
                 .padding(bezel)
                 .background {
@@ -293,6 +310,7 @@ private struct PhoneStage: View {
     }
 
     private var hint: String {
+        if inspecting { return "Inspecting: point at an element to see it · click to copy the step that taps it" }
         guard model.state(id)?.status.bluetooth.isConnected == true else {
             return "Pair over Bluetooth to control the \(noun) from here."
         }

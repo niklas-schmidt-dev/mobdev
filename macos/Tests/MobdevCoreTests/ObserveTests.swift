@@ -120,6 +120,7 @@ import Testing
         let list = ["Sparkasse", "com.apple.mobilemail"]
         #expect(AppBlocklist.isBlocked("sparkasse", in: list))
         #expect(AppBlocklist.isBlocked("com.example.Sparkasse", in: list))
+        #expect(AppBlocklist.isBlocked("de.sparkasse.app", in: list))
         #expect(AppBlocklist.isBlocked("com.apple.mobilemail", in: list))
         #expect(AppBlocklist.isBlocked("mobilemail", in: list))
         #expect(!AppBlocklist.isBlocked("Mail", in: list))

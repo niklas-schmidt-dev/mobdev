@@ -26,16 +26,20 @@ public enum AppBlocklist {
     public static func reload() { cache.set(nil) }
 
     /// Whether `app`, a name or bundle ID, is on the list, ignoring case and accents. A name also
-    /// matches the last part of a bundle ID ("Sparkasse" and com.example.sparkasse).
+    /// matches a bundle ID with that name as one of its parts after the first ("Sparkasse" and
+    /// de.sparkasse.app), and the other way round.
     static func isBlocked(_ app: String, in list: [String]) -> Bool {
         let needle = ElementQuery.folded(app)
         guard !needle.isEmpty else { return false }
+        func names(in bundleID: String) -> ArraySlice<Substring> { bundleID.split(separator: ".").dropFirst() }
         return list.contains { entry in
             let blocked = ElementQuery.folded(entry)
             if blocked == needle { return true }
-            let last = needle.split(separator: ".").last.map(String.init) ?? needle
-            let blockedLast = blocked.split(separator: ".").last.map(String.init) ?? blocked
-            return blocked.contains(".") != needle.contains(".") && (last == blockedLast)
+            switch (blocked.contains("."), needle.contains(".")) {
+            case (false, true): return names(in: needle).contains { $0 == blocked }
+            case (true, false): return names(in: blocked).contains { $0 == needle }
+            default: return false
+            }
         }
     }
 

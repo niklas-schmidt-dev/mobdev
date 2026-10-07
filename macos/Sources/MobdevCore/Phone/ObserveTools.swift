@@ -187,10 +187,11 @@ extension PhoneTools {
         let sorted = ElementQuery.onePerPlace(useful).sorted { a, b in
             abs(a.frame.minY - b.frame.minY) > 0.008 ? a.frame.minY < b.frame.minY : a.frame.minX < b.frame.minX
         }
+        // The part on screen, so a tap on a half-hidden element lands where it can be seen.
         return sorted.prefix(maxMarks).enumerated().map { index, element in
             ScreenMark(
                 number: index + 1, role: element.role, label: element.label, identifier: element.identifier,
-                value: element.value, frame: element.frame, enabled: element.enabled)
+                value: element.value, frame: element.frame.intersection(screen), enabled: element.enabled)
         }
     }
 

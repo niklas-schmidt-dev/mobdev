@@ -10,6 +10,8 @@ struct EmulatorStage: View {
     let frameSize: CGSize
     /// Whether the panel is shown beside the screen.
     let panel: Bool
+    /// Whether the element inspector lies over the screen instead of clicks reaching the device.
+    let inspecting: Bool
     @State private var image: CGImage?
     @State private var dragStarted: Date?
     /// Where the pointer is over the screen, in its points, and the size it is shown at.
@@ -41,6 +43,10 @@ struct EmulatorStage: View {
                     .focused($focused)
                     .focusEffectDisabled()
                     .onKeyPress(phases: .down, action: key)
+                    .overlay {
+                        if inspecting { ElementInspector(id: id, screen: screen, frameSize: size) }
+                    }
+                    .clipShape(.rect(cornerRadius: radius, style: .continuous))
                     .padding(bezel)
                     .background {
                         RoundedRectangle(cornerRadius: radius + bezel, style: .continuous)
@@ -61,7 +67,10 @@ struct EmulatorStage: View {
                     .accessibilityLabel("\(model.state(id)?.kind.label ?? "Device") screen")
                     .accessibilityHint("Click to tap, drag to swipe, type while focused")
 
-                Text(focused ? "Typing goes to the device. ⌘V types the Mac clipboard." : "Click to tap · drag to swipe · click, then type")
+                Text(
+                    inspecting
+                        ? "Inspecting: point at an element to see it · click to copy the step that taps it"
+                        : focused ? "Typing goes to the device. ⌘V types the Mac clipboard." : "Click to tap · drag to swipe · click, then type")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .contentTransition(.opacity)
