@@ -516,7 +516,9 @@ func closedPort() throws -> Int {
         let output = try await call(tools, "measure_launch", ["bundle_id": "com.example.gone", "runs": 1])
         #expect(output.isError)
         #expect(output.text == "Could not launch com.example.gone: com.example.gone is not installed.")
-        #expect(Date().timeIntervalSince(started) < 5)
+        // Ended by the failure, not by the launch timeout. Not a tighter bound: GitHub's runner
+        // starved this test for 19 s once (2026-10-07).
+        #expect(Date().timeIntervalSince(started) < PhoneTools.launchTimeout)
     }
 
     @Test func blockedAppsCannotBeLaunchedForTiming() throws {

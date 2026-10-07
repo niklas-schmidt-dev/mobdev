@@ -434,7 +434,9 @@ final class FakeAndroid: FakePhone, Device, @unchecked Sendable {
         let started = Date()
         task.cancel()
         let result = await task.value
-        #expect(Date().timeIntervalSince(started) < 3)
+        // Well under the step's 60 s, which an ignored cancel would wait out; not tighter, since
+        // GitHub's runners starve test processes for 15 s and more.
+        #expect(Date().timeIntervalSince(started) < 30)
         #expect(!result.passed)
         #expect(result.failure?.result.text == "Cancelled.")
         #expect(result.steps.count == 2)

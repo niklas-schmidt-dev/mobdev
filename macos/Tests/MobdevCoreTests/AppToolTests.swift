@@ -50,9 +50,11 @@ import Testing
     @Test func openURLWaitsLongerForAnExpectedPrompt() async throws {
         let own = [element("Button", "Ping", CGRect(x: 0.4, y: 0.4, width: 0.2, height: 0.05), tappable: true)]
         let phone = FakePhone(lines: [], apps: FakeApps(mayPromptToOpenURL: true), tree: own)
-        // The app's own screen for 15 tree reads, almost four seconds, then the prompt.
-        phone.laterTree.set((afterReads: 15, tree: prompt))
+        // The app's own screen for three seconds, past the 2.5 s an unexpected prompt gets, then
+        // the prompt. By the clock rather than by reads: GitHub's runner starved the test process
+        // so that 15 reads took over 20 s and the prompt never came (2026-10-07).
         let started = Date()
+        phone.treeFrom.set((date: started.addingTimeInterval(3), tree: prompt))
         let output = try await tools(phone).call(
             "open_url", arguments: ["url": "mobdevfixture://late"], source: "test", screenshotByDefault: false)
         #expect(output.text.hasSuffix("Mobdev tapped Open 3 times, but the prompt is still there. Tap its Open button, e.g. with tap_element."))

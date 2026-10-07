@@ -34,6 +34,9 @@ class FakePhone: PhoneBackend, @unchecked Sendable {
     /// A tree that replaces `tree` from the read after `afterReads` on, like a prompt that
     /// appears a moment later.
     let laterTree = Locked<(afterReads: Int, tree: [UIElement])?>(nil)
+    /// A tree that replaces `tree` from a moment on however seldom it is read, for waits that
+    /// must hold up on a CI runner that starves the test process.
+    let treeFrom = Locked<(date: Date, tree: [UIElement])?>(nil)
     private let treeReads = Locked(0)
     let settings: DeviceSettings?
     let networkProxy: NetworkProxyBackend?
@@ -65,6 +68,7 @@ class FakePhone: PhoneBackend, @unchecked Sendable {
             return count
         }
         if let later = laterTree.get(), read > later.afterReads { return later.tree }
+        if let timed = treeFrom.get(), Date() >= timed.date { return timed.tree }
         return tree
     }
 
