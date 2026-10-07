@@ -62,6 +62,8 @@ public final class PhoneTools: Sendable {
     let observed = Locked<ObservedMarks?>(nil)
     /// The screen recording `start_recording` started.
     let recording = Locked<ActiveRecording?>(nil)
+    /// iOS apps whose requests `start_network_capture` reads; Android's are in its proxy.
+    let appNetwork = AppNetworkCapture()
     /// Answers `assert_with_ai`: Apple Intelligence unless a test replaces it.
     let judge: any ScreenJudge
     /// Builds sent from elsewhere, which `install_app` takes as `upload`.
@@ -120,6 +122,8 @@ public final class PhoneTools: Sendable {
         `performance` samples an app's CPU, memory and frames and `measure_launch` times its cold launch, \
         both with optional budgets that fail the call; `reload_app` and `dev_menu` reload a React Native \
         or Expo app and open its developer menu. \
+        `start_network_capture`, `network_log` and `stop_network_capture` show which requests an app makes \
+        (Android through Mobdev's proxy, iOS from the app's own CFNetwork log; HTTPS is not decrypted). \
         Checks fail a flow or test step when the screen does not pass: `assert_screenshot` compares it with \
         a baseline picture, `accessibility_audit` finds missing labels, small targets and low contrast, and \
         `assert_with_ai` asks Apple Intelligence on the Mac a yes/no question about it. \
@@ -256,7 +260,7 @@ public final class PhoneTools: Sendable {
                     ], required: ["text"]), readOnly: true),
         ] + observeDefinitions + treeDefinitions + appDefinitions + settingsDefinitions + recordingDefinitions
             + sessionDefinitions + crawlDefinitions + checkDefinitions + flowDefinitions + testDefinitions
-            + devLoopDefinitions
+            + devLoopDefinitions + networkDefinitions
     }()
 
     public static func definition(named name: String) -> ToolDefinition? {
@@ -493,6 +497,7 @@ public final class PhoneTools: Sendable {
             if let output = try await runSessionTool(name, args) { return output }
             if let output = try await runCheckTool(name, args) { return output }
             if let output = try await runDevLoopTool(name, args) { return output }
+            if let output = try await runNetworkTool(name, args) { return output }
             return try await runAppTool(name, args)
         }
     }

@@ -179,6 +179,10 @@ only device, or the connected iPhone when simulators or Android devices run next
 | `open_url` | `url` | Deep links, universal links, web pages; confirms iOS's "Open in …?" where there is a UI tree |
 | `logs` | `bundle_id`, `after`, `lines`, `contains` | Output of launched apps and how they ended |
 | `crash_reports` | `app`, `name`, `limit` | Lists reports; `name` reads one |
+| `start_network_capture` | `bundle_id` | Records which requests an app makes (see [Network](#network)) |
+| `network_log` | `bundle_id`, `contains`, `after`, `limit`, `query`, `headers` | The recorded requests: method, URL, status, bytes each way, duration and where it was seen |
+| `stop_network_capture` | `bundle_id` | Ends the capture; on Android it removes Mobdev's proxy from the device |
+| `mock_response` | `url`, `status`, `body`, `content_type`, `clear` | Android: a fixed answer for plain HTTP requests through the proxy |
 | `set_location` | `latitude`, `longitude`, `route`, `speed`, `clear` | A simulated position, or a route the device follows |
 | `set_permission` | `bundle_id`, `permission`, `state` | Grant, revoke or reset location, photos, contacts, camera and more without the prompt |
 | `send_push` | `bundle_id`, `title`, `body`, `badge`, `data`, `payload` | A push notification to a simulator app |
@@ -222,8 +226,8 @@ $M call set_location '{"latitude": 52.52, "longitude": 13.405}' --device "iPhone
 It goes through the running app, so it reaches iPhones too and shows in Activity; without the app,
 or with `--local`, it runs by itself on booted simulators and Android devices, like `Mobdev flow`.
 `--json` prints the whole result, `--image` saves a returned screenshot. It exits 0 when the tool
-succeeded, 1 when it reported an error and 2 when it could not run. `start_recording`, `tap_mark`
-and other calls that build on an earlier one need the app.
+succeeded, 1 when it reported an error and 2 when it could not run. `start_recording`, `tap_mark`,
+network capture and other calls that build on an earlier one need the app.
 
 ### Observe, marks and waits
 
@@ -342,6 +346,37 @@ goes over `max_cpu` (average), `max_memory_mb` (peak), `max_janky_percent` or `m
   `<scheme>://expo-development-client/?url=…`. `testID` is the `id` for `tap_element`. The
   [`mobdev-react-native`](../skills/mobdev-react-native/SKILL.md) skill covers the loop, logs and
   Flutter.
+
+### Network
+
+`start_network_capture`, `network_log` and `stop_network_capture` show which requests an app makes,
+for debugging, for checking analytics and API calls, and for privacy audits. Nothing is installed
+on the device, and HTTPS is never decrypted, so each platform shows what it can:
+
+| | iOS Simulator, iPhone (Developer Mode) | Android |
+|---|---|---|
+| How | Relaunches the app with `CFNETWORK_DIAGNOSTICS=1` and `ACTIVITY_LOG_STDERR=1` and reads what CFNetwork logs to its console | Points the device at Mobdev's proxy on the Mac (`settings put global http_proxy`): emulators reach it as 10.0.2.2, phones through `adb reverse` |
+| Which requests | The app's own URLSession requests | Every app that follows Android's proxy setting, without telling them apart |
+| Shown | Method, scheme and host, status, bytes each way, duration, HTTP version, errors such as `host not found` | Plain HTTP: method, full URL, status, bytes, duration, headers. HTTPS: host, port, bytes each way and duration of the tunnel |
+| Not shown | Paths and queries (iOS logs them as `<redacted>`), web views (WebKit loads in another process), sockets outside URLSession | What travels inside HTTPS; apps that ignore the proxy setting, such as Flutter apps |
+
+- Each entry says where it was seen (`source`: `cfnetwork` or `proxy`). A request is listed once it
+  finished; running requests and open HTTPS tunnels are listed apart as still running. Queries show
+  as `?…` unless `query` is true. `headers: true` adds the headers of plain HTTP, with
+  `Authorization`, `Proxy-Authorization`, `Cookie` and `Set-Cookie` replaced by `<redacted>`.
+- iOS: `ACTIVITY_LOG_STDERR` copies the app's whole system log to its console. The network stack's
+  lines go to `network_log` instead of `logs`; other system lines show in `logs` while the app runs
+  this way. `stop_network_capture` stops recording; the app keeps the diagnostics until `launch_app`
+  starts it again. Tried on an iOS 27 simulator; an iPhone's console comes through `devicectl` the
+  same way but has not been tried yet.
+- Android: the proxy listens on 127.0.0.1 only and forwards each plain HTTP request on its own
+  connection. Mobdev removes the setting on `stop_network_capture`, when the device goes away or
+  Mobdev stops looking for it, and when Mobdev or a command-line run quits; after a crash, the next
+  Mobdev that sees the device removes it. It does not replace a proxy another tool set. Apps keep
+  connections they opened before the capture, so pass `bundle_id` to restart the app you watch.
+- `mock_response` (Android) answers plain HTTP requests whose URL contains `url` with a fixed status
+  and body, e.g. to try an error state against a dev server at `http://10.0.2.2:3000`.
+- A capture lives in the running app; a flow (`run_flow`, `Mobdev flow`) can start and stop one too.
 
 ### Simulators and Android
 
@@ -901,7 +936,14 @@ a real device or simulator (Xcode 27's `devicectl` drives both):
 MOBDEV_TEST_DEVICE=<udid> MOBDEV_TEST_APP=/path/to/App.app swift test --filter DeveloperIntegration
 # Launches an installed developer app, reads its logs, stops it, reads crash reports. Installs nothing.
 MOBDEV_TEST_DEVICE=<udid> MOBDEV_TEST_BUNDLE_ID=<bundle id> swift test --filter DeveloperIntegration
+# Captures the requests of an installed app that makes some within seconds of its launch.
+MOBDEV_TEST_DEVICE=<udid> MOBDEV_TEST_NETWORK_APP=<bundle id> swift test --filter DeveloperIntegration
 ```
+
+Network capture is tested with a proxy, clients and servers on 127.0.0.1 in the test process, a fake
+`adb` that keeps `http_proxy`, and CFNetwork console output recorded on an iOS 27 simulator.
+`MOBDEV_TEST_INTERNET=1 swift test --filter HTTPProxyTests` also sends `curl` through the proxy to
+example.com over HTTP and HTTPS.
 
 Simulators and Android are tested with fake devices and parsers fed real `adb` output. The
 opt-in `EmulatorIntegration` tests drive a booted simulator and a running emulator through every

@@ -44,6 +44,14 @@ public enum MobdevPaths {
     /// Crash reports copied from devices by `crash_reports`, one folder per device.
     public static var crashReportsFolder: URL { home.appendingPathComponent("crash-reports", isDirectory: true) }
 
+    /// Notes of the proxy settings Mobdev put on Android devices, one file per device. Shared by
+    /// the app, the development build and command-line runs, which all see the same emulators, so
+    /// whichever comes next can remove a setting one of them left behind.
+    static var networkCaptureRecords: URL {
+        FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("dev.mobdev.network-capture", isDirectory: true)
+    }
+
     /// A device's activity log, one JSON object per line.
     public static func activityFile(device: String) -> URL {
         let safe = device.filter { $0.isLetter || $0.isNumber || $0 == "-" }

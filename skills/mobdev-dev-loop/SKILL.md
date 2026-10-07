@@ -117,6 +117,10 @@ The loop is the same; only the build differs.
 - Verify on the device, not only by compiling: a passing build is not a working feature.
 - Show it: `start_recording` before the steps that prove a fix and `stop_recording` after, and give
   the user the video's path.
+- Check what the app sends: `start_network_capture` with the `bundle_id`, use the app, then
+  `network_log` (keep its `cursor` for `after`) and `stop_network_capture`. iOS lists method, host,
+  status, size and time but hides paths; Android shows plain HTTP in full and HTTPS as host and bytes.
+  Always stop it on Android, which otherwise keeps the proxy until Mobdev quits.
 - Report what you checked on the phone and what you could not, such as push notifications on an
   iPhone (a simulator takes `send_push`) or purchases that need real accounts.
 - Once a path works, offer to keep it as a test with `save_test` (see the `mobdev` skill), so the

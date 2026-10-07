@@ -105,6 +105,9 @@ public final class EmulatorHub: @unchecked Sendable {
                 // Reading name and version takes a moment; the device is listed once they are known.
                 readingDetails.insert(listed.serial)
                 Task {
+                    // A proxy setting a Mobdev left behind (it crashed, or the device went away
+                    // during a capture) would keep the device off the network.
+                    await AndroidNetworkCapture.clearLeftover(serial: listed.serial, adb: adb)
                     let details = await AndroidDevice.details(serial: listed.serial, listed: listed.properties, adb: adb)
                     self.queue.async {
                         self.readingDetails.remove(listed.serial)

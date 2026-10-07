@@ -170,6 +170,11 @@ public enum CallCommand {
                 "\(options.tool) needs the running Mobdev app: without it every call is a process of its own, which forgets the recording or the marks when it ends. Open Mobdev, or record a flow with Mobdev flow --artifacts.")
             return nil
         }
+        if ["start_network_capture", "network_log", "stop_network_capture", "mock_response"].contains(options.tool) {
+            output(
+                "\(options.tool) needs the running Mobdev app: without it every call is a process of its own, and the capture ends with it (on Android, with its proxy). Open Mobdev, or put the capture into a flow, which runs in one process.")
+            return nil
+        }
         let home = CommandSupport.home(artifacts: nil)
         defer { try? FileManager.default.removeItem(at: home.url) }
         guard let connection = await CommandSupport.connect(device: options.device, wait: 10, output: output) else {

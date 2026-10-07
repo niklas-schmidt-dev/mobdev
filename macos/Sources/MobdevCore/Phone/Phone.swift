@@ -85,6 +85,8 @@ public protocol PhoneBackend: Sendable {
     /// Opens a React Native or Expo app's developer menu the way the platform does and says how.
     /// Nil where the device has no way Mobdev can use (an iPhone cannot be shaken from the Mac).
     func developerMenu() async throws -> String?
+    /// Sending the device's traffic through Mobdev's proxy: Android. Nil elsewhere.
+    var networkProxy: NetworkProxyBackend? { get }
 }
 
 /// A wheel as a swipe, for devices without one: each step moves the content by a little over 5% of
@@ -111,4 +113,5 @@ extension PhoneBackend {
     public func screenScale() async -> Double? { nil }
     public var performance: AppPerformance? { nil }
     public func developerMenu() async throws -> String? { nil }
+    public var networkProxy: NetworkProxyBackend? { nil }
 }

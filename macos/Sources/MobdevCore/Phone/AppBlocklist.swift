@@ -49,7 +49,7 @@ public enum AppBlocklist {
         let app: String?
         switch tool {
         case "open_app": app = args.value["name"]?.stringValue
-        case "launch_app", "measure_launch": app = args.value["bundle_id"]?.stringValue
+        case "launch_app", "measure_launch", "start_network_capture": app = args.value["bundle_id"]?.stringValue
         default: return
         }
         guard let app else { return }

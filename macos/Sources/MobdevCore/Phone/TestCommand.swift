@@ -430,12 +430,20 @@ enum CommandSupport {
     /// Runs the command's work and exits with its code. The first interrupt cancels the work,
     /// which ends a wait at once and starts no further step; a second one quits at once.
     static func run(_ work: @escaping @Sendable () async -> Int32) -> Never {
-        let task = Task { exit(await work()) }
+        // An Android device must not keep a proxy setting that points at this ending process.
+        let task = Task {
+            let code = await work()
+            AndroidNetworkCapture.stopAll()
+            exit(code)
+        }
         let signals = [SIGINT, SIGTERM].map { number in
             signal(number, SIG_IGN)
             let source = DispatchSource.makeSignalSource(signal: number, queue: .main)
             source.setEventHandler {
-                if task.isCancelled { exit(130) }
+                if task.isCancelled {
+                    AndroidNetworkCapture.stopAll()
+                    exit(130)
+                }
                 FileHandle.standardError.write(Data("Stopping…\n".utf8))
                 task.cancel()
             }

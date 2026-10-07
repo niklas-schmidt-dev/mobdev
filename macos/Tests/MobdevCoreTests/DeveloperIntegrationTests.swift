@@ -82,4 +82,40 @@ import Testing
         #expect(removed.bundleID == installed.bundleID)
         #expect(try await control.app(installed.bundleID) == nil)
     }
+
+    static let networkApp = environment["MOBDEV_TEST_NETWORK_APP"]
+
+    /// Network capture of an installed app that makes requests within a few seconds of its launch:
+    ///
+    ///     MOBDEV_TEST_DEVICE=<udid> MOBDEV_TEST_NETWORK_APP=<bundle id> swift test --filter DeveloperIntegration
+    @Test(.enabled(if: device != nil && networkApp != nil, "Set MOBDEV_TEST_DEVICE and MOBDEV_TEST_NETWORK_APP"))
+    func captureAnAppsRequests() async throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("mobdev-integration")
+        // Simulators have UUIDs as identifiers, iPhones "00008120-…".
+        let control = DeviceControl(
+            udid: Self.device!, reportsFolder: folder, simulator: UUID(uuidString: Self.device!) != nil)
+        let tools = PhoneTools(phone: FakePhone(lines: [], apps: control), activity: ActivityLog(), settleDelay: 0)
+        func call(_ name: String, _ arguments: JSONValue = [:]) async throws -> ToolOutput {
+            let output = try await tools.call(name, arguments: arguments, source: "test", screenshotByDefault: false)
+            print("── \(name) \(arguments.compactString)\n\(output.text)")
+            return output
+        }
+        let app: JSONValue = .string(Self.networkApp!)
+        let started = try await call("start_network_capture", ["bundle_id": app])
+        #expect(!started.isError)
+        func count(_ log: ToolOutput) -> Int { log.data?["entries"]?.arrayValue?.count ?? 0 }
+        var log = try await call("network_log")
+        for _ in 0..<30 where count(log) == 0 {
+            try await Task.sleep(nanoseconds: 500_000_000)
+            log = try await tools.call("network_log", arguments: [:], source: "test", screenshotByDefault: false)
+        }
+        try await Task.sleep(nanoseconds: 3_000_000_000)
+        log = try await call("network_log", ["query": true])
+        #expect(count(log) > 0)
+        print(String(decoding: (log.data?["entries"] ?? .null).encoded(), as: UTF8.self))
+        _ = try await call("logs", ["bundle_id": app, "lines": 30])
+        let stopped = try await call("stop_network_capture")
+        #expect(!stopped.isError)
+        _ = try await call("stop_app", ["bundle_id": app])
+    }
 }

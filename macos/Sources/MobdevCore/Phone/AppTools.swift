@@ -113,6 +113,8 @@ extension PhoneTools {
             let arguments = try args.stringArray("arguments")
             let environment = try args.stringDictionary("environment")
             let restart = args.bool("restart") ?? true
+            // A fresh launch has no CFNetwork diagnostics, so its network capture ends.
+            if restart, phone.networkProxy == nil { endAppCapture(bundleID) }
             let outcome = try await requireApps().launch(
                 bundleID, arguments: arguments, environment: environment, restart: restart)
             switch outcome {

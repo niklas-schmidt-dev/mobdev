@@ -22,6 +22,7 @@ public final class AndroidDevice: Device, @unchecked Sendable {
     private let deviceSettings: AndroidSettings
     /// Nil when MOBDEV_ANDROID_SCRCPY=0.
     let scrcpy: ScrcpySession?
+    private let network: AndroidNetworkCapture
 
     struct Details: Equatable {
         var name: String
@@ -47,9 +48,11 @@ public final class AndroidDevice: Device, @unchecked Sendable {
         appBackend = AndroidApps(serial: serial, adb: adb, reportsFolder: reportsFolder)
         let scrcpy = scrcpyServer.map { ScrcpySession(serial: serial, adb: adb, server: $0) }
         self.scrcpy = scrcpy
-        deviceSettings = AndroidSettings(serial: serial, adb: adb, scrcpy: scrcpy) {
+        let isEmulator: @Sendable () -> Bool = {
             serial.hasPrefix("emulator-") || lockedDetails.get().modelName == "Android Emulator"
         }
+        deviceSettings = AndroidSettings(serial: serial, adb: adb, scrcpy: scrcpy, isEmulator: isEmulator)
+        network = AndroidNetworkCapture(serial: serial, adb: adb, isEmulator: isEmulator)
     }
 
     /// The pinned server, unless MOBDEV_ANDROID_SCRCPY=0.
@@ -58,10 +61,12 @@ public final class AndroidDevice: Device, @unchecked Sendable {
         return { await ScrcpyServer.file() }
     }
 
-    /// Stops following apps and ends scrcpy's server, when the device goes away.
+    /// Stops following apps, ends scrcpy's server and removes Mobdev's proxy, when the device goes
+    /// away or Mobdev stops looking for it.
     func close() {
         appBackend.close()
         scrcpy?.close()
+        network.close()
     }
 
     /// Reads name, model and Android version once, when the device appears.
@@ -95,6 +100,7 @@ public final class AndroidDevice: Device, @unchecked Sendable {
     public var name: String { details.get().name }
     public var apps: AppBackend? { appBackend }
     public var settings: DeviceSettings? { deviceSettings }
+    public var networkProxy: NetworkProxyBackend? { network }
 
     public var info: DeviceInfo? {
         let details = details.get()

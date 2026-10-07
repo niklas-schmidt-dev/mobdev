@@ -64,6 +64,8 @@ public final class AppLogs: Sendable {
         var next = 1
         /// Per bundle ID: "running", or how the app ended.
         var status: [String: String] = [:]
+        /// Per bundle ID: takes each line first and keeps it out of the log when it returns true.
+        var readers: [String: @Sendable (String) -> Bool] = [:]
     }
 
     /// Longer lines are cut, so one runaway print cannot fill memory or a relay response.
@@ -73,7 +75,14 @@ public final class AppLogs: Sendable {
 
     public init(limit: Int = 5000) { self.limit = limit }
 
+    /// Hands an app's lines to `reader` before they are logged, e.g. network capture's, which
+    /// keeps the system's network logging out. Nil removes it.
+    func setReader(_ reader: (@Sendable (String) -> Bool)?, for app: String) {
+        state.withLock { $0.readers[app] = reader }
+    }
+
     func append(app: String, text: String) {
+        if let reader = state.get().readers[app], reader(text) { return }
         let text = text.count > Self.maxLineLength ? String(text.prefix(Self.maxLineLength)) + "…" : text
         state.withLock { state in
             state.lines.append(Line(number: state.next, app: app, text: text))
