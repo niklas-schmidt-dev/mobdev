@@ -96,7 +96,9 @@ public final class AndroidNetworkCapture: NetworkProxyBackend, @unchecked Sendab
                     "Android already sends its traffic through the proxy \(current), which Mobdev would replace. Remove it (adb -s \(serial) shell settings put global http_proxy :0) or stop the tool that set it, then start again.")
             }
         }
-        let proxy = HTTPProxy(log: log, mocks: mockList)
+        // An emulator's apps reach this Mac's own servers, such as a dev server, as 10.0.2.2,
+        // which the proxy on the Mac has to connect to as 127.0.0.1.
+        let proxy = HTTPProxy(log: log, mocks: mockList, hostAliases: isEmulator() ? ["10.0.2.2": "127.0.0.1"] : [:])
         try await proxy.start()
         let port = proxy.port
         var host = "10.0.2.2"

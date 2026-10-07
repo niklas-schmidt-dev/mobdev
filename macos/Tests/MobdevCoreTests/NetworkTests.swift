@@ -142,6 +142,26 @@ func entries(in log: NetworkLog, count: Int) async -> [NetworkEntry] {
         #expect(entry.target(query: true) == "http://127.0.0.1:\(origin.port)/hello?x=1")
     }
 
+    /// An emulator's app asks for its dev server as 10.0.2.2, which only the emulator can reach;
+    /// the proxy on the Mac connects to 127.0.0.1 and logs the address the app used.
+    @Test func reachesTheMacsOwnServersUnderTheEmulatorsName() async throws {
+        let origin = HTTPServer(port: 0) { _ in HTTPResponse(status: 200, headers: [:], body: Data("dev server".utf8)) }
+        try await origin.start()
+        defer { origin.stop() }
+        let proxy = HTTPProxy(hostAliases: ["10.0.2.2": "127.0.0.1"])
+        try await proxy.start()
+        defer { proxy.stop() }
+
+        let client = TestClient(port: proxy.port)
+        client.send("GET http://10.0.2.2:\(origin.port)/feed HTTP/1.1\r\nHost: 10.0.2.2:\(origin.port)\r\n\r\n")
+        let response = await client.waitForEnd()
+        #expect(response.hasPrefix("HTTP/1.1 200"))
+        #expect(response.hasSuffix("dev server"))
+        let entry = try #require(await entries(in: proxy.log, count: 1).first)
+        #expect(entry.host == "10.0.2.2")
+        #expect(entry.status == 200)
+    }
+
     @Test func tunnelsConnectWithoutReadingIt() async throws {
         let echo = try await EchoServer()
         defer { echo.stop() }

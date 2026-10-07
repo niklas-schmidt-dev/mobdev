@@ -374,6 +374,8 @@ on the device, and HTTPS is never decrypted, so each platform shows what it can:
   Mobdev stops looking for it, and when Mobdev or a command-line run quits; after a crash, the next
   Mobdev that sees the device removes it. It does not replace a proxy another tool set. Apps keep
   connections they opened before the capture, so pass `bundle_id` to restart the app you watch.
+  An emulator's app still reaches a dev server on the Mac as `10.0.2.2` while it is captured: the
+  proxy connects to the Mac's `127.0.0.1` for it and logs the address the app used.
 - `mock_response` (Android) answers plain HTTP requests whose URL contains `url` with a fixed status
   and body, e.g. to try an error state against a dev server at `http://10.0.2.2:3000`.
 - A capture lives in the running app; a flow (`run_flow`, `Mobdev flow`) can start and stop one too.

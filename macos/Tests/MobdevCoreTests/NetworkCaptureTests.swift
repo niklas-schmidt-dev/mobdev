@@ -487,6 +487,9 @@ extension AndroidNetworkCaptureTests {
         #expect(entry["source"] == "proxy")
         #expect(entry["query"] == nil)
         #expect(entry["request_headers"]?.arrayValue?.contains(["name": "Cookie", "value": "<redacted>"]) == true)
+        // MCP passes agents the text only, so the headers are there too.
+        #expect(log.text.contains("\n  > Cookie: <redacted>"))
+        #expect(try await !call(tools, "network_log").text.contains("  > Cookie"))
         let withQuery = try await call(tools, "network_log", ["query": true])
         #expect(withQuery.data?["entries"]?.arrayValue?.first?["query"] == "page=1")
 

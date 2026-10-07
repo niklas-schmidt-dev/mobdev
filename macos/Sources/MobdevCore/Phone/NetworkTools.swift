@@ -194,10 +194,16 @@ extension PhoneTools {
         if page.entries.isEmpty, open.isEmpty, log.read(app: nil, after: nil, limit: 1, contains: nil).entries.isEmpty {
             lines.append("Start with start_network_capture, then use the app.")
         }
-        lines += page.entries.map { $0.summary(query: showQuery) }
+        // Agents read the text, so asked-for headers go there too, indented under their request.
+        func headerLines(_ entry: NetworkEntry) -> [String] {
+            guard showHeaders else { return [] }
+            return entry.requestHeaders.map { "  > \($0.name): \($0.value)" }
+                + entry.responseHeaders.map { "  < \($0.name): \($0.value)" }
+        }
+        for entry in page.entries { lines += [entry.summary(query: showQuery)] + headerLines(entry) }
         if !open.isEmpty {
             lines.append("Still running:")
-            lines += open.map { $0.summary(query: showQuery, open: true) }
+            for entry in open { lines += [entry.summary(query: showQuery, open: true)] + headerLines(entry) }
         }
         lines.append(
             page.more

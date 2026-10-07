@@ -27,6 +27,9 @@ public final class HTTPProxy: @unchecked Sendable {
     public let log: NetworkLog
     /// Shared with the capture that owns the proxy, so mocks outlive a restart of it.
     let mocks: Locked<[ResponseMock]>
+    /// Hosts the device names differently from this Mac, connected to under the Mac's name:
+    /// an emulator's 10.0.2.2 is the Mac's 127.0.0.1. The log keeps the device's name.
+    let hostAliases: [String: String]
     private let queue = DispatchQueue(label: "dev.mobdev.proxy")
     private var listener: NWListener?
     private var sessions: [ObjectIdentifier: ProxySession] = [:]
@@ -36,9 +39,10 @@ public final class HTTPProxy: @unchecked Sendable {
     static let maxHeadBytes = 64 * 1024
     static let maxSessions = 256
 
-    init(log: NetworkLog = NetworkLog(), mocks: Locked<[ResponseMock]> = Locked([])) {
+    init(log: NetworkLog = NetworkLog(), mocks: Locked<[ResponseMock]> = Locked([]), hostAliases: [String: String] = [:]) {
         self.log = log
         self.mocks = mocks
+        self.hostAliases = hostAliases
     }
 
     /// The port on 127.0.0.1, once started.
@@ -339,7 +343,8 @@ private final class ProxySession: @unchecked Sendable {
     /// server cannot be reached.
     private func connect(host: String, port: Int, ready: @escaping @Sendable () -> Void) {
         guard let nwPort = NWEndpoint.Port(rawValue: UInt16(port)) else { return answer(400, "Bad port \(port).") }
-        let upstream = NWConnection(host: NWEndpoint.Host(host), port: nwPort, using: .tcp)
+        let target = proxy?.hostAliases[host.lowercased()] ?? host
+        let upstream = NWConnection(host: NWEndpoint.Host(target), port: nwPort, using: .tcp)
         self.upstream = upstream
         upstream.stateUpdateHandler = { [weak self] state in
             guard let self, !self.closed else { return }
