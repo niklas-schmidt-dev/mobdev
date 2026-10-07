@@ -103,6 +103,10 @@ import Testing
         #expect(calls.contains(["simctl", "install", "SIM-1", app.path]))
         #expect(calls.contains(["simctl", "openurl", "SIM-1", "mobdevfixture://hello"]))
         #expect(calls.contains(["simctl", "uninstall", "SIM-1", "dev.mobdev.fixture"]))
+        // A restart ends the old instance itself before the launch, which keeps the flag as a backstop.
+        let terminate = try #require(calls.firstIndex(of: ["simctl", "terminate", "SIM-1", "dev.mobdev.fixture"]))
+        let launchIndex = try #require(calls.firstIndex { $0.first == "/usr/bin/env" })
+        #expect(terminate < launchIndex)
         let launch = try #require(calls.first { $0.first == "/usr/bin/env" })
         #expect(launch.contains("SIMCTL_CHILD_OS_ACTIVITY_DT_MODE=YES"))
         #expect(launch.contains("SIMCTL_CHILD_A=1"))

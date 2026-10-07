@@ -485,6 +485,10 @@ public final class DeviceControl: AppBackend, @unchecked Sendable {
             return .broughtToFront
         }
         detach(bundleID)
+        // The old instance ends before the new one starts: left to `--terminate-running-process`
+        // alone, simctl now and then printed nothing for 90 seconds on GitHub's simulators while
+        // the old console was still going away (2026-10-07).
+        if restart { _ = try? await stopOnSimulator(bundleID) }
         let environment = ["OS_ACTIVITY_DT_MODE": "YES"].merging(environment) { $1 }
         let variables = environment.sorted { $0.key < $1.key }.map { "SIMCTL_CHILD_\($0.key)=\($0.value)" }
         // Into a pipe, simctl passes the app's output on in blocks, late; `script` gives it a terminal,
