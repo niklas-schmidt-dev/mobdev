@@ -188,4 +188,6 @@ With Developer Mode on the iPhone and Xcode on the Mac, Mobdev also installs and
 reads their logs and crash reports: `list_apps`, `install_app`, `launch_app`, `stop_app`,
 `open_url`, `logs`, `crash_reports`. Use the `mobdev-dev-loop` skill for that workflow,
 `mobdev-bug-repro` to reproduce a reported bug, and `mobdev-store-screenshots` for App Store and
-Google Play screenshots.
+Google Play screenshots. `performance` and `measure_launch` measure an app, with budgets that fail
+the call. For React Native, Expo and Flutter apps (`reload_app`, `dev_menu`, Expo Go, testIDs),
+use the `mobdev-react-native` skill.

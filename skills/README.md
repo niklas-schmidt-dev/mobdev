@@ -24,6 +24,7 @@ Or copy a folder into your agent's skills directory, e.g. `~/.claude/skills/`.
 |---|---|
 | [`mobdev`](mobdev/SKILL.md) | Driving an iPhone, simulator or Android device reliably: seeing the screen, tapping, typing, device state, recordings, the command line, safety |
 | [`mobdev-dev-loop`](mobdev-dev-loop/SKILL.md) | Build, install, launch, read logs and crash reports of your own iOS or Android app |
+| [`mobdev-react-native`](mobdev-react-native/SKILL.md) | React Native, Expo and Flutter apps: Expo Go and dev clients, reload, the developer menu, testIDs, performance |
 | [`mobdev-smoke-test`](mobdev-smoke-test/SKILL.md) | A quick pass/fail check of an app's critical paths, with evidence |
 | [`mobdev-bug-repro`](mobdev-bug-repro/SKILL.md) | Reproduce a bug report: device state, video, logs and crash reports, a minimal reproduction saved as a test |
 | [`mobdev-store-screenshots`](mobdev-store-screenshots/SKILL.md) | App Store and Google Play screenshots for every locale and device size |
