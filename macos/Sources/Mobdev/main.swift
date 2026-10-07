@@ -5,8 +5,7 @@ import MobdevCore
 if CommandLine.arguments.dropFirst().first == "mcp" {
     MCPStdioBridge.run {
         // Start the app in the background if it is not running yet.
-        let bundleURL = Bundle.main.bundleURL
-        if bundleURL.pathExtension == "app" {
+        if let bundleURL = MobdevPaths.appBundle {
             let configuration = NSWorkspace.OpenConfiguration()
             configuration.activates = false
             // Keep a custom data directory or port, so the bridge finds the app it started.

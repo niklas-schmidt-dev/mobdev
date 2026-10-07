@@ -1,4 +1,5 @@
 import Foundation
+import ImageIO
 
 /// `Mobdev call <tool> [arguments]` and its shorthand `Mobdev <tool> key=value …`: one tool call from
 /// a shell, for scripts and for agents that prefer a terminal to MCP. `Mobdev tools` lists the tools.
@@ -96,7 +97,7 @@ public enum CallCommand {
         do {
             // A binary outside an app bundle, as `swift build` makes, never reaches the installed
             // app: a developer's test call must not act on the iPhone that app controls.
-            if options.local || Bundle.main.bundleURL.pathExtension != "app" { throw LocalSocket.Failure.notRunning }
+            if options.local || MobdevPaths.appBundle == nil { throw LocalSocket.Failure.notRunning }
             result = try await callApp(options)
         } catch LocalSocket.Failure.notRunning {
             guard let local = await callHere(options, output: output) else { return 2 }
@@ -107,7 +108,13 @@ public enum CallCommand {
             return 2
         }
         if let path = options.image {
-            if let encoded = result["screenshot"]?["data"]?.stringValue, let data = Data(base64Encoded: encoded) {
+            if let encoded = result["screenshot"]?["data"]?.stringValue, var data = Data(base64Encoded: encoded) {
+                // Tools return JPEG; a .png name gets a PNG.
+                if path.lowercased().hasSuffix(".png"), let source = CGImageSourceCreateWithData(data as CFData, nil),
+                    let image = CGImageSourceCreateImageAtIndex(source, 0, nil), let png = ImageTools.encode(image, png: true)
+                {
+                    data = png.data
+                }
                 do {
                     try data.write(to: URL(fileURLWithPath: (path as NSString).expandingTildeInPath))
                 } catch {
@@ -187,6 +194,20 @@ public enum CallCommand {
         }
     }
 
+    /// Up to the first ". " that ends a sentence, not one inside "e.g." or a file name such as ".mp4".
+    static func firstSentence(_ text: String) -> String {
+        var searchStart = text.startIndex
+        while let range = text.range(of: ". ", range: searchStart..<text.endIndex) {
+            let before = text[text.startIndex..<range.lowerBound]
+            let next = text[range.upperBound...].first
+            if !before.hasSuffix("e.g"), !before.hasSuffix("i.e"), next?.isUppercase == true || next == "`" {
+                return String(before) + "."
+            }
+            searchStart = range.upperBound
+        }
+        return text
+    }
+
     /// `Mobdev tools`: every tool with its description, or with --json their schemas.
     public static func listTools(_ arguments: [String]) -> Never {
         let definitions = DeviceTools.definitions
@@ -194,8 +215,7 @@ public enum CallCommand {
             CommandSupport.print(String(decoding: JSONValue.array(definitions.map(\.mcpJSON)).encoded(), as: UTF8.self))
         } else {
             for definition in definitions {
-                let first = definition.description.split(separator: ".").first.map(String.init) ?? definition.description
-                CommandSupport.print("\(definition.name.padding(toLength: 22, withPad: " ", startingAt: 0)) \(first).")
+                CommandSupport.print("\(definition.name.padding(toLength: 22, withPad: " ", startingAt: 0)) \(firstSentence(definition.description))")
             }
         }
         exit(0)

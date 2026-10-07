@@ -158,5 +158,8 @@ import Testing
         #expect(throws: ToolFailure.self) { try CallCommand.parse([]) }
         #expect(CallCommand.isTool("set_location"))
         #expect(!CallCommand.isTool("flow"))
+        #expect(CallCommand.firstSentence("Press a key, e.g. space. More here.") == "Press a key, e.g. space.")
+        #expect(CallCommand.firstSentence("Saves an .mp4 file. Then stops.") == "Saves an .mp4 file.")
+        #expect(CallCommand.firstSentence("No period") == "No period")
     }
 }

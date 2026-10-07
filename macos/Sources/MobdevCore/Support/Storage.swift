@@ -22,6 +22,17 @@ public enum MobdevPaths {
         return support.appendingPathComponent(bundleIdentifier, isDirectory: true)
     }
 
+    /// The Mobdev.app this binary belongs to, also when it runs through a symlink such as one
+    /// Homebrew makes, where `Bundle.main` sees the symlink's folder. Nil for a bare binary.
+    public static var appBundle: URL? {
+        var url = (Bundle.main.executableURL ?? URL(fileURLWithPath: CommandLine.arguments[0])).resolvingSymlinksInPath()
+        while url.path != "/" {
+            if url.pathExtension == "app" { return url }
+            url.deleteLastPathComponent()
+        }
+        return nil
+    }
+
     public static var tokenFile: URL { home.appendingPathComponent("token") }
     /// Where the app listens for `Mobdev mcp`. Unlike the loopback port, no other user can take it.
     public static var socketFile: URL { home.appendingPathComponent("mobdev.sock") }
