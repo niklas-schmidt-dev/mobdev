@@ -32,7 +32,10 @@ and crash reports. Read the `mobdev` skill for driving the UI.
    `/usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' <app>/Info.plist`.
 
 2. **Install:** `install_app` with the absolute path of the `.app` (or an `.ipa`). A newer build
-   replaces the old one and keeps its data.
+   replaces the old one and keeps its data. When you build somewhere else than the Mac that runs
+   Mobdev (a cloud agent, a CI job) and reach it through a relay, upload the build first with
+   `scripts/mobdev-upload.sh` (curl only) or `Mobdev upload`, then `install_app` with `upload` set
+   to the id it prints.
 
 3. **Launch:** `launch_app` with `bundle_id`. It restarts a running copy and captures everything the
    app prints: `print`, `NSLog`, `Logger` and `os_log`. Pass `arguments` (for example

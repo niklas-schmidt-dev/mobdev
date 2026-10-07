@@ -82,8 +82,9 @@ name as `device`; without it Mobdev picks the connected iPhone when there is one
 setup, and the same tools work, with these differences:
 
 - Simulators take keys in their own keyboard layout; Mobdev handles that.
-- On Android, `press_key` with `escape` is Back, `type_text` types ASCII only, and `open_app` matches
-  package names ("Settings" opens com.android.settings; `list_apps` with `all: true` lists them).
+- On Android, `press_key` with `escape` is Back, and `open_app` matches package names ("Settings"
+  opens com.android.settings; `list_apps` with `all: true` lists them). `type_text` types any text,
+  emoji included; text beyond ASCII goes through the clipboard, which holds it afterwards.
 - An app reopens where it was left. `stop_app` first when you need its first screen.
 - `ui_tree` lists the elements on screen with role, label, accessibility identifier and position.
   Prefer `observe` and `tap_mark`, or `tap_element` (by `id` or `text`) and `wait_for_element`, to
