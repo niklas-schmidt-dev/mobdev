@@ -4,6 +4,8 @@
 //   the Mac can stop working on it. Macs that do not know "cancel" ignore it.
 // Mac → relay: {"type":"response","id","status","headers","body"}, {"type":"devices","devices"}
 //   (shared/devices.ts) and "ping", which the runtime answers with "pong".
+// Live view adds live_start, live_stop and live_input (relay → Mac) and live_frame and live_end
+//   (Mac → relay); see shared/live.ts.
 // Frames of an unknown type are ignored in both directions.
 
 /** An agent request on its way to a Mac. Bodies are base64. */

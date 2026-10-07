@@ -2,8 +2,28 @@ import { DurableObject } from "cloudflare:workers";
 import type { Autumn, Balance } from "../../shared/autumn";
 import { accessTokenExists, recordHostDevices, recordHostOffline, recordHostOnline } from "../../shared/db";
 import { devicesFromFrame, type Device, type MacDevices } from "../../shared/devices";
-import { randomHex } from "../../shared/keys";
+import { randomHex, sha256Hex } from "../../shared/keys";
+import {
+  LIVE_CLOSE,
+  LIVE_MAX_FPS,
+  LIVE_MAX_FRAME_BYTES,
+  LIVE_MAX_INPUTS_PER_SECOND,
+  LIVE_MAX_TICKETS,
+  LIVE_MAX_UNACKED,
+  LIVE_MAX_VIEWERS_PER_MAC,
+  LIVE_RENEW_MS,
+  LIVE_SUBPROTOCOL,
+  LIVE_TICKET_MS,
+  LIVE_VIEWER_IDLE_MS,
+  closeReason,
+  normalizeLiveInput,
+  ticketSecret,
+  type LiveGrant,
+  type LiveMode,
+  type LiveViewer,
+} from "../../shared/live";
 import { FEATURES } from "../../shared/plans";
+import { existingShares } from "../../shared/shares";
 import { autumnFor, exhausted, hasRelayPlan, quotaFromCustomer, withBalance, type Quota } from "./billing";
 import {
   CLOSE_REPLACED,
@@ -26,8 +46,9 @@ import {
 import type { RelayEnv } from "./env";
 
 /**
- * What one connection used that Autumn has not confirmed yet: agent requests, and milliseconds
- * with at least one request in flight. `batch` is on its way to Autumn while the counters go on.
+ * What one connection used that Autumn has not confirmed yet: agent requests and live view inputs,
+ * and milliseconds with at least one request in flight or someone watching the Mac live (busy).
+ * `batch` is on its way to Autumn while the counters go on.
  * The meter lives in the socket's attachment, so it survives hibernation, and moves to storage
  * when the Mac disconnects, until Autumn confirms it.
  */
@@ -54,6 +75,66 @@ interface Attachment {
   meter: Meter | null;
   /** The account's allowance; null until Autumn could be read, and requests pass meanwhile. */
   quota: Quota | null;
+}
+
+/**
+ * A live view's socket (shared/live.ts). Viewers are hibernatable WebSockets of the same space,
+ * tagged "viewer" and "viewer:<mac>", so getWebSockets(<mac name>) still finds only Macs.
+ */
+interface ViewerAttachment {
+  viewer: true;
+  mac: string;
+  /** The Mac connection it watches; a new connection of the same Mac starts over. */
+  macConnectedAt: number;
+  device: string;
+  /** The stream it shares with the other viewers of the device; the Mac's frames carry its id. */
+  stream: string;
+  fps: number;
+  mode: LiveMode;
+  who: LiveViewer;
+  shareId: string | null;
+  endsAt: number | null;
+  joinedAt: number;
+}
+
+/** What the relay worker asks for when a viewer connects (X-Mobdev-Live). */
+export interface LiveConnect {
+  /** The Mac, from /h/<mac>/ or X-Mobdev-Host; null for the only one. Tickets name their own. */
+  name: string | null;
+  device: string;
+  fps: number;
+  ticket: string | null;
+  /** The viewer offered the live subprotocol (browsers), which the answer must then name. */
+  protocol: boolean;
+}
+
+/** An unused ticket under `ticket:<sha256 of its secret>`. */
+interface StoredTicket {
+  grant: LiveGrant;
+  expiresAt: number;
+}
+
+const TICKET_PREFIX = "ticket:";
+const viewerTag = (mac: string) => `viewer:${mac}`;
+
+function macOf(socket: WebSocket): Attachment | null {
+  const attachment = socket.deserializeAttachment() as Attachment | ViewerAttachment | null;
+  return attachment && !("viewer" in attachment) ? attachment : null;
+}
+
+function viewerOf(socket: WebSocket): ViewerAttachment | null {
+  const attachment = socket.deserializeAttachment() as Attachment | ViewerAttachment | null;
+  return attachment && "viewer" in attachment ? attachment : null;
+}
+
+/** Flow control of one viewer, in memory: a viewer that outlives a hibernation starts afresh. */
+interface Flow {
+  /** Frames sent and not acknowledged, by seq. */
+  sent: number[];
+  /** When its last inputs arrived, for LIVE_MAX_INPUTS_PER_SECOND. */
+  inputs: number[];
+  /** When it last sent anything; "ping" shows in getWebSocketAutoResponseTimestamp instead. */
+  seen: number;
 }
 
 const METER_PREFIX = "meter:";
@@ -107,6 +188,9 @@ export class RelaySpace extends DurableObject<RelayEnv> {
   private busySince = new Map<WebSocket, number>();
   /** Closed connections whose meter already moved to storage. */
   private retired = new WeakSet<WebSocket>();
+  private flows = new Map<WebSocket, Flow>();
+  /** Viewers already let go, so a close the relay started is not handled twice. */
+  private left = new WeakSet<WebSocket>();
   private flushScheduled = false;
   /** How long an agent waits for the Mac's answer. Tests shorten it. */
   requestTimeoutMs = REQUEST_TIMEOUT_MS;
@@ -122,6 +206,8 @@ export class RelaySpace extends DurableObject<RelayEnv> {
    * from Autumn (X-Mobdev-Billing).
    */
   async fetch(request: Request): Promise<Response> {
+    const live = request.headers.get("X-Mobdev-Live");
+    if (live) return this.acceptViewer(JSON.parse(live) as LiveConnect);
     const accountId = request.headers.get("X-Mobdev-Account") ?? "";
     const billing = request.headers.get("X-Mobdev-Billing");
     const macs = Math.min(Number(request.headers.get("X-Mobdev-Macs")), MAX_ONLINE_HOSTS_PER_ACCOUNT);
@@ -143,6 +229,7 @@ export class RelaySpace extends DurableObject<RelayEnv> {
     for (const socket of existing) {
       await this.retire(socket);
       socket.close(CLOSE_REPLACED, "another connection with this key and name took over");
+      this.endViewersOf(socket, LIVE_CLOSE.macGone, "mac_offline", "the Mac reconnected");
     }
     // The access token may be revoked while this runs. Revoking deletes it and lists the spaces
     // of its Macs in one D1 batch (deleteAccessToken), then asks those spaces to close them. So:
@@ -172,7 +259,7 @@ export class RelaySpace extends DurableObject<RelayEnv> {
     const connected = new Map<string, number>();
     for (const socket of this.ctx.getWebSockets()) {
       if (socket.readyState !== WebSocket.OPEN) continue;
-      const attachment = socket.deserializeAttachment() as Attachment | null;
+      const attachment = macOf(socket);
       if (attachment) connected.set(attachment.name, Math.max(connected.get(attachment.name) ?? 0, attachment.connectedAt));
     }
     const names = [...connected.keys()];
@@ -276,6 +363,7 @@ export class RelaySpace extends DurableObject<RelayEnv> {
 
   async webSocketMessage(socket: WebSocket, message: string | ArrayBuffer): Promise<void> {
     if (typeof message !== "string") return;
+    if (viewerOf(socket)) return this.viewerMessage(socket, message);
     let data: {
       type?: unknown;
       id?: string;
@@ -283,6 +371,9 @@ export class RelaySpace extends DurableObject<RelayEnv> {
       headers?: Record<string, string>;
       body?: string;
       devices?: unknown;
+      seq?: unknown;
+      code?: unknown;
+      reason?: unknown;
     } | null;
     try {
       data = JSON.parse(message);
@@ -293,6 +384,16 @@ export class RelaySpace extends DurableObject<RelayEnv> {
     if (data.type === "devices") {
       const devices = devicesFromFrame(message, data);
       if (devices) await this.storeDevices(socket, devices);
+      return;
+    }
+    if (data.type === "live_frame" && typeof data.id === "string") {
+      this.liveFrame(socket, message, data.id, typeof data.seq === "number" ? data.seq : 0);
+      return;
+    }
+    if (data.type === "live_end" && typeof data.id === "string") {
+      const code = typeof data.code === "string" ? data.code : "ended";
+      const reason = typeof data.reason === "string" ? data.reason : "";
+      this.liveEnd(socket, data.id, code, reason);
       return;
     }
     if (data.type !== "response" || !data.id) return;
@@ -306,41 +407,50 @@ export class RelaySpace extends DurableObject<RelayEnv> {
   }
 
   async webSocketClose(socket: WebSocket): Promise<void> {
-    await this.disconnected(socket);
+    if (viewerOf(socket)) this.viewerLeft(socket);
+    else await this.disconnected(socket);
   }
 
   async webSocketError(socket: WebSocket): Promise<void> {
-    await this.disconnected(socket);
+    if (viewerOf(socket)) this.viewerLeft(socket);
+    else await this.disconnected(socket);
   }
 
-  /** Sends what the Macs used to Autumn, and asks again for allowances that are unknown or used up. */
+  /**
+   * Looks after live views (renews their streams on the Macs, ends expired, revoked and silent
+   * ones), sends what the Macs used to Autumn, and asks again for allowances that are unknown or
+   * used up.
+   */
   async alarm(): Promise<void> {
     this.flushScheduled = false;
+    const nextLive = await this.liveHousekeeping();
     const autumn = autumnFor(this.env);
-    if (!autumn) return;
     let failed = false;
-    for (const socket of this.ctx.getWebSockets()) {
-      if (socket.readyState !== WebSocket.OPEN || this.retired.has(socket)) continue;
-      if (!(await this.flushConnection(autumn, socket))) failed = true;
-    }
-    for (const [key, meter] of await this.ctx.storage.list<Meter>({ prefix: METER_PREFIX })) {
-      try {
-        // A stored meter can hold a batch and newer counts; both go before it is deleted.
-        while (takeBatch(meter)) {
-          await this.ctx.storage.put(key, meter); // A retry after a crash sends the same batch.
-          await this.send(autumn, meter);
-          meter.batch = null;
-          meter.seq++;
-          await this.ctx.storage.put(key, meter);
+    if (autumn) {
+      for (const socket of this.ctx.getWebSockets()) {
+        if (socket.readyState !== WebSocket.OPEN || this.retired.has(socket) || !macOf(socket)) continue;
+        if (!(await this.flushConnection(autumn, socket))) failed = true;
+      }
+      for (const [key, meter] of await this.ctx.storage.list<Meter>({ prefix: METER_PREFIX })) {
+        try {
+          // A stored meter can hold a batch and newer counts; both go before it is deleted.
+          while (takeBatch(meter)) {
+            await this.ctx.storage.put(key, meter); // A retry after a crash sends the same batch.
+            await this.send(autumn, meter);
+            meter.batch = null;
+            meter.seq++;
+            await this.ctx.storage.put(key, meter);
+          }
+          await this.ctx.storage.delete(key);
+        } catch (error) {
+          console.warn("could not send usage to Autumn", error);
+          failed = true;
         }
-        await this.ctx.storage.delete(key);
-      } catch (error) {
-        console.warn("could not send usage to Autumn", error);
-        failed = true;
       }
     }
     if (failed) await this.scheduleFlush(USAGE_RETRY_MS);
     else if (this.busySince.size > 0) await this.scheduleFlush(); // Macs still busy keep being counted.
+    if (nextLive !== null) await this.scheduleAlarmAt(nextLive);
   }
 
   /** Sends one connected Mac's usage. Agent requests keep running while Autumn answers. */
@@ -412,9 +522,12 @@ export class RelaySpace extends DurableObject<RelayEnv> {
     return count;
   }
 
-  /** Adds the time a Mac just spent on requests to its meter once the last one finished. */
+  /**
+   * Adds the time a Mac was busy to its meter once it is idle again: its last request finished and
+   * nobody watches it live.
+   */
   private finished(socket: WebSocket): void {
-    if (this.inFlight(socket) > 0) return;
+    if (this.inFlight(socket) > 0 || this.watchers(socket).length > 0) return;
     const since = this.busySince.get(socket);
     this.busySince.delete(socket);
     if (since === undefined || this.retired.has(socket)) return;
@@ -444,6 +557,7 @@ export class RelaySpace extends DurableObject<RelayEnv> {
     for (const [id, pending] of this.pending) {
       if (pending.socket === socket) this.settle(id, errorResponse(502, "the Mac disconnected"));
     }
+    this.endViewersOf(socket, LIVE_CLOSE.macGone, "mac_offline", "the Mac disconnected");
     await this.pruneDevices();
     const attachment = socket.deserializeAttachment() as Attachment | null;
     if (!attachment) return;
@@ -513,9 +627,332 @@ export class RelaySpace extends DurableObject<RelayEnv> {
     const names = new Set<string>();
     for (const socket of this.ctx.getWebSockets()) {
       if (socket.readyState !== WebSocket.OPEN) continue;
-      const attachment = socket.deserializeAttachment() as Attachment | null;
+      const attachment = macOf(socket);
       if (attachment) names.add(attachment.name);
     }
     return [...names].sort();
+  }
+
+  // MARK: Live view (shared/live.ts)
+
+  /** Creates a one-time ticket for the dashboard to hand to a browser; see RelayAdmin.liveTicket. */
+  async createTicket(spaceId: string, grant: LiveGrant): Promise<{ ticket: string } | { error: "offline" | "busy" }> {
+    if (!this.macSocket(grant.mac)) return { error: "offline" };
+    const now = Date.now();
+    const stored = await this.ctx.storage.list<StoredTicket>({ prefix: TICKET_PREFIX, limit: LIVE_MAX_TICKETS * 2 });
+    const stale = [...stored].filter(([, ticket]) => ticket.expiresAt <= now).map(([key]) => key);
+    if (stale.length > 0) await this.ctx.storage.delete(stale);
+    if (stored.size - stale.length >= LIVE_MAX_TICKETS) return { error: "busy" };
+    const secret = randomHex(16);
+    await this.ctx.storage.put<StoredTicket>(TICKET_PREFIX + (await sha256Hex(secret)), {
+      grant,
+      expiresAt: now + LIVE_TICKET_MS,
+    });
+    return { ticket: `mdv_${spaceId}${secret}` };
+  }
+
+  /** Ends the views of a revoked share link; see RelayAdmin.endShare. */
+  async endShare(shareId: string): Promise<number> {
+    const viewers = this.ctx
+      .getWebSockets("viewer")
+      .filter((socket) => socket.readyState === WebSocket.OPEN && viewerOf(socket)?.shareId === shareId);
+    for (const viewer of viewers) this.endViewer(viewer, LIVE_CLOSE.revoked, "revoked", "the share link was revoked");
+    return viewers.length;
+  }
+
+  private async redeemTicket(ticket: string): Promise<LiveGrant | null> {
+    const key = TICKET_PREFIX + (await sha256Hex(ticketSecret(ticket)));
+    const stored = await this.ctx.storage.get<StoredTicket>(key);
+    if (!stored) return null;
+    await this.ctx.storage.delete(key);
+    return stored.expiresAt > Date.now() ? stored.grant : null;
+  }
+
+  /** Accepts a viewer's WebSocket and starts or joins the stream of its device. */
+  private async acceptViewer(connect: LiveConnect): Promise<Response> {
+    let grant: LiveGrant;
+    if (connect.ticket) {
+      const redeemed = await this.redeemTicket(connect.ticket);
+      if (!redeemed) return jsonError(401, "this live view ticket is unknown, used or expired; open the live view again");
+      grant = redeemed;
+    } else {
+      grant = { mac: connect.name ?? "", device: connect.device, mode: "control", viewer: { kind: "key", label: null }, shareId: null, endsAt: null };
+    }
+    const now = Date.now();
+    if (grant.endsAt !== null && grant.endsAt <= now) return jsonError(403, "this share link expired");
+    let name = grant.mac;
+    if (!name) {
+      const names = this.names();
+      if (names.length === 0) return jsonError(503, "no Mac is connected with this key");
+      if (names.length > 1) {
+        return jsonError(409, `several Macs are connected; use /h/<name>/v1/live with one of: ${names.join(", ")}`);
+      }
+      name = names[0]!;
+    }
+    const mac = this.macSocket(name);
+    if (!mac) return jsonError(503, `the Mac "${name}" is not connected`);
+    if (await this.revoked(mac)) return jsonError(503, `the access token of the Mac "${name}" was revoked`);
+    const macAttachment = macOf(mac)!;
+    const watchers = this.watchers(mac);
+    if (watchers.length >= LIVE_MAX_VIEWERS_PER_MAC) {
+      return jsonError(429, `the Mac "${name}" already has ${LIVE_MAX_VIEWERS_PER_MAC} viewers`, { "Retry-After": "10" });
+    }
+    if (macAttachment.meter) {
+      const since = this.busySince.get(mac);
+      const limit = exhausted(macAttachment.quota, unconfirmed(macAttachment.meter, since === undefined ? 0 : now - since));
+      if (limit) return jsonError(429, limit.message, { "Retry-After": String(limit.retryAfter) });
+    }
+
+    const joined = watchers.map(viewerOf).find((viewer) => viewer?.device === grant.device);
+    const attachment: ViewerAttachment = {
+      viewer: true,
+      mac: name,
+      macConnectedAt: macAttachment.connectedAt,
+      device: grant.device,
+      stream: joined?.stream ?? randomHex(16),
+      fps: Math.min(Math.max(connect.fps, 1), LIVE_MAX_FPS),
+      mode: grant.mode,
+      who: grant.viewer,
+      shareId: grant.shareId,
+      endsAt: grant.endsAt,
+      joinedAt: now,
+    };
+    const { 0: client, 1: server } = new WebSocketPair();
+    this.ctx.acceptWebSocket(server, ["viewer", viewerTag(name)]);
+    server.serializeAttachment(attachment);
+    this.flows.set(server, { sent: [], inputs: [], seen: now });
+    server.send(JSON.stringify({ type: "live", mac: name, device: grant.device, mode: grant.mode, fps: attachment.fps }));
+    this.sendStart(mac, attachment.stream);
+    // Watching keeps the Mac busy, which counts as active time like a request in flight.
+    if (!this.busySince.has(mac)) {
+      this.busySince.set(mac, now);
+      if (macAttachment.meter) await this.scheduleFlush();
+    }
+    await this.scheduleAlarmAt(Math.min(now + LIVE_RENEW_MS, attachment.endsAt ?? Number.POSITIVE_INFINITY));
+    const headers: HeadersInit = connect.protocol ? { "Sec-WebSocket-Protocol": LIVE_SUBPROTOCOL } : {};
+    return new Response(null, { status: 101, webSocket: client, headers });
+  }
+
+  private macSocket(name: string): WebSocket | undefined {
+    return this.ctx.getWebSockets(name).find((socket) => socket.readyState === WebSocket.OPEN && macOf(socket));
+  }
+
+  /** The open viewers of a Mac connection. */
+  private watchers(mac: WebSocket): WebSocket[] {
+    const attachment = macOf(mac);
+    if (!attachment) return [];
+    return this.ctx.getWebSockets(viewerTag(attachment.name)).filter((socket) => {
+      if (socket.readyState !== WebSocket.OPEN || this.left.has(socket)) return false;
+      return viewerOf(socket)?.macConnectedAt === attachment.connectedAt;
+    });
+  }
+
+  private flowOf(viewer: WebSocket): Flow {
+    let flow = this.flows.get(viewer);
+    if (!flow) {
+      flow = { sent: [], inputs: [], seen: Date.now() };
+      this.flows.set(viewer, flow);
+    }
+    return flow;
+  }
+
+  /** Tells the Mac who watches a stream now (live_start), or live_stop when nobody does. */
+  private sendStart(mac: WebSocket, stream: string): void {
+    const viewers = this.watchers(mac)
+      .map(viewerOf)
+      .filter((viewer): viewer is ViewerAttachment => viewer?.stream === stream);
+    const frame =
+      viewers.length === 0
+        ? { type: "live_stop", id: stream }
+        : {
+            type: "live_start",
+            id: stream,
+            device: viewers[0]!.device,
+            fps: Math.max(...viewers.map((viewer) => viewer.fps)),
+            viewers: viewers.map((viewer) => ({
+              kind: viewer.who.kind,
+              ...(viewer.who.label ? { label: viewer.who.label } : {}),
+              control: viewer.mode === "control",
+            })),
+          };
+    try {
+      mac.send(JSON.stringify(frame));
+    } catch {
+      // The Mac is gone; its close ends the viewers.
+    }
+  }
+
+  /** Passes a frame from the Mac to the viewers of its stream that are not behind. */
+  private liveFrame(mac: WebSocket, message: string, stream: string, seq: number): void {
+    if (message.length > LIVE_MAX_FRAME_BYTES) return;
+    const viewers = this.watchers(mac).filter((viewer) => viewerOf(viewer)?.stream === stream);
+    for (const viewer of viewers) {
+      const flow = this.flowOf(viewer);
+      if (flow.sent.length >= LIVE_MAX_UNACKED) continue;
+      try {
+        viewer.send(message);
+        flow.sent.push(seq);
+      } catch {
+        // Closing; its close event lets it go.
+      }
+    }
+    // After a hibernation the busy time starts again with the next frame.
+    if (viewers.length > 0 && !this.busySince.has(mac)) {
+      this.busySince.set(mac, Date.now());
+      if (macOf(mac)?.meter) this.ctx.waitUntil(this.scheduleFlush());
+    }
+  }
+
+  /** The Mac ended a stream: its viewers hear why and are closed. */
+  private liveEnd(mac: WebSocket, stream: string, code: string, reason: string): void {
+    for (const viewer of this.watchers(mac)) {
+      if (viewerOf(viewer)?.stream === stream) this.endViewer(viewer, LIVE_CLOSE.ended, code, reason, false);
+    }
+    this.finished(mac);
+  }
+
+  private async viewerMessage(viewer: WebSocket, message: string): Promise<void> {
+    const flow = this.flowOf(viewer);
+    flow.seen = Date.now();
+    let data: { type?: unknown; seq?: unknown } | null;
+    try {
+      data = JSON.parse(message);
+    } catch {
+      return;
+    }
+    if (typeof data !== "object" || data === null) return;
+    if (data.type === "ack" && typeof data.seq === "number") {
+      const seq = data.seq;
+      flow.sent = flow.sent.filter((sent) => sent > seq);
+    } else if (data.type === "input") {
+      const problem = await this.viewerInput(viewer, data, flow);
+      if (problem) viewer.send(JSON.stringify({ type: "live_error", message: problem }));
+    }
+  }
+
+  /** Checks a viewer's input and sends it to the Mac; returns why it was refused. */
+  private async viewerInput(viewer: WebSocket, data: object, flow: Flow): Promise<string | null> {
+    const attachment = viewerOf(viewer);
+    if (!attachment) return null;
+    if (attachment.mode !== "control") return "this live view is view only";
+    const normalized = normalizeLiveInput(data);
+    if ("error" in normalized) return normalized.error;
+    const now = Date.now();
+    flow.inputs = flow.inputs.filter((at) => now - at < 1000);
+    if (flow.inputs.length >= LIVE_MAX_INPUTS_PER_SECOND) {
+      return `too many inputs; at most ${LIVE_MAX_INPUTS_PER_SECOND} a second`;
+    }
+    flow.inputs.push(now);
+    const mac = this.macSocket(attachment.mac);
+    if (!mac || macOf(mac)?.connectedAt !== attachment.macConnectedAt) return null; // Its close follows.
+    if (await this.revoked(mac)) return null;
+    const macAttachment = macOf(mac)!;
+    if (macAttachment.meter) {
+      // An input is a request, like an agent's tool call.
+      const since = this.busySince.get(mac);
+      const limit = exhausted(macAttachment.quota, unconfirmed(macAttachment.meter, since === undefined ? 0 : now - since));
+      if (limit) return limit.message;
+      macAttachment.meter.requests++;
+      mac.serializeAttachment(macAttachment);
+    }
+    mac.send(JSON.stringify({ type: "live_input", id: attachment.stream, input: normalized.input }));
+    return null;
+  }
+
+  /** A viewer left or was closed: the Mac hears who still watches, or stops the stream. */
+  private viewerLeft(viewer: WebSocket): void {
+    if (this.left.has(viewer)) return;
+    this.left.add(viewer);
+    this.flows.delete(viewer);
+    const attachment = viewerOf(viewer);
+    if (!attachment) return;
+    const mac = this.macSocket(attachment.mac);
+    if (!mac || macOf(mac)?.connectedAt !== attachment.macConnectedAt) return;
+    this.sendStart(mac, attachment.stream);
+    this.finished(mac);
+  }
+
+  /**
+   * Tells a viewer why its view ends and closes it. `notify` lets the Mac know who still watches;
+   * a stream the Mac ended itself needs no word back.
+   */
+  private endViewer(viewer: WebSocket, code: number, reasonCode: string, reason: string, notify = true): void {
+    try {
+      viewer.send(JSON.stringify({ type: "live_end", code: reasonCode, reason }));
+      viewer.close(code, closeReason(reason));
+    } catch {
+      // Already closed.
+    }
+    if (notify) {
+      this.viewerLeft(viewer);
+    } else {
+      this.left.add(viewer);
+      this.flows.delete(viewer);
+    }
+  }
+
+  /** Ends the views of a Mac connection that went away. */
+  private endViewersOf(mac: WebSocket, code: number, reasonCode: string, reason: string): void {
+    for (const viewer of this.watchers(mac)) this.endViewer(viewer, code, reasonCode, reason, false);
+  }
+
+  /**
+   * Every LIVE_RENEW_MS while someone watches: repeats live_start for each stream, so the Mac keeps
+   * it, and ends views whose Mac is gone, whose share link expired or was revoked, whose viewer
+   * went silent or whose account used up its allowance. Returns when to look again, or null when
+   * nobody watches any more.
+   */
+  private async liveHousekeeping(): Promise<number | null> {
+    const viewers = this.ctx.getWebSockets("viewer").filter((socket) => socket.readyState === WebSocket.OPEN && !this.left.has(socket));
+    if (viewers.length === 0) return null;
+    const now = Date.now();
+    const shareIds = [...new Set(viewers.map((viewer) => viewerOf(viewer)?.shareId).filter((id): id is string => !!id))];
+    let revoked = new Set<string>();
+    try {
+      const existing = await existingShares(this.env.DB, shareIds);
+      revoked = new Set(shareIds.filter((id) => !existing.has(id)));
+    } catch (error) {
+      console.warn("could not check share links; trying again later", error);
+    }
+    const streams = new Map<string, WebSocket>();
+    let next = now + LIVE_RENEW_MS;
+    for (const viewer of viewers) {
+      const attachment = viewerOf(viewer)!;
+      const mac = this.macSocket(attachment.mac);
+      const macAttachment = mac ? macOf(mac) : null;
+      const seen = Math.max(
+        this.flows.get(viewer)?.seen ?? 0,
+        this.ctx.getWebSocketAutoResponseTimestamp(viewer)?.getTime() ?? 0,
+        attachment.joinedAt,
+      );
+      const since = mac ? this.busySince.get(mac) : undefined;
+      const limit =
+        macAttachment?.meter && mac
+          ? exhausted(macAttachment.quota, unconfirmed(macAttachment.meter, since === undefined ? 0 : now - since))
+          : null;
+      if (!mac || macAttachment?.connectedAt !== attachment.macConnectedAt) {
+        this.endViewer(viewer, LIVE_CLOSE.macGone, "mac_offline", "the Mac disconnected", false);
+      } else if (attachment.endsAt !== null && now >= attachment.endsAt) {
+        this.endViewer(viewer, LIVE_CLOSE.expired, "expired", "the share link expired");
+      } else if (attachment.shareId && revoked.has(attachment.shareId)) {
+        this.endViewer(viewer, LIVE_CLOSE.revoked, "revoked", "the share link was revoked");
+      } else if (now - seen > LIVE_VIEWER_IDLE_MS) {
+        this.endViewer(viewer, LIVE_CLOSE.timeout, "timeout", "the viewer sent nothing in time");
+      } else if (limit) {
+        this.endViewer(viewer, LIVE_CLOSE.allowance, "allowance", limit.message);
+      } else {
+        streams.set(attachment.stream, mac);
+        if (!this.busySince.has(mac)) this.busySince.set(mac, now); // Woke from hibernation.
+        if (attachment.endsAt !== null) next = Math.min(next, attachment.endsAt);
+      }
+    }
+    for (const [stream, mac] of streams) this.sendStart(mac, stream);
+    return streams.size > 0 ? next : null;
+  }
+
+  /** Sets the alarm to `at` unless it already goes off earlier. */
+  private async scheduleAlarmAt(at: number): Promise<void> {
+    const current = await this.ctx.storage.getAlarm();
+    if (current === null || current > at) await this.ctx.storage.setAlarm(at);
   }
 }

@@ -8,11 +8,14 @@ public protocol ToolCalling: Sendable {
         -> ToolOutput
     /// The phone a request addresses by id or name, for the raw screenshot endpoint.
     func phone(for device: String?) throws -> PhoneBackend
+    /// That phone's activity log, for what is not a tool call, such as someone watching it live.
+    func activity(for device: String?) -> ActivityLog?
 }
 
 extension PhoneTools: ToolCalling {
     public var definitions: [ToolDefinition] { Self.definitions }
     public func phone(for device: String?) throws -> PhoneBackend { phone }
+    public func activity(for device: String?) -> ActivityLog? { activity }
 }
 
 /// A device as agents, the relay and the dashboard see it. The JSON matches the relay's
@@ -163,6 +166,8 @@ public final class DeviceTools: ToolCalling {
     }
 
     public func phone(for device: String?) throws -> PhoneBackend { try resolve(device) }
+
+    public func activity(for device: String?) -> ActivityLog? { try? resolve(device).activity }
 
     /// The device's flow recorder, which the app starts and stops. Nil for an unknown device.
     public func recorder(for device: String) -> FlowRecorder? {

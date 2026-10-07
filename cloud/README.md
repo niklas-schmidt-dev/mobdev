@@ -6,7 +6,7 @@ The website, dashboard and hosted relay. Everything runs on Cloudflare.
 |---|---|---|
 | Website and dashboard | `src/`, worker `mobdev-web`, `mobdev.sh` | TanStack Start. Sign-in with WorkOS AuthKit. Dashboard issues access tokens and lists Macs. |
 | Hosted relay | `relay/`, worker `mobdev-relay`, `relay.mobdev.sh` | One Durable Object per space. Macs connect with hibernatable WebSockets, so an idle Mac costs nothing. Same protocol as [`../relay`](../relay). |
-| Database | D1 `mobdev`, `migrations/` | Accounts, hashed access tokens, which Macs are connected and the iPhones they report, and a deleted account's usage until its allowance renews (below). No request or screenshot content. |
+| Database | D1 `mobdev`, `migrations/` | Accounts, hashed access tokens, which Macs are connected and the iPhones they report, hashed live view share links, and a deleted account's usage until its allowance renews (below). No request or screenshot content. |
 | Billing | [Autumn](https://docs.useautumn.com) on Stripe, `autumn.config.ts` | Plans, monthly allowances and usage per account; checkout and billing portal. |
 
 The relay is a separate worker so deploying the website never disconnects Macs. The website
@@ -102,6 +102,45 @@ connected also in its space's Durable Object storage.
 `online` is what D1 recorded when Macs connected and disconnected; the dashboard also checks the
 relay. The dashboard lists each Mac's devices under it.
 
+## Live view
+
+The relay streams a device's screen to viewers and passes their taps and typing back, with the
+same protocol as the Go relay ([`../relay/README.md`](../relay/README.md#live-view), code in
+`shared/live.ts` and `RelaySpace`). Viewer sockets are hibernatable WebSockets of the Mac's space,
+tagged `viewer` and `viewer:<mac>`. The Mac streams only while "Allow live view" is on under
+Remote Access in the app (off by default).
+
+| Who | How | May |
+|---|---|---|
+| Agents and tools | `GET /v1/live` with the client key, as `Bearer mdc_…` or the `mobdev-auth.mdc_…` subprotocol | Watch and control any device of the Mac |
+| The account in the dashboard | "Live" next to a device opens `/live?space=…&mac=…&device=…` | Watch and control its own Macs' devices |
+| Anyone with a share link | `mobdev.sh/live/mds_…`, no account | One device or every device of one Mac, view only or with control, until the link expires or is revoked |
+
+Browsers never get a key. Before each connection the page asks a server function for a ticket;
+the website checks who may watch what and asks the relay over the `RelayAdmin` service binding
+(`liveTicket`), which keeps the SHA-256 hash of a random secret with that grant in the space's
+Durable Object for 60 s. The browser presents `mdv_<space><secret>` as a subprotocol; the relay uses
+it once. So no secret is shared between the workers.
+
+Share links are created and revoked on the live page and listed in the dashboard. D1 keeps them in
+`live_shares` with the token's SHA-256 hash, a label, the Mac (and device, or all of them), the
+mode and the expiry (an hour, a day or a week; at most 20 per account). Revoking deletes the row and
+calls `RelayAdmin.endShare`, which closes its viewers at once (4005); if that call fails, the
+space's alarm finds the link gone within 30 s. A link ends its views when it expires (4004), and it
+only works while its Mac still belongs to the account that made it. Forgetting the Mac or deleting
+the account deletes its links.
+
+Metering: a Mac with at least one viewer is busy, so watching counts as active time like a request
+in flight, and each input counts as one request. Frames count as neither. Opening a view counts
+once against the key's `AGENT_LIMIT`. Viewers are refused (429) and closed (4029) when the
+account's allowance is used up. The space's alarm runs every 30 s while someone watches: it renews
+each stream on the Mac (`live_start`) and ends views whose Mac left, whose link expired or was
+revoked, or whose viewer went silent.
+
+Tested in `test/live.test.ts` against the relay worker and D1. The website's pages and server
+functions (`src/routes/live.*.tsx`, `src/server/live.ts`, `src/components/live.tsx`) have no unit
+tests; check them in the browser (Local development).
+
 ## Local development
 
 ```sh
@@ -162,6 +201,10 @@ bunx wrangler d1 migrations apply mobdev --remote   # only when migrations/ chan
 bun run deploy:relay                                 # disconnects Macs briefly; they reconnect
 bun run deploy:web
 ```
+
+Keep this order: the website calls the relay's `RelayAdmin` methods and reads tables that the
+migrations add (live view needs `0005_live_shares.sql` and a relay with `liveTicket` and
+`endShare`).
 
 Secrets of `mobdev-web` (`bunx wrangler secret put <name>`): `WORKOS_API_KEY` (Production secret
 key), `WORKOS_COOKIE_PASSWORD` (set) and `AUTUMN_SECRET_KEY`. Without the API key the public pages

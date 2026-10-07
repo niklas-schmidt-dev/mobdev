@@ -605,11 +605,22 @@ struct ActivityRow: View {
                 Text(entry.date, format: .dateTime.hour().minute().second())
                     .monospacedDigit()
                     .foregroundStyle(.secondary)
-                Text(entry.source == "relay" ? "Remote" : entry.source == "app" ? "You" : "This Mac")
+                Text(Self.origin(entry.source))
                     .font(.caption)
                     .foregroundStyle(.tertiary)
         }
         .font(.callout)
+    }
+
+    /// Where an action came from: an agent through the relay, someone in the browser's live view,
+    /// the person at this Mac, or an agent on this Mac.
+    static func origin(_ origin: String) -> String {
+        switch origin {
+        case "relay": "Remote"
+        case "browser": "Browser"
+        case "app": "You"
+        default: "This Mac"
+        }
     }
 }
 
@@ -663,6 +674,7 @@ struct ToolIcon: View {
         case "measure_launch": "stopwatch"
         case "dev_menu": "ellipsis.rectangle"
         case "reload_app": "arrow.clockwise"
+        case "live_view": "eye.fill"
         default: "info.circle.fill"
         }
     }
@@ -678,12 +690,14 @@ struct ToolIcon: View {
         case "install_app", "uninstall_app", "launch_app", "stop_app", "open_url", "measure_launch", "dev_menu",
             "reload_app": .teal
         case "list_apps", "logs", "crash_reports", "performance": .brown
+        case "live_view": .red
         default: .gray
         }
     }
 
     /// "Tap text" for "tap_text", from the tool's own title.
     static func title(for tool: String) -> String {
-        DeviceTools.definitions.first { $0.name == tool }?.title ?? tool
+        if tool == "live_view" { return "Live view" }  // Not a tool: someone watching in the browser.
+        return DeviceTools.definitions.first { $0.name == tool }?.title ?? tool
     }
 }

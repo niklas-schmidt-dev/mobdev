@@ -111,6 +111,9 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var relayURL = ""
     public var relayAccessToken = ""
     public var hostName = AppSettings.defaultHostName
+    /// Lets the relay stream a device's screen to the dashboard, share links and agents (live view),
+    /// and their taps and typing reach the device. Off until turned on: a screen can show anything.
+    public var liveViewAllowed = false
     /// Lists booted iOS simulators and Android devices next to iPhones.
     public var emulatorsEnabled = true
     /// Chosen on the welcome page: simulators and Android only, so the setup assistant does not
@@ -144,6 +147,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         relayURL = try container.decodeIfPresent(String.self, forKey: .relayURL) ?? ""
         relayAccessToken = try container.decodeIfPresent(String.self, forKey: .relayAccessToken) ?? ""
         hostName = try container.decodeIfPresent(String.self, forKey: .hostName) ?? defaults.hostName
+        liveViewAllowed = (try? container.decodeIfPresent(Bool.self, forKey: .liveViewAllowed)) ?? false
         emulatorsEnabled = try container.decodeIfPresent(Bool.self, forKey: .emulatorsEnabled) ?? true
         iPhoneSetupDeferred = try container.decodeIfPresent(Bool.self, forKey: .iPhoneSetupDeferred) ?? false
         runnerTeam = (try? container.decodeIfPresent(String.self, forKey: .runnerTeam)) ?? ""

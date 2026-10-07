@@ -1,4 +1,135 @@
 {
+  "75a28f737b511118": "Waiting for the screen",
+  "445511757fcd365a": "Connecting…",
+  "3cf8fbd4f35cae64": "Live · {fps} fps",
+  "425be7ecd878142d": "Live",
+  "a9b005d195b411ce": "Mac offline",
+  "97e91e046221389d": "Link expired",
+  "3e8a001d9e2e5300": "Link not valid",
+  "4d9f05fa09cf6ec2": "Limit reached",
+  "60434ab831897ee0": "Not connected",
+  "01ac8805c2826b3d": "Live view off",
+  "20c3947738c91bf3": "Live view ended",
+  "aba31effc6c4db19": "The picture stopped. The device may be locked or asleep.",
+  "bcb61ae96e111a0b": "No picture yet. The device may be locked, or Mobdev on the Mac may need an update.",
+  "e72c350f5dde2520": "Connected. Waiting for the screen…",
+  "ed45d9045f7c6761": "The Mac is offline. Trying again…",
+  "508a6db7447ed50f": "This link has expired.",
+  "cf2a349a35622de5": "This link is no longer valid.",
+  "2e2329af93210e8c": "This account has used up its hosted relay time for this month.",
+  "48abf2e3c99c9502": "Could not connect. Trying again…",
+  "355188d4c155d586": "Live view is off on this Mac. Turn on “Allow live view” under Remote Access in Mobdev, then try again.",
+  "1cd152a0629c24b3": "This device is not connected to the Mac right now.",
+  "8dabdcb53828b40f": "The live view was stopped on the Mac.",
+  "c2e98f93d8c4c8c2": "The live view ended.",
+  "a33e24f4540aa46b": "Live device screen",
+  "5aaa084ecd5bfa6d": "{device}. Click to tap, drag to swipe, and type while it has focus.",
+  "c1fce9e09de432ad": "{device}, view only",
+  "ca749b12449e9284": "Home",
+  "53092121ca7de57b": "View only",
+  "be1da3273ffdb5bd": "Try again",
+  "fa299c8daacf10c3": {
+    "t": "p",
+    "i": 1,
+    "c": "Click to tap, hold to press long, drag to swipe, scroll with the wheel. Click the screen, then type to send keys; ⌘V pastes."
+  },
+  "c7ac115f79a99013": "expires in {minutes} min",
+  "82ce017d0b5ec846": "expires in {hours} h",
+  "99b843737978f523": "expires in {days} days",
+  "258d16c1554b734c": "Copy link",
+  "4a078b0719124dcb": "e.g. For Anna",
+  "e8ee3c10be8c2336": "1 hour",
+  "58247f6a8b748278": "1 day",
+  "2cddd6095abc734a": "7 days",
+  "1d3965f81db9e6bc": "View and control",
+  "570567bbea004eac": "View only",
+  "d0218e5924ad8b21": "every device",
+  "069cff50767008ce": "one device",
+  "e451a63fa4c27f78": "Revoke “{name}”",
+  "7ea6eba2e8ee9865": "Share live view",
+  "fb4516dffeebe159": "Done",
+  "e935645414913c24": {
+    "t": "p",
+    "i": 1,
+    "c": "Anyone with the link can watch without an account until it expires. Revoke it here at any time."
+  },
+  "7d4b3f8d46df1b19": [
+    {
+      "t": "p",
+      "i": 1,
+      "c": [
+        "Link for “",
+        {
+          "i": 2,
+          "k": "_gt_value_2",
+          "v": "v"
+        },
+        "”"
+      ]
+    },
+    {
+      "t": "p",
+      "i": 3,
+      "c": "It is shown only once. Copy it now."
+    }
+  ],
+  "7955b0a60b641b9d": "Create another",
+  "4614a422f1430cd7": "Name",
+  "f0578e109081ffe8": "Access",
+  "c418406c7c929270": {
+    "t": "span",
+    "i": 1,
+    "c": [
+      {
+        "t": "span",
+        "i": 2,
+        "c": "View only"
+      },
+      {
+        "t": "span",
+        "i": 3,
+        "c": "They see the screen and cannot touch it."
+      }
+    ]
+  },
+  "2ba4dd171f2b4561": {
+    "t": "span",
+    "i": 1,
+    "c": [
+      {
+        "t": "span",
+        "i": 2,
+        "c": "View and control"
+      },
+      {
+        "t": "span",
+        "i": 3,
+        "c": "They can tap, swipe and type, as you can."
+      }
+    ]
+  },
+  "6208f18a13757170": "Shows",
+  "e295596448c1fd93": {
+    "t": "span",
+    "i": 1,
+    "c": [
+      "Every device on ",
+      {
+        "i": 2,
+        "k": "_gt_value_2",
+        "v": "v"
+      }
+    ]
+  },
+  "3c489c60ebc61c43": "Expires after",
+  "fd10d26cf062a1f3": "Create link",
+  "2cfaab177bbe54c4": "Links to this Mac",
+  "f4d1d918e5221a75": {
+    "t": "p",
+    "i": 1,
+    "c": "None yet."
+  },
+  "224e9839195b63b2": "Revoke",
   "b334084b5da61a48": "Main",
   "2c1c93a646bbea6e": "Language",
   "b80f965a578b8557": "Copied",
@@ -71,6 +202,7 @@
   "30589efe06e4d26f": "just now",
   "a771b87e24b3a67e": "{minutes} min ago",
   "9f87340ecd54bff6": "{hours} h ago",
+  "14ce27abb7a7b2d0": "Watch {name} live",
   "fb5edc430667c4a9": "{used} of unlimited hours",
   "c9f10d90b4749579": "{used} of unlimited",
   "17feff542207ba00": "{used} of {limit} hours",
@@ -93,6 +225,8 @@
   "9486550ad71ea1c6": ", online",
   "7ebd933ef8c24928": ", offline",
   "5073157898471687": "Devices of {name}",
+  "6071169ec586e9bd": "Shared live views",
+  "295498449b7c1840": "Anyone with one of these links can watch until it expires. Revoking ends their view at once.",
   "e1183fb3e611a799": "Access tokens",
   "125c4a8144fea48d": "Revoking a token disconnects every Mac that uses it.",
   "ba79c433dafd2870": "Revoke “{name}”? Macs using it disconnect.",
@@ -111,6 +245,7 @@
       "c": "Accounts are being set up. The Mac app and self-hosted relay work without one in the meantime."
     }
   ],
+  "9a06fd459ce858b9": "Live",
   "b711807130f5f97e": {
     "t": "p",
     "i": 1,
@@ -225,7 +360,6 @@
     }
   ],
   "2a9b52ded4d99898": "Open in Mobdev",
-  "fb4516dffeebe159": "Done",
   "00e7538452be88e3": {
     "t": "p",
     "i": 1,
@@ -277,7 +411,6 @@
       }
     ]
   },
-  "224e9839195b63b2": "Revoke",
   "8c72ff0014375565": "Delete account…",
   "5d973795984549fc": "Install",
   "93feded7f96bfd7a": "Set up the iPhone",
@@ -1331,6 +1464,39 @@
       ]
     }
   ],
+  "b70cb44ca09e0fb9": [
+    {
+      "t": "h3",
+      "i": 1,
+      "c": "Live view"
+    },
+    {
+      "t": "p",
+      "i": 2,
+      "c": [
+        "Turn on “Allow live view” under Remote Access in the app, then click “Live” next to a device in the ",
+        {
+          "t": "Link",
+          "i": 3,
+          "c": "dashboard"
+        },
+        " to watch its screen in the browser: click to tap, drag to swipe and type on it. “Share…” there creates a link that expires, to view only or to control, which anyone can open without an account until you revoke it. The app shows while someone watches and can stop it. Watching counts as active time. Agents open the same stream with the client key at",
+        " ",
+        {
+          "t": "code",
+          "i": 4,
+          "c": "/v1/live"
+        },
+        "; see the ",
+        {
+          "t": "a",
+          "i": 5,
+          "c": "relay’s protocol"
+        },
+        "."
+      ]
+    }
+  ],
   "d5d5541ae86ede6f": [
     {
       "t": "h3",
@@ -1539,8 +1705,6 @@
   "6d92b3ac946aa3bb": "Run it on my iPhone and find out why it crashes.",
   "7f8cb8174c6d288f": "Next",
   "8d8555364510a069": "Planned",
-  "e60bd40be027415a": "Live view in the browser.",
-  "0a73e54778118a8d": "Watch and take over a phone from the dashboard, and share devices with your team.",
   "abeb6ee67f73f8bd": "Does it replace Xcode or Android Studio?",
   "44ee2c19acafea77": "No. Keep building with Xcode, Android Studio, Gradle or XcodeBuildMCP. Mobdev takes over once there is a build: it installs it on a device, runs it, drives it and reads its logs and crash reports.",
   "e1e9ccdf882b927a": "Does the iPhone need developer mode or an app?",
@@ -1849,6 +2013,11 @@
       "c": "Turn on remote access and agents on other machines connect through a relay. Your Mac keeps one outgoing connection, so no port is ever opened. The app and the dashboard list every Mac and its phones."
     }
   ],
+  "970a4d85d2e7f410": {
+    "t": "p",
+    "i": 1,
+    "c": "Watch and control a phone live in the browser, and share it with a link that expires, to view only or to control. The Mac shows while someone watches and decides whether anyone may."
+  },
   "88f06d6d8c22de6b": [
     {
       "t": "h2",
@@ -2015,6 +2184,73 @@
     ]
   },
   "19c065090ac5adec": "Read the docs ›",
+  "ac0de2a59d9c8860": "Device",
+  "37a19317b98706bc": [
+    {
+      "t": "h1",
+      "i": 1,
+      "c": "This link has expired."
+    },
+    {
+      "t": "p",
+      "i": 2,
+      "c": "Ask whoever shared it for a new one."
+    }
+  ],
+  "31373b409bae0547": [
+    {
+      "t": "h1",
+      "i": 1,
+      "c": "This link is not valid."
+    },
+    {
+      "t": "p",
+      "i": 2,
+      "c": "It may have been revoked or copied incompletely. Ask whoever shared it for a new one."
+    }
+  ],
+  "fe76cb5217fbed58": "No device is connected to this Mac right now.",
+  "690e06d595fe93da": [
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " is offline right now."
+  ],
+  "44e32a46ec702208": [
+    {
+      "t": "h1",
+      "i": 1,
+      "c": "Mac not found."
+    },
+    {
+      "t": "p",
+      "i": 2,
+      "c": [
+        "This Mac is not in your account. Open the live view from your ",
+        {
+          "t": "Link",
+          "i": 3,
+          "c": "dashboard"
+        },
+        "."
+      ]
+    }
+  ],
+  "9b9eb2bd97470a23": [
+    {
+      "t": "h1",
+      "i": 1,
+      "c": "Almost there."
+    },
+    {
+      "t": "p",
+      "i": 2,
+      "c": "Accounts are being set up."
+    }
+  ],
+  "ca0bb01349db5560": "Share…",
   "bcbe114d1010427f": [
     {
       "t": "h1",
@@ -2063,6 +2299,11 @@
       "c": "The relay records which Macs are connected: a name you choose, when it connected and disconnected, and an ID derived from your Mac’s key. For each Mac it also keeps the iPhones and iPads it last reported: their name, model, iOS version, a device ID and whether they are ready. Agent requests and responses, including screenshots, only pass through memory and are never written to disk or logs. Cloudflare, which runs the relay, may keep standard request metadata such as IP addresses for security."
     }
   ],
+  "73704749791d9d03": {
+    "t": "p",
+    "i": 1,
+    "c": "Live view works the same way: the pictures of a device’s screen and the taps and typing sent to it only pass through memory. For each share link you create, we keep the name you give it, which Mac or device it shows, whether it allows control, when it expires and a SHA-256 hash of the link. Revoking a link deletes it, and expired links are deleted the next time you open the dashboard."
+  },
   "bd63323eb07e6f93": [
     {
       "t": "h2",
@@ -2108,7 +2349,10 @@
   "b939e274857882b3": "Your billing record could not be deleted, so nothing was deleted. Try again in a moment.",
   "a213e4c483c81496": "Cancel {plan} under “Manage billing” first, then delete your account.",
   "b1046773885d301e": "You can have at most {count} access tokens.",
+  "8291543d714a075f": "You can have at most {count} share links. Revoke one first.",
   "b5f2554e55012b9a": "Not signed in.",
   "a41f2c2b05c508f2": "Billing is not set up.",
-  "6be714f0b883563e": "Billing could not be reached, so no token was created. Try again in a moment."
+  "6be714f0b883563e": "Billing could not be reached, so no token was created. Try again in a moment.",
+  "db158bd77c655d92": "Shared view",
+  "a77a0210b319a770": "This Mac is not in your account."
 }

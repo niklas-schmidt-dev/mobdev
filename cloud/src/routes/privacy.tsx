@@ -44,6 +44,14 @@ function Privacy() {
             relay, may keep standard request metadata such as IP addresses for security.
           </p>
         </T>
+        <T>
+          <p className="mt-3">
+            Live view works the same way: the pictures of a device’s screen and the taps and typing sent to it only pass
+            through memory. For each share link you create, we keep the name you give it, which Mac or device it shows,
+            whether it allows control, when it expires and a SHA-256 hash of the link. Revoking a link deletes it, and
+            expired links are deleted the next time you open the dashboard.
+          </p>
+        </T>
 
         <T>
           <h2 className="mt-10 text-[24px] font-semibold tracking-tight text-ink">Plans and payments</h2>

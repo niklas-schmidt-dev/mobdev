@@ -198,6 +198,54 @@ import Testing
         #expect(try await listed().first?.devices == [locked])
     }
 
+    /// A viewer watches the fake phone through the relay, as a browser would (the key as a
+    /// subprotocol), and its click becomes a tap; leaving ends the stream on the Mac.
+    @Test(.enabled(if: RelayEndToEndTests.goPath != nil, "Go is not installed"))
+    func liveViewThroughTheRelay() async throws {
+        let relay = try await RelayProcess.start()
+        defer { relay.stop() }
+        let phone = FakePhone(lines: [("Settings", 420, 300)])
+        let activity = ActivityLog()
+        let tools = PhoneTools(phone: phone, activity: activity, settleDelay: 0)
+        let router = APIRouter(tools: tools, token: { "unused" }, port: { 0 })
+        let live = LiveStreams(tools: tools, allowed: true)
+        let client = RelayClient(live: live, handler: { request in await router.handle(request, from: .relay) })
+        let secret = "mdh_" + SecretStore.randomHex(bytes: 32)
+        client.start(url: relay.base, secret: secret, hostName: "studio", accessToken: nil)
+        defer { client.stop() }
+        for _ in 0..<100 where client.state != .connected { try await Task.sleep(for: .milliseconds(50)) }
+        #expect(client.state == .connected)
+
+        let key = RelayClient.clientKey(forSecret: secret)
+        let url = URL(string: "ws://127.0.0.1:\(relay.base.port!)/h/studio/v1/live?fps=10")!
+        let viewer = URLSession.shared.webSocketTask(with: url, protocols: ["mobdev-live", "mobdev-auth.\(key)"])
+        viewer.maximumMessageSize = 4 << 20
+        viewer.resume()
+        defer { viewer.cancel(with: .goingAway, reason: nil) }
+        func next() async throws -> [String: Any] {
+            guard case .string(let text) = try await viewer.receive() else { return [:] }
+            return (try JSONSerialization.jsonObject(with: Data(text.utf8))) as? [String: Any] ?? [:]
+        }
+        let hello = try await next()
+        #expect(hello["type"] as? String == "live")
+        #expect(hello["mode"] as? String == "control")
+        let frame = try await next()
+        #expect(frame["type"] as? String == "live_frame")
+        #expect(frame["height"] as? Int == 800)
+        try await viewer.send(.string(#"{"type":"ack","seq":\#(frame["seq"] as? Int ?? 0)}"#))
+        #expect(live.sessions.first?.viewers == [LiveStreams.Viewer(kind: "key", control: true)])
+
+        try await viewer.send(.string(#"{"type":"input","action":"tap","x":0.5,"y":0.5}"#))
+        for _ in 0..<100 where phone.events.get().isEmpty { try await Task.sleep(for: .milliseconds(50)) }
+        #expect(phone.events.get() == [.tap(NormalizedPoint(x: 0.5, y: 0.5), 0.08)])
+        #expect(activity.all.contains { $0.tool == "tap" && $0.source == "browser" })
+
+        viewer.cancel(with: .normalClosure, reason: nil)
+        for _ in 0..<100 where !live.sessions.isEmpty { try await Task.sleep(for: .milliseconds(50)) }
+        #expect(live.sessions.isEmpty)
+        #expect(activity.all.first?.summary == "Live view ended: nobody watches any more")
+    }
+
     /// A build reaches the Mac through the relay in chunks, a full 8 MiB one among them, byte for
     /// byte, and install_app installs it: sent by Mobdev upload's client and by the shell script.
     @Test(.enabled(if: RelayEndToEndTests.goPath != nil, "Go is not installed"))

@@ -4,10 +4,11 @@ import { env } from "cloudflare:workers";
 import { getGT } from "gt-tanstack-start";
 import { carryOverUsage, removeAccount } from "../../shared/accounts";
 import { Autumn, currentSubscription, type Customer } from "../../shared/autumn";
-import { UserError } from "../../shared/errors";
 import { FEATURES, FREE_PLAN, PLANS, PRO_PLAN, planById, type Plan } from "../../shared/plans";
+import { listShares, type ShareRow } from "../../shared/shares";
 import { hasRelayPlan } from "../../relay/src/billing";
 import { authConfigured } from "./auth-config";
+import { relay, requireUser, siteOrigin, translated } from "./common";
 import {
   createAccessToken,
   deleteAccessToken,
@@ -19,41 +20,6 @@ import {
   type AccessTokenRow,
   type HostRow,
 } from "../../shared/db";
-
-interface RelayAdmin {
-  connected(spaceIds: string[]): Promise<Record<string, string[]>>;
-  disconnectToken(tokenId: string, spaceIds: string[]): Promise<number>;
-}
-
-const relay = () => env.RELAY as unknown as RelayAdmin;
-
-// Errors a server function throws for the dashboard to show are in the language of the request,
-// which General Translation resolves from its cookie; errors only logged stay English.
-
-/** An error from shared/, which only speaks English, in the language of the request. */
-async function translated(error: unknown): Promise<unknown> {
-  if (!(error instanceof UserError)) return error;
-  const gt = await getGT();
-  switch (error.reason) {
-    case "billing-unreachable":
-      return new Error(gt("Billing could not be reached, so nothing was deleted. Try again in a moment."));
-    case "billing-record":
-      return new Error(gt("Your billing record could not be deleted, so nothing was deleted. Try again in a moment."));
-    case "paid-plan":
-      return new Error(gt("Cancel {plan} under “Manage billing” first, then delete your account.", { plan: String(error.value) }));
-    case "token-limit":
-      return new Error(gt("You can have at most {count} access tokens.", { count: Number(error.value) }));
-  }
-}
-
-async function requireUser() {
-  const { user } = await getAuth();
-  if (!user) {
-    const gt = await getGT();
-    throw new Error(gt("Not signed in."));
-  }
-  return user;
-}
 
 /**
  * Drops Macs connected with a revoked token. The token is already gone, so a failure only delays
@@ -90,11 +56,6 @@ async function reconcile(hosts: HostRow[]): Promise<HostRow[]> {
 /** Autumn holds plans and usage. Without its key the hosted relay is not billed. */
 function autumn(): Autumn | null {
   return env.AUTUMN_SECRET_KEY ? new Autumn(env.AUTUMN_SECRET_KEY) : null;
-}
-
-/** The site's public origin. The WorkOS redirect URI is set per environment, so it has the right one. */
-function siteOrigin(): string {
-  return new URL(env.WORKOS_REDIRECT_URI).origin;
 }
 
 export interface Allowance {
@@ -137,6 +98,8 @@ export interface DashboardData {
   user: { email: string; firstName: string | null };
   tokens: AccessTokenRow[];
   hosts: HostRow[];
+  /** Live view links that have not expired. */
+  shares: ShareRow[];
   relayUrl: string;
   /** "off" when the relay is not billed, "unavailable" when Autumn could not be read. */
   billing: BillingData | "off" | "unavailable";
@@ -169,9 +132,10 @@ export const loadDashboard = createServerFn({ method: "GET" }).handler(async ():
   const { user } = await getAuth();
   if (!user) return { state: "signed-out" };
   await upsertAccount(env.DB, user.id, user.email);
-  const [tokens, hosts, billing] = await Promise.all([
+  const [tokens, hosts, shares, billing] = await Promise.all([
     listAccessTokens(env.DB, user.id),
     listHosts(env.DB, user.id),
+    listShares(env.DB, user.id),
     loadBilling(user),
   ]);
   return {
@@ -179,6 +143,7 @@ export const loadDashboard = createServerFn({ method: "GET" }).handler(async ():
     user: { email: user.email, firstName: user.firstName ?? null },
     tokens,
     hosts: await reconcile(hosts),
+    shares,
     relayUrl: env.RELAY_URL,
     billing,
   };

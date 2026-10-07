@@ -54,6 +54,29 @@ struct RemoteView: View {
                 } footer: {
                     Text("Anyone with the client key can control the phone. A new key disconnects every agent using the old one.")
                 }
+
+                Section {
+                    Toggle(
+                        "Allow live view",
+                        isOn: Binding(get: { model.settings.liveViewAllowed }, set: { model.setLiveViewAllowed($0) }))
+                    ForEach(model.liveSessions) { session in
+                        LabeledContent {
+                            Button("Stop") { model.stopLiveView(session.deviceID) }
+                                .help("End this live view for everyone watching")
+                        } label: {
+                            Label {
+                                Text(session.deviceName)
+                                Text("Watched in the browser now by \(LiveStreams.describe(session.viewers))")
+                            } icon: {
+                                Image(systemName: "eye.fill").foregroundStyle(.red)
+                            }
+                        }
+                    }
+                } header: {
+                    Text("Live View")
+                } footer: {
+                    Text("Watch and control this Mac's devices in the browser at mobdev.sh, and share them with a link. Agents with the client key can watch too. Screens can show private data, so live view stays off until you turn it on here; turning it off ends every live view.")
+                }
             }
         }
         .formStyle(.grouped)

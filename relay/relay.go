@@ -44,6 +44,9 @@ type Config struct {
 	// MaxInFlight is how many requests one Mac may have in flight; more get 429. The hosted
 	// relay has the same limit (MAX_IN_FLIGHT_PER_MAC).
 	MaxInFlight int
+	// LiveRenew is how often the relay repeats live_start for each live stream, so the Mac knows
+	// someone still watches (it ends a stream that is not renewed for 75 s). See live.go.
+	LiveRenew time.Duration
 }
 
 func DefaultConfig() Config {
@@ -55,12 +58,14 @@ func DefaultConfig() Config {
 		MaxBuffered:    256 << 20,
 		MaxHosts:       32,
 		MaxInFlight:    4,
+		LiveRenew:      30 * time.Second,
 	}
 }
 
 // envelope is one tunnelled HTTP request ("request") or its answer ("response").
 // Bodies are base64. When the relay gives up on a request it has sent, it tells the Mac
-// with {"type":"cancel","id":...} (see host.cancel).
+// with {"type":"cancel","id":...} (see host.cancel). The Mac's live view frames
+// ("live_frame", "live_end") are read into it too, for their id, seq, code and reason.
 type envelope struct {
 	Type    string            `json:"type"`
 	ID      string            `json:"id"`
@@ -70,6 +75,9 @@ type envelope struct {
 	Status  int               `json:"status,omitempty"`
 	Headers map[string]string `json:"headers"`
 	Body    string            `json:"body"`
+	Seq     int64             `json:"seq,omitempty"`
+	Code    string            `json:"code,omitempty"`
+	Reason  string            `json:"reason,omitempty"`
 }
 
 // CloseReplaced tells a Mac that another connection with the same key and name took over.
@@ -136,8 +144,9 @@ type host struct {
 	writeMu     sync.Mutex
 	mu          sync.Mutex
 	pending     map[string]chan envelope
-	inFlight    int      // agent requests admitted and not finished, at most Config.MaxInFlight
-	devices     []Device // latest list from the Mac; replaced, never modified in place
+	inFlight    int                    // agent requests admitted and not finished, at most Config.MaxInFlight
+	devices     []Device               // latest list from the Mac; replaced, never modified in place
+	streams     map[string]*liveStream // live views by device (live.go)
 	done        chan struct{}
 }
 
@@ -342,6 +351,8 @@ func (s *Relay) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.listHosts(w, r)
 	case r.URL.Path == "/v1/relay/devices" && r.Method == http.MethodGet:
 		s.listDevices(w, r)
+	case isLivePath(r.URL.Path):
+		s.live(w, r)
 	default:
 		s.forward(w, r)
 	}
@@ -391,6 +402,7 @@ func (s *Relay) connect(w http.ResponseWriter, r *http.Request) {
 		connectedAt: time.Now(),
 		pending:     map[string]chan envelope{},
 		devices:     []Device{},
+		streams:     map[string]*liveStream{},
 		done:        make(chan struct{}),
 	}
 
@@ -417,8 +429,10 @@ func (s *Relay) connect(w http.ResponseWriter, r *http.Request) {
 		}
 		s.mu.Unlock()
 		close(h.done)
+		h.endAllStreams(closeLiveMacGone, "the Mac disconnected")
 		_ = conn.CloseNow()
 	}()
+	go h.renewStreams(s.cfg.LiveRenew)
 
 	for {
 		readCtx, cancel := context.WithTimeout(context.Background(), s.cfg.IdleTimeout)
@@ -437,9 +451,19 @@ func (s *Relay) connect(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		var env envelope
-		if json.Unmarshal(data, &env) == nil && env.Type == "response" {
+		parsed := json.Unmarshal(data, &env) == nil
+		switch {
+		case parsed && env.Type == "response":
 			h.deliver(env)
-		} else if devices, ok := parseDevices(data); ok {
+		case parsed && env.Type == "live_frame":
+			h.liveFrame(env, data)
+		case parsed && env.Type == "live_end":
+			h.liveEnd(env)
+		default:
+			devices, ok := parseDevices(data)
+			if !ok {
+				continue
+			}
 			h.mu.Lock()
 			h.devices = devices
 			h.mu.Unlock()
@@ -505,6 +529,48 @@ func (s *Relay) listDevices(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(map[string]any{"macs": macs})
 }
 
+// hostAndPath reads which Mac a request names, from /h/<mac>/<path> or X-Mobdev-Host, and the
+// path to use on that Mac. The name is empty when the request names none; false for "/h/" alone.
+func hostAndPath(r *http.Request) (name, path string, ok bool) {
+	path = r.URL.Path
+	name = strings.ToLower(r.Header.Get("X-Mobdev-Host"))
+	if strings.HasPrefix(path, "/h/") {
+		rest := strings.TrimPrefix(path, "/h/")
+		slash := strings.Index(rest, "/")
+		if slash <= 0 {
+			return "", "", false
+		}
+		name, path = strings.ToLower(rest[:slash]), rest[slash:]
+	}
+	return name, path, true
+}
+
+// pickHost finds the Mac a request is for: the one named, or the only one connected with the key.
+// It answers the request itself when there is none (503) or several to choose from (409).
+func (s *Relay) pickHost(w http.ResponseWriter, space, name string) (*host, string, bool) {
+	s.mu.Lock()
+	hosts := s.spaces[space]
+	target := hosts[name]
+	online := make([]string, 0, len(hosts))
+	for hostName, h := range hosts {
+		online = append(online, hostName)
+		if name == "" && len(hosts) == 1 {
+			target, name = h, hostName
+		}
+	}
+	s.mu.Unlock()
+	switch {
+	case target == nil && name != "":
+		writeError(w, http.StatusServiceUnavailable, "the Mac \""+name+"\" is not connected")
+	case target == nil && len(online) == 0:
+		writeError(w, http.StatusServiceUnavailable, "no Mac is connected with this key")
+	case target == nil:
+		sort.Strings(online)
+		writeError(w, http.StatusConflict, "several Macs are connected; use /h/<name>/... with one of: "+strings.Join(online, ", "))
+	}
+	return target, name, target != nil
+}
+
 // Any method and any body pass, byte for byte: bodies travel base64 in the frames, so a build
 // uploaded in chunks (PUT /v1/uploads/<id>, application/octet-stream) reaches the Mac unchanged.
 // The hosted relay forwards the same headers (cloud/relay/src/protocol.ts).
@@ -520,43 +586,17 @@ func (s *Relay) forward(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	path := r.URL.Path
-	name := strings.ToLower(r.Header.Get("X-Mobdev-Host"))
-	if strings.HasPrefix(path, "/h/") {
-		rest := strings.TrimPrefix(path, "/h/")
-		slash := strings.Index(rest, "/")
-		if slash <= 0 {
-			writeError(w, http.StatusNotFound, "use /h/<mac-name>/<path>")
-			return
-		}
-		name, path = strings.ToLower(rest[:slash]), rest[slash:]
+	name, path, ok := hostAndPath(r)
+	if !ok {
+		writeError(w, http.StatusNotFound, "use /h/<mac-name>/<path>")
+		return
 	}
 	if path != "/mcp" && !strings.HasPrefix(path, "/v1/") {
 		writeError(w, http.StatusNotFound, "not found")
 		return
 	}
-
-	s.mu.Lock()
-	hosts := s.spaces[space]
-	target := hosts[name]
-	online := make([]string, 0, len(hosts))
-	for hostName, h := range hosts {
-		online = append(online, hostName)
-		if name == "" && len(hosts) == 1 {
-			target, name = h, hostName
-		}
-	}
-	s.mu.Unlock()
-	switch {
-	case target == nil && name != "":
-		writeError(w, http.StatusServiceUnavailable, "the Mac \""+name+"\" is not connected")
-		return
-	case target == nil && len(online) == 0:
-		writeError(w, http.StatusServiceUnavailable, "no Mac is connected with this key")
-		return
-	case target == nil:
-		sort.Strings(online)
-		writeError(w, http.StatusConflict, "several Macs are connected; use /h/<name>/... with one of: "+strings.Join(online, ", "))
+	target, name, ok := s.pickHost(w, space, name)
+	if !ok {
 		return
 	}
 

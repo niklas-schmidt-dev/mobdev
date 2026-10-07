@@ -634,6 +634,17 @@ function Docs() {
                 {'curl -fsSLO https://raw.githubusercontent.com/niklas-schmidt-dev/mobdev/main/scripts/mobdev-upload.sh\nexport MOBDEV_URL=https://relay.mobdev.sh/h/<mac-name> MOBDEV_KEY=mdc_…\nid=$(sh mobdev-upload.sh app-debug.apk)\n# install_app {"upload": "<id>", "device": "emulator-5554"}'}
               </Code>
               <T>
+                <h3 className="pt-2 text-[21px] font-semibold tracking-tight text-ink">Live view</h3>
+                <p>
+                  Turn on “Allow live view” under Remote Access in the app, then click “Live” next to a device in
+                  the <Link to="/dashboard">dashboard</Link> to watch its screen in the browser: click to tap, drag to
+                  swipe and type on it. “Share…” there creates a link that expires, to view only or to control, which
+                  anyone can open without an account until you revoke it. The app shows while someone watches and can
+                  stop it. Watching counts as active time. Agents open the same stream with the client key at{" "}
+                  <code className={code}>/v1/live</code>; see the <a href={`${GITHUB_URL}/blob/main/relay/README.md#live-view`}>relay’s protocol</a>.
+                </p>
+              </T>
+              <T>
                 <h3 className="pt-2 text-[21px] font-semibold tracking-tight text-ink">Limits of the hosted relay</h3>
                 <p>
                   <Var>{FREE_PLAN.name}</Var> connects <Num>{FREE_PLAN.macs}</Num> Mac and

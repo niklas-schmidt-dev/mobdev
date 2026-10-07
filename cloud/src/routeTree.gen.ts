@@ -16,6 +16,8 @@ import { Route as DocsRouteImport } from './routes/docs'
 import { Route as DownloadRouteImport } from './routes/download'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as SignOutRouteImport } from './routes/sign-out'
+import { Route as LiveIndexRouteImport } from './routes/live.index'
+import { Route as LiveTokenRouteImport } from './routes/live.$token'
 import { Route as ApiAuthCallbackRouteImport } from './routes/api/auth/callback'
 import { Route as ApiAuthSignInRouteImport } from './routes/api/auth/sign-in'
 
@@ -54,6 +56,16 @@ const SignOutRoute = SignOutRouteImport.update({
   path: '/sign-out',
   getParentRoute: () => rootRouteImport,
 } as any)
+const LiveIndexRoute = LiveIndexRouteImport.update({
+  id: '/live/',
+  path: '/live/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LiveTokenRoute = LiveTokenRouteImport.update({
+  id: '/live/$token',
+  path: '/live/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAuthCallbackRoute = ApiAuthCallbackRouteImport.update({
   id: '/api/auth/callback',
   path: '/api/auth/callback',
@@ -73,6 +85,8 @@ export interface FileRoutesByFullPath {
   '/download': typeof DownloadRoute
   '/privacy': typeof PrivacyRoute
   '/sign-out': typeof SignOutRoute
+  '/live/$token': typeof LiveTokenRoute
+  '/live/': typeof LiveIndexRoute
   '/api/auth/callback': typeof ApiAuthCallbackRoute
   '/api/auth/sign-in': typeof ApiAuthSignInRoute
 }
@@ -84,6 +98,8 @@ export interface FileRoutesByTo {
   '/download': typeof DownloadRoute
   '/privacy': typeof PrivacyRoute
   '/sign-out': typeof SignOutRoute
+  '/live/$token': typeof LiveTokenRoute
+  '/live': typeof LiveIndexRoute
   '/api/auth/callback': typeof ApiAuthCallbackRoute
   '/api/auth/sign-in': typeof ApiAuthSignInRoute
 }
@@ -96,6 +112,8 @@ export interface FileRoutesById {
   '/download': typeof DownloadRoute
   '/privacy': typeof PrivacyRoute
   '/sign-out': typeof SignOutRoute
+  '/live/$token': typeof LiveTokenRoute
+  '/live/': typeof LiveIndexRoute
   '/api/auth/callback': typeof ApiAuthCallbackRoute
   '/api/auth/sign-in': typeof ApiAuthSignInRoute
 }
@@ -109,6 +127,8 @@ export interface FileRouteTypes {
     | '/download'
     | '/privacy'
     | '/sign-out'
+    | '/live/$token'
+    | '/live/'
     | '/api/auth/callback'
     | '/api/auth/sign-in'
   fileRoutesByTo: FileRoutesByTo
@@ -120,6 +140,8 @@ export interface FileRouteTypes {
     | '/download'
     | '/privacy'
     | '/sign-out'
+    | '/live/$token'
+    | '/live'
     | '/api/auth/callback'
     | '/api/auth/sign-in'
   id:
@@ -131,6 +153,8 @@ export interface FileRouteTypes {
     | '/download'
     | '/privacy'
     | '/sign-out'
+    | '/live/$token'
+    | '/live/'
     | '/api/auth/callback'
     | '/api/auth/sign-in'
   fileRoutesById: FileRoutesById
@@ -143,6 +167,8 @@ export interface RootRouteChildren {
   DownloadRoute: typeof DownloadRoute
   PrivacyRoute: typeof PrivacyRoute
   SignOutRoute: typeof SignOutRoute
+  LiveTokenRoute: typeof LiveTokenRoute
+  LiveIndexRoute: typeof LiveIndexRoute
   ApiAuthCallbackRoute: typeof ApiAuthCallbackRoute
   ApiAuthSignInRoute: typeof ApiAuthSignInRoute
 }
@@ -198,6 +224,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SignOutRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/live/': {
+      id: '/live/'
+      path: '/live'
+      fullPath: '/live/'
+      preLoaderRoute: typeof LiveIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/live/$token': {
+      id: '/live/$token'
+      path: '/live/$token'
+      fullPath: '/live/$token'
+      preLoaderRoute: typeof LiveTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/auth/callback': {
       id: '/api/auth/callback'
       path: '/api/auth/callback'
@@ -223,6 +263,8 @@ const rootRouteChildren: RootRouteChildren = {
   DownloadRoute: DownloadRoute,
   PrivacyRoute: PrivacyRoute,
   SignOutRoute: SignOutRoute,
+  LiveTokenRoute: LiveTokenRoute,
+  LiveIndexRoute: LiveIndexRoute,
   ApiAuthCallbackRoute: ApiAuthCallbackRoute,
   ApiAuthSignInRoute: ApiAuthSignInRoute,
 }

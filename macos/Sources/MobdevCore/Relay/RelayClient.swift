@@ -17,8 +17,9 @@ public enum RelayState: Sendable, Equatable {
     }
 }
 
-/// A frame from the relay: a "request", or "cancel" when the relay stopped waiting for the
-/// request with that id (it timed out, or the agent went away).
+/// A frame from the relay: a "request", "cancel" when the relay stopped waiting for the request
+/// with that id (it timed out, or the agent went away), or live view's "live_start", "live_stop"
+/// and "live_input" (see `LiveStreams`).
 struct RelayFrame: Decodable {
     var type: String
     var id: String?
@@ -53,6 +54,8 @@ public final class RelayClient: @unchecked Sendable {
     static let maxRequests = 8
 
     private let handler: Handler
+    /// Streams devices to viewers of the relay's live view; without it live frames are ignored.
+    private let live: LiveStreams?
     private let onStateChange: @Sendable (RelayState) -> Void
     private let stateBox = Locked<RelayState>(.off)
     private let loop = Locked<Task<Void, Never>?>(nil)
@@ -62,10 +65,11 @@ public final class RelayClient: @unchecked Sendable {
     private let pingInterval: TimeInterval
 
     public init(
-        pingInterval: TimeInterval = 20, handler: @escaping Handler,
+        pingInterval: TimeInterval = 20, live: LiveStreams? = nil, handler: @escaping Handler,
         onStateChange: @escaping @Sendable (RelayState) -> Void = { _ in }
     ) {
         self.handler = handler
+        self.live = live
         self.onStateChange = onStateChange
         self.pingInterval = pingInterval
         let configuration = URLSessionConfiguration.ephemeral
@@ -178,7 +182,10 @@ public final class RelayClient: @unchecked Sendable {
         // Requests being answered, by id: the relay can cancel one, and the connection ending cancels
         // them all, so work that nobody waits for any more (such as long typing) stops.
         let requests = Locked<[String: Task<Void, Never>]>([:])
-        defer { for request in requests.get().values { request.cancel() } }
+        defer {
+            for request in requests.get().values { request.cancel() }
+            live?.connectionEnded()  // Its viewers are gone with the connection.
+        }
         await withTaskGroup(of: Void.self) { group in
             group.addTask {
                 // Keepalive: a ping now confirms the connection, then one per interval.
@@ -206,6 +213,10 @@ public final class RelayClient: @unchecked Sendable {
                     guard let frame = try? JSONDecoder().decode(RelayFrame.self, from: Data(text.utf8)) else { continue }
                     if frame.type == "cancel", let id = frame.id {
                         requests.withLock { $0[id] }?.cancel()
+                        continue
+                    }
+                    if frame.type.hasPrefix("live_") {
+                        self.live?.handle(text) { reply in (try? await task.send(.string(reply))) != nil }
                         continue
                     }
                     guard frame.type == "request",

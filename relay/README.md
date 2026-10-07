@@ -49,6 +49,7 @@ revokes the client key.
 | Agent | `/h/<mac>/mcp`, `/h/<mac>/v1/...` or header `X-Mobdev-Host` | Pick a Mac when several share a key |
 | Agent | `GET /v1/relay/hosts` | Connected Macs for this key |
 | Agent | `GET /v1/relay/devices` | Connected Macs for this key with their iPhones (see below) |
+| Viewer | WebSocket `GET /v1/live?device=<id>&fps=<1-10>`, also `/h/<mac>/v1/live` | Watch a device's screen and tap and type on it ([Live view](#live-view)) |
 | Anyone | `GET /healthz` | |
 
 Messages are JSON text frames: the relay sends `{"type":"request","id","method","path","query","headers","body"}`
@@ -94,6 +95,35 @@ memory until the Mac disconnects.
 A Mac that has not sent a list yet has `"devices":[]`. The hosted relay answers the same request
 and also lists every Mac of an account, including offline ones, at `GET /v1/account/devices`
 (see [`../cloud`](../cloud)).
+
+### Live view
+
+A viewer (a browser, an agent, a script) watches a device's screen and taps and types on it. It
+opens `GET /v1/live?device=<id or name>&fps=<1-10>` as a WebSocket with the client key, as
+`Authorization: Bearer mdc_…` or, from a browser, which cannot set headers on a WebSocket, as the
+subprotocols `mobdev-live` and `mobdev-auth.mdc_…`; the relay then answers with `mobdev-live`.
+Without `device` the Mac picks the device as its tools do; `fps` is 5 unless given, at most 10. The
+relay asks the Mac for the stream, and every viewer of the same device shares it.
+
+| Frame | Direction | |
+|---|---|---|
+| `{"type":"live","mac","device","mode","fps"}` | relay → viewer | Once, first. `mode` is `control` (`view` for view-only share links on the hosted relay). |
+| `{"type":"live_frame","id","seq","width","height","jpeg"}` | Mac → relay → viewer | JPEG in base64, 800 px on the long edge, quality 0.5, passed on unchanged. An unchanged screen is sent again every 2 s. |
+| `{"type":"ack","seq"}` | viewer → relay | For every frame shown. A viewer with 2 frames unacknowledged gets no more until it acknowledges: slow viewers skip frames, nothing queues. |
+| `{"type":"input","action",…}` | viewer → relay | `tap` `{x,y}`, `long_press` `{x,y,seconds}`, `swipe` `{from_x,from_y,to_x,to_y,duration}`, `scroll` `{x,y,direction,amount}`, `text` `{text}`, `key` `{key,modifiers}` or `home`. Points are fractions of the screen from its top left, 0 to 1. At most 10 a second. |
+| `{"type":"live_error","message"}` | relay → viewer | An input was refused. |
+| `{"type":"live_end","code","reason"}` | relay → viewer | Right before the relay closes the view. |
+| `"ping"`, `"pong"` | viewer ⇄ relay | Every 20 s; a viewer silent for 75 s is closed. |
+| `{"type":"live_start","id","device","fps","viewers"}` | relay → Mac | Starts a stream, tells the Mac its viewers (`[{"kind","label","control"}]`, kind `key`, `owner` or `share`) and the highest fps any of them asked for, and is repeated every 30 s while someone watches. |
+| `{"type":"live_stop","id"}` | relay → Mac | The last viewer left. |
+| `{"type":"live_input","id","input"}` | relay → Mac | A checked input, which the Mac runs as the matching tool (`tap`, `swipe`, `type_text`, `press_key`, `home`, …). |
+| `{"type":"live_end","id","code","reason"}` | Mac → relay | The Mac ended the stream: `disabled` (live view is off in the app), `no_device`, `stopped` (stopped in the app) or `timeout` (not renewed for 75 s). |
+
+Close codes for viewers: 4002 the Mac disconnected, 4003 the Mac ended the stream (the `live_end`
+before says why), 4008 the viewer went silent; the hosted relay adds 4004 (share link expired),
+4005 (link revoked) and 4029 (allowance used up). At most 10 viewers per Mac (429); frames larger
+than 2 MB are dropped; text has at most 1000 characters. Mobdev streams only after "Allow live
+view" is turned on under Remote Access; until then it answers `live_end` with `disabled`.
 
 Limits: 16 MB bodies, 90 s per request, 32 Macs per key and, as on the hosted relay, 4 requests
 in flight per Mac (more get 429 with `Retry-After: 1`). An agent's request headers must arrive

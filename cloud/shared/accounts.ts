@@ -120,6 +120,7 @@ export async function removeAccount(
     await disconnect(token.id, await deleteAccessToken(db, user.id, token.id));
   }
   await db.batch([
+    db.prepare("DELETE FROM live_shares WHERE account_id = ?1").bind(user.id),
     db.prepare("DELETE FROM hosts WHERE account_id = ?1").bind(user.id),
     db.prepare("DELETE FROM accounts WHERE id = ?1").bind(user.id),
   ]);

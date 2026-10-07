@@ -1,10 +1,11 @@
-import { createFileRoute, redirect, useRouter } from "@tanstack/react-router";
+import { Link, createFileRoute, redirect, useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { signOut } from "@workos/authkit-tanstack-react-start";
 import { Num, T, Var, msg, useGT, useLocale, useMessages } from "gt-tanstack-start";
 import { useState, type FormEvent, type ReactNode } from "react";
 import type { Device } from "../../shared/devices";
 import { PRO_PLAN } from "../../shared/plans";
+import { useExpiry } from "../components/share-dialog";
 import { Code, CopyButton, Page, buttonPrimary } from "../components/site";
 import { currentLocale } from "../lib/i18n";
 import { toLocale, type Locale } from "../lib/locales";
@@ -20,6 +21,7 @@ import {
   type BillingData,
   type DashboardData,
 } from "../server/dashboard";
+import { revokeShareLink } from "../server/live";
 
 export const Route = createFileRoute("/dashboard")({
   head: () => privatePageHead(currentLocale() === "de" ? "Konto — Mobdev" : "Account — Mobdev"),
@@ -131,8 +133,10 @@ function DeviceGlyph({ tablet }: { tablet: boolean }) {
   );
 }
 
-function DeviceRow({ device, macOnline }: { device: Device; macOnline: boolean }) {
+function DeviceRow({ device, host }: { device: Device; host: { space_id: string; name: string; online: number } }) {
   const m = useMessages();
+  const gt = useGT();
+  const macOnline = host.online === 1;
   const tablet = device.device_class === "iPad";
   const system = tablet ? "iPadOS" : device.device_class === "Android" ? "Android" : "iOS";
   const name = device.name || device.model_name || device.device_class || "iPhone";
@@ -158,6 +162,21 @@ function DeviceRow({ device, macOnline }: { device: Device; macOnline: boolean }
         {label("mt-1 flex sm:hidden")}
       </div>
       {label("hidden shrink-0 sm:flex")}
+      {/* Watching needs the Mac online and the device's picture. */}
+      {macOnline && device.screen && (
+        <Link
+          to="/live"
+          search={{ space: host.space_id, mac: host.name, device: device.id }}
+          aria-label={gt("Watch {name} live", { name })}
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-card px-3 py-1 text-[13px] font-medium text-link ring-1 ring-black/5 transition-colors hover:bg-white dark:ring-white/10 dark:hover:bg-white/15"
+        >
+          <svg viewBox="0 0 24 24" className="size-3.5" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+            <path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z" />
+            <circle cx="12" cy="12" r="3" />
+          </svg>
+          <T>Live</T>
+        </Link>
+      )}
     </li>
   );
 }
@@ -307,6 +326,7 @@ function PlanCard({
 function Dashboard({ data }: { data: DashboardData & { loadedAt: number } }) {
   const gt = useGT();
   const ago = useAgo(data.loadedAt);
+  const expiry = useExpiry(data.loadedAt);
   const router = useRouter();
   const { upgraded = false } = Route.useSearch();
   const [name, setName] = useState("");
@@ -508,7 +528,7 @@ function Dashboard({ data }: { data: DashboardData & { loadedAt: number } }) {
                         aria-label={gt("Devices of {name}", { name: host.name })}
                       >
                         {host.devices.map((device) => (
-                          <DeviceRow key={device.id} device={device} macOnline={host.online === 1} />
+                          <DeviceRow key={device.id} device={device} host={host} />
                         ))}
                       </ul>
                     ) : (
@@ -523,6 +543,41 @@ function Dashboard({ data }: { data: DashboardData & { loadedAt: number } }) {
               </ul>
             )}
           </Card>
+
+          {data.shares.length > 0 && (
+            <Card
+              title={gt("Shared live views")}
+              subtitle={gt("Anyone with one of these links can watch until it expires. Revoking ends their view at once.")}
+            >
+              <ul className="divide-y divide-line/70">
+                {data.shares.map((share) => {
+                  const host = data.hosts.find((row) => row.space_id === share.space_id && row.name === share.mac);
+                  const device = share.device ? host?.devices.find((candidate) => candidate.id === share.device) : null;
+                  const shows = share.device === null ? share.mac : `${device?.name || share.device} · ${share.mac}`;
+                  return (
+                    <li key={share.id} className="flex items-center gap-4 py-4 first:pt-0 last:pb-0">
+                      <div className="min-w-0">
+                        <p className="truncate text-[17px] font-medium">{share.label}</p>
+                        <p className="text-[14px] text-muted">
+                          {shows} · {share.mode === "control" ? gt("View and control") : gt("View only")} ·{" "}
+                          {expiry(share.expires_at)}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void run(() => revokeShareLink({ data: { id: share.id } }))}
+                        aria-label={gt("Revoke “{name}”", { name: share.label })}
+                        className={`ml-auto ${destructive}`}
+                      >
+                        <T>Revoke</T>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </Card>
+          )}
 
           {data.billing === "unavailable" && (
             <Card title={gt("Plan")}>

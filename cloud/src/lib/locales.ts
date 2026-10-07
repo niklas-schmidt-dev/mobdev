@@ -9,10 +9,11 @@ export type Locale = (typeof LOCALES)[number];
 export const DEFAULT_LOCALE: Locale = "en";
 
 /** Pages that exist in every language. Server routes such as /download and /api have no copies. */
-const LOCALIZED_PATHS = new Set(["/", "/docs", "/privacy", "/dashboard", "/sign-out"]);
+const LOCALIZED_PATHS = new Set(["/", "/docs", "/privacy", "/dashboard", "/sign-out", "/live"]);
 
+/** Also every share link, /live/<token>. */
 export function isLocalizedPath(path: string): boolean {
-  return LOCALIZED_PATHS.has(path);
+  return LOCALIZED_PATHS.has(path) || /^\/live\/[^/]+$/.test(path);
 }
 
 export function toLocale(value: string | undefined): Locale {

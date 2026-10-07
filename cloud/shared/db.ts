@@ -206,9 +206,15 @@ export async function listHosts(db: D1Database, accountId: string): Promise<Host
   return results.map((row) => ({ ...row, devices: parseStoredDevices(row.devices) }));
 }
 
+/** Forgets an offline Mac, and the live view links to it with it. */
 export async function forgetHost(db: D1Database, accountId: string, spaceId: string, name: string): Promise<void> {
-  await db
+  const { meta } = await db
     .prepare("DELETE FROM hosts WHERE account_id = ?1 AND space_id = ?2 AND name = ?3 AND online = 0")
+    .bind(accountId, spaceId, name)
+    .run();
+  if (meta.changes === 0) return;
+  await db
+    .prepare("DELETE FROM live_shares WHERE account_id = ?1 AND space_id = ?2 AND mac = ?3")
     .bind(accountId, spaceId, name)
     .run();
 }

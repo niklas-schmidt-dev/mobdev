@@ -826,6 +826,24 @@ Relays forward requests and store nothing. Anyone with the client key can contro
 **New Client Key** revokes the old one, and revoking the access token in the dashboard disconnects
 the Mac.
 
+### Live view
+
+With **Allow live view** on under Remote Access, the relay can stream a device's screen to a
+browser: **Live** next to a device in the [dashboard](https://mobdev.sh/dashboard) shows it, and a
+click taps, a drag swipes and typing types, as in the app's mirror. **Share…** there makes a link
+for one device or the whole Mac that anyone can open without an account, to view only or also to
+control, for an hour, a day or a week; revoke it there. Agents with the client key open the same
+stream at `/v1/live` ([protocol](../relay/README.md#live-view)).
+
+Live view is off until you turn it on, on each Mac: a screen can show messages, codes and other
+private data, and the Mac decides whether anyone may watch it. While someone watches, the device's
+page shows **Watched in the browser now** and Remote Access lists who (you in the dashboard, a share
+link by its name, an agent with the client key), each with **Stop**. Every viewer who comes or goes
+is logged in the device's activity, and taps and typing from the browser show there as "Browser".
+Turning the setting off ends every live view at once. Frames are JPEGs of 800 px on the long edge
+at up to 10 a second, sent only when the screen changes (and every 2 s otherwise); the relay passes
+them through memory only.
+
 ### Install builds from anywhere
 
 A cloud agent (Claude Code on the web, Codex cloud, Cursor background agents) or CI builds the app
@@ -877,6 +895,8 @@ Mobdev's log (Console, subsystem `dev.mobdev.mac`), the install in the device's 
 - The token and relay secret are files readable only by you (mode 0600) in
   `~/Library/Application Support/dev.mobdev.mac`. `MOBDEV_HOME` moves that directory.
 - No telemetry, no account. Every agent action appears under **Activity** in the app.
+- Live view in the browser is off until **Allow live view** is turned on under Remote Access; the
+  app shows while someone watches and can stop it (see [Live view](#live-view)).
 - Agents act on your real phone with your accounts. Keep a human in the loop for anything that
   sends messages, pays or deletes.
 - **Blocked apps** (Settings › Agents, or `MOBDEV_BLOCKED_APPS` with comma-separated names and
@@ -983,6 +1003,18 @@ MOBDEV_TEST_RUNNER_SIMULATOR=$UDID swift test --filter RunnerIntegration
 xcrun simctl delete "$UDID"
 MOBDEV_TEST_USBMUXD=<iPhone udid> swift test --filter usbmuxdListsTheConnectedIPhone
 MOBDEV_TEST_RUNNER_DEVICE=<iPhone udid> MOBDEV_TEST_RUNNER_TOKEN=<token> swift test --filter runnerOnAnIPhoneAnswersOverUSB
+```
+
+Live view is tested with a fake phone, on its own (`LiveStreamsTests`) and through the Go relay
+(`RelayEndToEndTests`). To look at it in a browser, the opt-in `LiveHarness` test runs this Mac's
+side against a relay for a while, as the app would with **Allow live view** on: with a simulator it
+streams that one and can install and open the fixture app, without one a fake phone. It writes what
+viewers do, and the fixture's taps at the end, to `MOBDEV_LIVE_LOG`:
+
+```sh
+MOBDEV_LIVE_RELAY=http://127.0.0.1:8787 MOBDEV_LIVE_SECRET=mdh_… MOBDEV_LIVE_TOKEN=mda_… \
+  MOBDEV_LIVE_SIMULATOR=<udid> MOBDEV_LIVE_APP=../examples/flows/fixture/MobdevFixture.app \
+  MOBDEV_LIVE_SECONDS=300 MOBDEV_LIVE_LOG=/tmp/live.log swift test --filter LiveHarness
 ```
 
 `MobdevCore` contains everything testable: HID reports and gestures (`HID/`), screen capture and

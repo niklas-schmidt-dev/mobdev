@@ -78,6 +78,8 @@ final class AppModel {
     private(set) var ambient: [String: [Color]] = [:]
     /// Your other Macs and their iPhones, from the hosted relay. Empty without Remote Access.
     private(set) var otherMacs: [RemoteMac] = []
+    /// Devices watched through the relay's live view right now, with who watches.
+    private(set) var liveSessions: [LiveStreams.Session] = []
     /// The setup assistant. It opens by itself until macOS has asked for camera and Bluetooth
     /// access, so both prompts appear on the page that explains them.
     var showsOnboarding = false
@@ -96,6 +98,7 @@ final class AppModel {
     /// Where `Mobdev mcp` connects: a Unix socket in the private data directory.
     @ObservationIgnored private let socketServer: HTTPServer
     @ObservationIgnored private let relay: RelayClient
+    @ObservationIgnored private let live: LiveStreams
     @ObservationIgnored private let tokenBox: Locked<String>
     @ObservationIgnored private let portBox = Locked<UInt16>(0)
     @ObservationIgnored private var started = false
@@ -127,7 +130,10 @@ final class AppModel {
             await router.handle(request, from: .socket)
         }
         let relaySignal = ChangeSignal()
-        relay = RelayClient(handler: { request in await router.handle(request, from: .relay) }) { _ in
+        let liveSignal = ChangeSignal()
+        let live = LiveStreams(tools: tools, allowed: settings.liveViewAllowed) { _ in liveSignal.fire() }
+        self.live = live
+        relay = RelayClient(live: live, handler: { request in await router.handle(request, from: .relay) }) { _ in
             relaySignal.fire()
         }
 
@@ -138,6 +144,13 @@ final class AppModel {
                 guard let self else { return }
                 self.relayState = self.relay.state
                 if self.relayState == .connected { await self.refreshOtherMacs() }
+            }
+        }
+        liveSignal.connect { [weak self] in
+            Task { @MainActor in
+                guard let self else { return }
+                let sessions = self.live.sessions
+                if sessions != self.liveSessions { self.liveSessions = sessions }
             }
         }
     }
@@ -587,6 +600,22 @@ final class AppModel {
     func applyRelaySettings() {
         save()
         if settings.relayEnabled { startRelay() }
+    }
+
+    /// Lets the relay stream screens to the dashboard, share links and agents. Turning it off ends
+    /// every live view at once.
+    func setLiveViewAllowed(_ allowed: Bool) {
+        settings.liveViewAllowed = allowed
+        save()
+        live.setAllowed(allowed)
+    }
+
+    /// Ends the live views of a device, or all of them, for whoever watches.
+    func stopLiveView(_ id: String? = nil) { live.end(device: id) }
+
+    /// Who watches a device through live view right now; empty when nobody does.
+    func liveViewers(_ id: String) -> [LiveStreams.Viewer] {
+        liveSessions.filter { $0.deviceID == id }.flatMap { $0.viewers }
     }
 
     func rotateRelayKey() {

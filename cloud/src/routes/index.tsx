@@ -124,19 +124,21 @@ const skills = [
   },
 ] as const;
 
-/** The roadmap in "Coming next". Keep the statuses honest; move shipped items into the page above. */
+/**
+ * The roadmap in "Coming next". Keep the statuses honest; move shipped items into the page above.
+ * While it is empty the section shows only where to follow along. (Live view in the browser shipped
+ * and moved to "At your desk. Or anywhere.")
+ */
 type RoadmapStatus = "Next" | "Planned";
 
 const statusLabels: Record<RoadmapStatus, string> = { Next: msg("Next"), Planned: msg("Planned") };
 
-const roadmap = [
-  {
-    icon: "browser",
-    status: "Planned" as RoadmapStatus,
-    title: msg("Live view in the browser."),
-    body: msg("Watch and take over a phone from the dashboard, and share devices with your team."),
-  },
-] as const;
+const roadmap: readonly {
+  icon: Parameters<typeof Icon>[0]["name"];
+  status: RoadmapStatus;
+  title: string;
+  body: string;
+}[] = [];
 
 const faqs = [
   [
@@ -529,6 +531,12 @@ function Home() {
                   phones.
                 </p>
               </T>
+              <T>
+                <p className="mt-3 max-w-lg text-[17px] leading-[1.47] text-muted">
+                  Watch and control a phone live in the browser, and share it with a link that expires, to view only or
+                  to control. The Mac shows while someone watches and decides whether anyone may.
+                </p>
+              </T>
             </div>
           </div>
         </div>
@@ -545,6 +553,7 @@ function Home() {
               The toolkit keeps growing. Free, like everything else.
             </p>
           </T>
+          {roadmap.length > 0 && (
           <ul className="mx-auto mt-14 grid max-w-md grid-cols-1 gap-5">
             {roadmap.map((item, index) => (
               <li key={item.title} {...reveal(index)} className={mistCard}>
@@ -561,6 +570,7 @@ function Home() {
               </li>
             ))}
           </ul>
+          )}
           <p className="mt-10 text-center">
             <a href={GITHUB_URL} className={moreLink}>
               <T>Follow along on GitHub ›</T>

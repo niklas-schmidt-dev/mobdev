@@ -3,9 +3,19 @@ import { WorkerEntrypoint } from "cloudflare:workers";
 import { cacheMacsAllowed, findAccessToken, listHosts, touchAccessToken, type AccessRow } from "../../shared/db";
 import type { MacDevices } from "../../shared/devices";
 import { bearer, hostName, isAccessToken, isClientKey, isHostSecret, spaceForClientKey, spaceForSecret } from "../../shared/keys";
+import {
+  isLiveDevice,
+  isLiveTicket,
+  liveCredential,
+  liveFps,
+  offersLiveSubprotocol,
+  ticketSpace,
+  type LiveGrant,
+} from "../../shared/live";
 import { FREE_PLAN } from "../../shared/plans";
 import { autumnFor, hasRelayPlan, macsAllowed, quotaFromCustomer, type Quota } from "./billing";
 import type { RelayEnv } from "./env";
+import type { LiveConnect } from "./space";
 import {
   AGENT_BURST,
   DASHBOARD_URL,
@@ -30,9 +40,54 @@ export default {
     if (url.pathname === "/healthz") return new Response("ok\n", { headers: { "content-type": "text/plain" } });
     if (url.pathname === "/v1/host/connect") return connectHost(request, url, env, ctx);
     if (url.pathname === "/v1/account/devices") return accountDevices(request, env, ctx);
+    if (isLivePath(url.pathname)) return connectViewer(request, url, env);
     return forwardToHost(request, url, env);
   },
 } satisfies ExportedHandler<RelayEnv>;
+
+function isLivePath(path: string): boolean {
+  return path === "/v1/live" || /^\/h\/[^/]+\/v1\/live$/.test(path);
+}
+
+/**
+ * A live view (shared/live.ts): the viewer brings the Mac's client key or a ticket from the
+ * dashboard, as Authorization or, from a browser, as a subprotocol. Connecting counts against the
+ * key's request rate like one agent request; what it watches counts as the Mac's active time.
+ */
+async function connectViewer(request: Request, url: URL, env: RelayEnv): Promise<Response> {
+  if (request.headers.get("Upgrade")?.toLowerCase() !== "websocket") {
+    return jsonError(426, "expected a WebSocket upgrade");
+  }
+  const credential = liveCredential(request);
+  let spaceId: string;
+  let ticket: string | null = null;
+  if (isClientKey(credential)) {
+    spaceId = await spaceForClientKey(credential);
+  } else if (isLiveTicket(credential)) {
+    spaceId = ticketSpace(credential);
+    ticket = credential;
+  } else {
+    return jsonError(401, "missing or malformed client key or live view ticket", { "WWW-Authenticate": "Bearer" });
+  }
+  if (!(await env.AGENT_LIMIT.limit({ key: spaceId })).success) {
+    return jsonError(
+      429,
+      `too many requests for this Mac key: at most ${AGENT_BURST.limit} every ${AGENT_BURST.seconds} seconds`,
+      { "Retry-After": String(AGENT_BURST.seconds) },
+    );
+  }
+  const name = url.pathname.startsWith("/h/")
+    ? url.pathname.slice(3, url.pathname.indexOf("/", 3)).toLowerCase()
+    : request.headers.get("X-Mobdev-Host")?.toLowerCase() || null;
+  const device = url.searchParams.get("device") ?? "";
+  if (!isLiveDevice(device)) return jsonError(400, "device must be a device id or name of at most 200 characters");
+  const fps = liveFps(url.searchParams.get("fps"));
+  if (fps === null) return jsonError(400, "fps must be a number from 1 to 10");
+  const live: LiveConnect = { name, device, fps, ticket, protocol: offersLiveSubprotocol(request) };
+  return env.RELAY_SPACE.getByName(spaceId).fetch(
+    new Request(url, { headers: { Upgrade: "websocket", "X-Mobdev-Live": JSON.stringify(live) } }),
+  );
+}
 
 /**
  * Every Mac of the access token's account with the devices it last reported, for the Mac app.
@@ -214,5 +269,18 @@ export class RelayAdmin extends WorkerEntrypoint<RelayEnv> {
       spaceIds.map((spaceId) => this.env.RELAY_SPACE.getByName(spaceId).revokeToken(tokenId)),
     );
     return closed.reduce((sum, count) => sum + count, 0);
+  }
+
+  /**
+   * A one-time ticket, good for a minute, that lets a browser open the live view the dashboard
+   * decided on: the owner's own, or one a share link allows. "offline" when the Mac is not connected.
+   */
+  async liveTicket(spaceId: string, grant: LiveGrant): Promise<{ ticket: string } | { error: "offline" | "busy" }> {
+    return this.env.RELAY_SPACE.getByName(spaceId).createTicket(spaceId, grant);
+  }
+
+  /** Ends the live views of a revoked share link. */
+  async endShare(spaceId: string, shareId: string): Promise<number> {
+    return this.env.RELAY_SPACE.getByName(spaceId).endShare(shareId);
   }
 }

@@ -4,7 +4,7 @@
  */
 export class UserError extends Error {
   constructor(
-    readonly reason: "billing-unreachable" | "billing-record" | "paid-plan" | "token-limit",
+    readonly reason: "billing-unreachable" | "billing-record" | "paid-plan" | "token-limit" | "share-limit",
     message: string,
     readonly value?: string | number,
   ) {

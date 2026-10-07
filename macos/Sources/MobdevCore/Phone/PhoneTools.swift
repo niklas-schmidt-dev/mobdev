@@ -48,7 +48,7 @@ struct ToolFailure: Error, CustomStringConvertible {
 /// The phone actions shared by MCP, the REST API and the relay.
 public final class PhoneTools: Sendable {
     let phone: PhoneBackend
-    private let activity: ActivityLog
+    let activity: ActivityLog
     private let settleDelay: TimeInterval
     /// Every line of an image (query nil) or where a query is; Vision unless a test replaces it.
     let readText: @Sendable (CGImage, String?) throws -> [TextMatch]

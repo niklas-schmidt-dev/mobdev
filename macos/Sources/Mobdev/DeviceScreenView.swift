@@ -46,6 +46,7 @@ struct DeviceScreenView: View {
                     ConnectPhone(id: id)
                 }
             }
+            .overlay(alignment: .top) { LiveViewBadge(id: id) }
             // Only moves, so the phone keeps its size and the video layer is not resized.
             .offset(x: showPanel ? -(Self.panelWidth + 12) / 2 : 0)
         }
@@ -83,6 +84,39 @@ struct DeviceScreenView: View {
                 Button("Inspector", systemImage: "sidebar.trailing") { showPanel.toggle() }
                     .help(showPanel ? "Hide the inspector" : "Show activity and info")
             }
+        }
+    }
+}
+
+/// Shows above the screen while someone watches the device through the relay's live view, with a
+/// button that ends it for everyone.
+private struct LiveViewBadge: View {
+    @Environment(AppModel.self) private var model
+    let id: String
+
+    var body: some View {
+        let viewers = model.liveViewers(id)
+        if !viewers.isEmpty {
+            HStack(spacing: 10) {
+                Image(systemName: "eye.fill")
+                    .foregroundStyle(.red)
+                    .accessibilityHidden(true)
+                Text("Watched in the browser now")
+                    .font(.callout.weight(.medium))
+                Button("Stop") { model.stopLiveView(id) }
+                    .buttonStyle(.glass)
+                    .controlSize(.small)
+                    .help("End the live view for everyone watching")
+            }
+            .padding(.leading, 14)
+            .padding(.trailing, 8)
+            .padding(.vertical, 6)
+            .glassEffect(.regular, in: .capsule)
+            .help("Watched by \(LiveStreams.describe(viewers))")
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Watched in the browser now by \(LiveStreams.describe(viewers))")
+            .padding(.top, 14)
+            .transition(.move(edge: .top).combined(with: .opacity))
         }
     }
 }

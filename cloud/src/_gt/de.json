@@ -1,4 +1,135 @@
 {
+  "75a28f737b511118": "Warte auf den Bildschirm",
+  "445511757fcd365a": "Verbinde …",
+  "3cf8fbd4f35cae64": "Live · {fps} fps",
+  "425be7ecd878142d": "Live",
+  "a9b005d195b411ce": "Mac ist offline",
+  "97e91e046221389d": "Link abgelaufen",
+  "3e8a001d9e2e5300": "Link ungültig",
+  "4d9f05fa09cf6ec2": "Limit erreicht",
+  "60434ab831897ee0": "Nicht verbunden",
+  "01ac8805c2826b3d": "Live-Ansicht aus",
+  "20c3947738c91bf3": "Live-Ansicht beendet",
+  "aba31effc6c4db19": "Das Bild ist stehen geblieben. Das Gerät ist vielleicht gesperrt oder im Ruhezustand.",
+  "bcb61ae96e111a0b": "Noch kein Bild. Das Gerät ist vielleicht gesperrt, oder Mobdev auf dem Mac braucht ein Update.",
+  "e72c350f5dde2520": "Verbunden. Warte auf den Bildschirm …",
+  "ed45d9045f7c6761": "Der Mac ist offline. Neuer Versuch …",
+  "508a6db7447ed50f": "Dieser Link ist abgelaufen.",
+  "cf2a349a35622de5": "Dieser Link ist nicht mehr gültig.",
+  "2e2329af93210e8c": "Dieses Konto hat seine Zeit auf dem gehosteten Relay für diesen Monat aufgebraucht.",
+  "48abf2e3c99c9502": "Keine Verbindung möglich. Neuer Versuch …",
+  "355188d4c155d586": "Die Live-Ansicht ist auf diesem Mac aus. Schalte in Mobdev unter „Remote Access“ „Allow live view“ ein und versuch es dann noch einmal.",
+  "1cd152a0629c24b3": "Dieses Gerät ist gerade nicht mit dem Mac verbunden.",
+  "8dabdcb53828b40f": "Die Live-Ansicht wurde auf dem Mac beendet.",
+  "c2e98f93d8c4c8c2": "Die Live-Ansicht ist beendet.",
+  "a33e24f4540aa46b": "Live-Bildschirm des Geräts",
+  "5aaa084ecd5bfa6d": "{device}. Klicke zum Tippen, ziehe zum Wischen und tippe auf der Tastatur, solange es den Fokus hat.",
+  "c1fce9e09de432ad": "{device}, nur ansehen",
+  "ca749b12449e9284": "Home",
+  "53092121ca7de57b": "Nur ansehen",
+  "be1da3273ffdb5bd": "Noch einmal versuchen",
+  "fa299c8daacf10c3": {
+    "t": "p",
+    "i": 1,
+    "c": "Klicke zum Tippen, halte für einen langen Druck, ziehe zum Wischen und scrolle mit dem Mausrad. Klicke auf den Bildschirm und tippe dann auf der Tastatur; ⌘V fügt ein."
+  },
+  "c7ac115f79a99013": "läuft in {minutes} Min. ab",
+  "82ce017d0b5ec846": "läuft in {hours} Std. ab",
+  "99b843737978f523": "läuft in {days} Tagen ab",
+  "258d16c1554b734c": "Link kopieren",
+  "4a078b0719124dcb": "z. B. Für Anna",
+  "e8ee3c10be8c2336": "1 Stunde",
+  "58247f6a8b748278": "1 Tag",
+  "2cddd6095abc734a": "7 Tage",
+  "1d3965f81db9e6bc": "Ansehen und steuern",
+  "570567bbea004eac": "Nur ansehen",
+  "d0218e5924ad8b21": "alle Geräte",
+  "069cff50767008ce": "ein Gerät",
+  "e451a63fa4c27f78": "„{name}“ widerrufen",
+  "7ea6eba2e8ee9865": "Live-Ansicht teilen",
+  "fb4516dffeebe159": "Fertig",
+  "e935645414913c24": {
+    "t": "p",
+    "i": 1,
+    "c": "Wer den Link hat, kann ohne Konto zusehen, bis er abläuft. Du kannst ihn hier jederzeit widerrufen."
+  },
+  "7d4b3f8d46df1b19": [
+    {
+      "t": "p",
+      "i": 1,
+      "c": [
+        "Link für „",
+        {
+          "i": 2,
+          "k": "_gt_value_2",
+          "v": "v"
+        },
+        "“"
+      ]
+    },
+    {
+      "t": "p",
+      "i": 3,
+      "c": "Er wird nur einmal angezeigt. Kopiere ihn jetzt."
+    }
+  ],
+  "7955b0a60b641b9d": "Noch einen erstellen",
+  "4614a422f1430cd7": "Name",
+  "f0578e109081ffe8": "Zugriff",
+  "c418406c7c929270": {
+    "t": "span",
+    "i": 1,
+    "c": [
+      {
+        "t": "span",
+        "i": 2,
+        "c": "Nur ansehen"
+      },
+      {
+        "t": "span",
+        "i": 3,
+        "c": "Sie sehen den Bildschirm, können ihn aber nicht bedienen."
+      }
+    ]
+  },
+  "2ba4dd171f2b4561": {
+    "t": "span",
+    "i": 1,
+    "c": [
+      {
+        "t": "span",
+        "i": 2,
+        "c": "Ansehen und steuern"
+      },
+      {
+        "t": "span",
+        "i": 3,
+        "c": "Sie können tippen, wischen und schreiben, so wie du."
+      }
+    ]
+  },
+  "6208f18a13757170": "Zeigt",
+  "e295596448c1fd93": {
+    "t": "span",
+    "i": 1,
+    "c": [
+      "Alle Geräte an ",
+      {
+        "i": 2,
+        "k": "_gt_value_2",
+        "v": "v"
+      }
+    ]
+  },
+  "3c489c60ebc61c43": "Läuft ab nach",
+  "fd10d26cf062a1f3": "Link erstellen",
+  "2cfaab177bbe54c4": "Links zu diesem Mac",
+  "f4d1d918e5221a75": {
+    "t": "p",
+    "i": 1,
+    "c": "Noch keine."
+  },
+  "224e9839195b63b2": "Widerrufen",
   "b334084b5da61a48": "Hauptmenü",
   "2c1c93a646bbea6e": "Sprache",
   "b80f965a578b8557": "Kopiert",
@@ -71,6 +202,7 @@
   "30589efe06e4d26f": "gerade eben",
   "a771b87e24b3a67e": "vor {minutes} Min.",
   "9f87340ecd54bff6": "vor {hours} Std.",
+  "14ce27abb7a7b2d0": "{name} live ansehen",
   "fb5edc430667c4a9": "{used} Std. (unbegrenzt)",
   "c9f10d90b4749579": "{used} (unbegrenzt)",
   "17feff542207ba00": "{used} von {limit} Stunden",
@@ -93,6 +225,8 @@
   "9486550ad71ea1c6": ", verbunden",
   "7ebd933ef8c24928": ", getrennt",
   "5073157898471687": "Geräte von {name}",
+  "6071169ec586e9bd": "Geteilte Live-Ansichten",
+  "295498449b7c1840": "Wer einen dieser Links hat, kann zusehen, bis er abläuft. Widerrufen beendet die Ansicht sofort.",
   "e1183fb3e611a799": "Zugangstokens",
   "125c4a8144fea48d": "Wenn du ein Token widerrufst, werden alle Macs getrennt, die es benutzen.",
   "ba79c433dafd2870": "„{name}“ widerrufen? Macs, die es benutzen, werden getrennt.",
@@ -111,6 +245,7 @@
       "c": "Konten werden gerade eingerichtet. Die Mac-App und das selbst gehostete Relay funktionieren bis dahin auch ohne."
     }
   ],
+  "9a06fd459ce858b9": "Live",
   "b711807130f5f97e": {
     "t": "p",
     "i": 1,
@@ -225,7 +360,6 @@
     }
   ],
   "2a9b52ded4d99898": "In Mobdev öffnen",
-  "fb4516dffeebe159": "Fertig",
   "00e7538452be88e3": {
     "t": "p",
     "i": 1,
@@ -277,7 +411,6 @@
       }
     ]
   },
-  "224e9839195b63b2": "Widerrufen",
   "8c72ff0014375565": "Konto löschen …",
   "5d973795984549fc": "Installation",
   "93feded7f96bfd7a": "iPhone einrichten",
@@ -1333,6 +1466,39 @@
       ]
     }
   ],
+  "b70cb44ca09e0fb9": [
+    {
+      "t": "h3",
+      "i": 1,
+      "c": "Live-Ansicht"
+    },
+    {
+      "t": "p",
+      "i": 2,
+      "c": [
+        "Schalte in der App unter „Remote Access“ „Allow live view“ ein und klicke dann im ",
+        {
+          "t": "Link",
+          "i": 3,
+          "c": "Dashboard"
+        },
+        " neben einem Gerät auf „Live“, um seinen Bildschirm im Browser zu sehen: Klicke zum Tippen, ziehe zum Wischen und schreibe darauf. „Teilen …“ erstellt dort einen Link, der abläuft, zum Ansehen oder zum Steuern, den jeder ohne Konto öffnen kann, bis du ihn widerrufst. Die App zeigt, wenn jemand zusieht, und kann es beenden. Zusehen zählt als aktive Zeit. Agenten öffnen denselben Stream mit dem Client-Key unter",
+        " ",
+        {
+          "t": "code",
+          "i": 4,
+          "c": "/v1/live"
+        },
+        "; siehe das ",
+        {
+          "t": "a",
+          "i": 5,
+          "c": "Protokoll des Relays"
+        },
+        "."
+      ]
+    }
+  ],
   "d5d5541ae86ede6f": [
     {
       "t": "h3",
@@ -1542,8 +1708,6 @@
   "6d92b3ac946aa3bb": "Starte die App auf meinem iPhone und finde heraus, warum sie abstürzt.",
   "7f8cb8174c6d288f": "Demnächst",
   "8d8555364510a069": "Geplant",
-  "e60bd40be027415a": "Live-Ansicht im Browser.",
-  "0a73e54778118a8d": "Ein Smartphone im Dashboard verfolgen und übernehmen, und Geräte mit deinem Team teilen.",
   "abeb6ee67f73f8bd": "Ersetzt Mobdev Xcode oder Android Studio?",
   "44ee2c19acafea77": "Nein. Bau weiter mit Xcode, Android Studio, Gradle oder XcodeBuildMCP. Mobdev übernimmt, sobald es einen Build gibt: Es installiert ihn auf einem Gerät, startet ihn, bedient ihn und liest seine Logs und Crash-Reports.",
   "e1e9ccdf882b927a": "Braucht das iPhone den Entwicklermodus oder eine App?",
@@ -1852,6 +2016,11 @@
       "c": "Schalte den Fernzugriff ein, und Agenten auf anderen Rechnern verbinden sich über ein Relay. Dein Mac hält nur eine ausgehende Verbindung offen, es wird also nie ein Port geöffnet. Die App und das Dashboard listen jeden Mac und seine Smartphones auf."
     }
   ],
+  "970a4d85d2e7f410": {
+    "t": "p",
+    "i": 1,
+    "c": "Sieh dir ein Smartphone live im Browser an und steuere es, und teile es mit einem Link, der abläuft, zum Ansehen oder zum Steuern. Der Mac zeigt, wenn jemand zusieht, und entscheidet, ob das überhaupt jemand darf."
+  },
   "88f06d6d8c22de6b": [
     {
       "t": "h2",
@@ -2018,6 +2187,73 @@
     ]
   },
   "19c065090ac5adec": "Zur Doku ›",
+  "ac0de2a59d9c8860": "Gerät",
+  "37a19317b98706bc": [
+    {
+      "t": "h1",
+      "i": 1,
+      "c": "Dieser Link ist abgelaufen."
+    },
+    {
+      "t": "p",
+      "i": 2,
+      "c": "Bitte die Person, die ihn geteilt hat, um einen neuen."
+    }
+  ],
+  "31373b409bae0547": [
+    {
+      "t": "h1",
+      "i": 1,
+      "c": "Dieser Link ist nicht gültig."
+    },
+    {
+      "t": "p",
+      "i": 2,
+      "c": "Vielleicht wurde er widerrufen oder nicht vollständig kopiert. Bitte die Person, die ihn geteilt hat, um einen neuen."
+    }
+  ],
+  "fe76cb5217fbed58": "Mit diesem Mac ist gerade kein Gerät verbunden.",
+  "690e06d595fe93da": [
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " ist gerade offline."
+  ],
+  "44e32a46ec702208": [
+    {
+      "t": "h1",
+      "i": 1,
+      "c": "Mac nicht gefunden."
+    },
+    {
+      "t": "p",
+      "i": 2,
+      "c": [
+        "Dieser Mac gehört nicht zu deinem Konto. Öffne die Live-Ansicht in deinem ",
+        {
+          "t": "Link",
+          "i": 3,
+          "c": "Dashboard"
+        },
+        "."
+      ]
+    }
+  ],
+  "9b9eb2bd97470a23": [
+    {
+      "t": "h1",
+      "i": 1,
+      "c": "Fast geschafft."
+    },
+    {
+      "t": "p",
+      "i": 2,
+      "c": "Konten werden gerade eingerichtet."
+    }
+  ],
+  "ca0bb01349db5560": "Teilen …",
   "bcbe114d1010427f": [
     {
       "t": "h1",
@@ -2066,6 +2302,11 @@
       "c": "Das Relay hält fest, welche Macs verbunden sind: einen Namen, den du wählst, wann der Mac sich verbunden und getrennt hat, und eine ID, die aus dem Schlüssel deines Macs abgeleitet ist. Zu jedem Mac speichert es außerdem die iPhones und iPads, die er zuletzt gemeldet hat: Name, Modell, iOS-Version, eine Geräte-ID und ob sie bereit sind. Anfragen und Antworten der Agenten, Screenshots eingeschlossen, laufen nur durch den Arbeitsspeicher und werden nie auf die Festplatte oder in Logs geschrieben. Cloudflare, das das Relay betreibt, kann übliche Metadaten von Anfragen wie IP-Adressen zur Sicherheit aufbewahren."
     }
   ],
+  "73704749791d9d03": {
+    "t": "p",
+    "i": 1,
+    "c": "Die Live-Ansicht funktioniert genauso: Die Bilder vom Bildschirm eines Geräts und die Tipp- und Tastatureingaben, die an es gehen, laufen nur durch den Arbeitsspeicher. Für jeden geteilten Link, den du erstellst, speichern wir den Namen, den du ihm gibst, welchen Mac oder welches Gerät er zeigt, ob er Steuern erlaubt, wann er abläuft und einen SHA-256-Hash des Links. Widerrufen löscht einen Link, abgelaufene Links werden gelöscht, wenn du das nächste Mal das Dashboard öffnest."
+  },
   "bd63323eb07e6f93": [
     {
       "t": "h2",
@@ -2111,7 +2352,10 @@
   "b939e274857882b3": "Dein Abrechnungseintrag konnte nicht gelöscht werden, daher wurde nichts gelöscht. Versuch es gleich noch einmal.",
   "a213e4c483c81496": "Kündige {plan} zuerst unter „Abrechnung verwalten“ und lösche dann dein Konto.",
   "b1046773885d301e": "Du kannst höchstens {count} Zugangstokens haben.",
+  "8291543d714a075f": "Du kannst höchstens {count} geteilte Links haben. Widerrufe zuerst einen.",
   "b5f2554e55012b9a": "Du bist nicht angemeldet.",
   "a41f2c2b05c508f2": "Die Abrechnung ist nicht eingerichtet.",
-  "6be714f0b883563e": "Die Abrechnung war nicht erreichbar, daher wurde kein Token erstellt. Versuch es gleich noch einmal."
+  "6be714f0b883563e": "Die Abrechnung war nicht erreichbar, daher wurde kein Token erstellt. Versuch es gleich noch einmal.",
+  "db158bd77c655d92": "Geteilte Ansicht",
+  "a77a0210b319a770": "Dieser Mac gehört nicht zu deinem Konto."
 }
