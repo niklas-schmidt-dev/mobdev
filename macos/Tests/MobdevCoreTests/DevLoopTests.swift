@@ -134,18 +134,19 @@ final class DevLoopPhone: PhoneBackend, @unchecked Sendable {
         return status
     }
 
-    /// Home until activated, then three reads each of two animation frames, then the app.
+    /// Home until activated, then six reads alternating between two animation frames, then the app.
     func frame() -> CGImage? {
         guard let timedApps else { return base.frame() }
         guard let activated = timedApps.activated.get() else { return Self.home }
-        // Counted in frames read rather than in time, so a test process that a CI runner starves
-        // still sees both animation frames before the app (2026-10-07).
+        // Counted in frames read rather than in time, and every read during the launch changes:
+        // a CI runner that starved the test process longer than `stable` after a frame otherwise
+        // ended the timing as a still screen at 0 ms (2026-10-07).
         let count = framesSinceLaunch.withLock { state -> Int in
             if state.launch != activated { state = (activated, 0) }
             state.count += 1
             return state.count
         }
-        return count <= 3 ? Self.animation1 : count <= 6 ? Self.animation2 : Self.app
+        return count > 6 ? Self.app : count.isMultiple(of: 2) ? Self.animation2 : Self.animation1
     }
 
     func tap(at point: NormalizedPoint, hold: TimeInterval) async throws { try await base.tap(at: point, hold: hold) }
