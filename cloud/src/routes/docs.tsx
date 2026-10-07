@@ -104,6 +104,14 @@ const developerTools = [
   ["crash_reports", "app, name, limit", msg("List crash reports, or read one: exception, reason, crashed thread")],
 ];
 
+/** Which requests an app makes. */
+const networkTools = [
+  ["start_network_capture", "bundle_id", msg("Start recording an app’s requests")],
+  ["network_log", "bundle_id, contains, after, query, headers", msg("The recorded requests: method, URL, status, bytes and time")],
+  ["stop_network_capture", "bundle_id", msg("Stop recording; on Android this removes the proxy again")],
+  ["mock_response", "url, status, body, content_type, clear", msg("Android: a fixed answer for plain HTTP requests, e.g. an error from your API")],
+];
+
 /** Measure an app, and the React Native and Expo dev loop. */
 const performanceTools = [
   ["performance", "bundle_id, seconds, max_cpu, max_memory_mb, max_janky_percent", msg("CPU, memory and, on Android, frames of a running app; budgets fail the call")],
@@ -410,6 +418,18 @@ function Docs() {
               </T>
               <ToolTable rows={performanceTools} />
               <Code>{'{"measure_launch": {"bundle_id": "com.example.MyApp", "runs": 5, "max_ms": 1500}}\n{"performance": {"bundle_id": "com.example.MyApp", "seconds": 20, "max_memory_mb": 300}}'}</Code>
+              <T>
+                <h3 className="pt-2 text-[21px] font-semibold tracking-tight text-ink">Network</h3>
+                <p>
+                  The network tools show which requests an app makes, for debugging, for checking analytics and API
+                  calls, and for privacy audits. Nothing is installed on the device, and HTTPS is never decrypted. On
+                  iOS, Mobdev relaunches the app with Apple’s network diagnostics on and reads its log: method, host,
+                  status, bytes and time, but iOS hides paths and queries. On Android, Mobdev points the device at a
+                  proxy on the Mac: plain HTTP in full, HTTPS as host, bytes and time. Stopping the capture removes the
+                  proxy again, and a dev server on the Mac stays reachable as 10.0.2.2.
+                </p>
+              </T>
+              <ToolTable rows={networkTools} />
             </Section>
 
             <Section id="flows">

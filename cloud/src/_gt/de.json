@@ -350,6 +350,10 @@
   "0ac466474519ce04": "Einen Deep Link, Universal Link oder eine Webseite öffnen",
   "c251abb37649208f": "Ausgabe von print, NSLog und os_log und wie die App beendet wurde",
   "146352292b4cf39c": "Crash-Reports auflisten oder einen lesen: Exception, Grund, abgestürzter Thread",
+  "ae874cb857cc7e94": "Die Anfragen einer App aufzeichnen",
+  "4f236cf8d119eb43": "Die aufgezeichneten Anfragen: Methode, URL, Status, Bytes und Dauer",
+  "a27804ea948898da": "Die Aufzeichnung beenden; auf Android verschwindet damit auch der Proxy",
+  "d40f8ab5d7cf415d": "Android: eine feste Antwort auf einfache HTTP-Anfragen, etwa einen Fehler deiner API",
   "93fae913627ba671": "CPU, Speicher und auf Android Frames einer laufenden App; Budgets lassen den Aufruf fehlschlagen",
   "965ce66b601a2102": "Kaltstartzeit über mehrere Läufe: schnellster, Median, langsamster",
   "491ff4ed5c824653": "Eine React-Native- oder Expo-App über Metro neu laden, sonst über ihr Entwicklermenü",
@@ -865,6 +869,18 @@
         },
         " lassen den Schritt fehlschlagen, so bemerkt ein Test, wenn eine App langsamer oder schwerer geworden ist."
       ]
+    }
+  ],
+  "fbce5bf050b53728": [
+    {
+      "t": "h3",
+      "i": 1,
+      "c": "Netzwerk"
+    },
+    {
+      "t": "p",
+      "i": 2,
+      "c": "Die Netzwerk-Tools zeigen, welche Anfragen eine App stellt: zum Debuggen, um Analytics- und API-Aufrufe zu prüfen und für Datenschutz-Audits. Auf dem Gerät wird nichts installiert, und HTTPS wird nie entschlüsselt. Auf iOS startet Mobdev die App mit Apples Netzwerkdiagnose neu und liest ihr Log: Methode, Host, Status, Bytes und Dauer, Pfade und Queries verbirgt iOS allerdings. Auf Android leitet Mobdev das Gerät über einen Proxy auf dem Mac: einfaches HTTP vollständig, HTTPS als Host, Bytes und Dauer. Endet die Aufzeichnung, verschwindet auch der Proxy wieder, und ein Dev-Server auf dem Mac bleibt unter 10.0.2.2 erreichbar."
     }
   ],
   "b9b9c97857392266": {
