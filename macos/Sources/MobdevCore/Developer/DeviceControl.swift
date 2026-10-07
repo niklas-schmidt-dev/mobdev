@@ -529,8 +529,10 @@ public final class DeviceControl: AppBackend, @unchecked Sendable {
             // Such a launch is tried again; one that never gets there is not "Launched".
             // The pid line goes through the terminal `script` gives simctl, which lost simctl's
             // and the app's stdout once on GitHub (2026-10-07) while stderr came through; the
-            // simulator's launchd knows whether the app runs either way.
-            let deadline = Date().addingTimeInterval(Self.simctlStartWait)
+            // simulator's launchd knows whether the app runs either way. A launch that shows no
+            // sign of life in its share of the wait is asked for again: right after an install,
+            // SpringBoard on GitHub's simulators ignored the first request for minutes.
+            let deadline = Date().addingTimeInterval(Self.simctlStartWait / Double(Self.simctlLaunchAttempts))
             var polls = 0
             while !launch.sawStart, !launch.hasEnded, Date() < deadline {
                 try? await Task.sleep(nanoseconds: 250_000_000)
@@ -544,15 +546,15 @@ public final class DeviceControl: AppBackend, @unchecked Sendable {
                 launch.detach()
                 console.stop()
                 logs.setStatus("did not start", for: bundleID)
-                guard launch.hasEnded else {
-                    throw DeveloperError(
-                        "The app did not start within \(Int(Self.simctlStartWait)) seconds: simctl reported no process.")
-                }
                 let reason = logs.read(app: bundleID, after: nil, limit: 2, contains: nil).lines.map(\.text)
                     .joined(separator: " ")
                 if attempt < Self.simctlLaunchAttempts {
                     try? await Task.sleep(nanoseconds: UInt64(Self.simctlRetryPause * 1_000_000_000))
                     continue
+                }
+                guard launch.hasEnded else {
+                    throw DeveloperError(
+                        "The app did not start within \(Int(Self.simctlStartWait)) seconds and \(attempt) launches: simctl reported no process.")
                 }
                 throw DeveloperError(
                     "simctl could not launch \(bundleID) in \(attempt) tries\(reason.isEmpty ? "." : ": \(reason)")")
@@ -582,9 +584,10 @@ public final class DeviceControl: AppBackend, @unchecked Sendable {
         }
     }
 
-    /// How often a launch simctl refuses is tried, how long its pid line is waited for, and the
-    /// pause between tries. A healthy simulator prints the line within a second; GitHub's took
-    /// over 45 seconds for a relaunch on a bad day (2026-10-07), so the wait is generous.
+    /// How often a launch is asked for, how long all tries together wait for a sign of the app
+    /// (its pid line or its process), and the pause between tries. A healthy simulator shows it
+    /// within a second; GitHub's took over 45 seconds on a bad day (2026-10-07), so the wait is
+    /// generous, and a request SpringBoard sat on is replaced after its share of it.
     static let simctlLaunchAttempts = 3
     static let simctlStartWait: TimeInterval = 90
     static let simctlRetryPause: TimeInterval = 2

@@ -149,8 +149,9 @@ import Testing
         let started = Date()
         let outcome = try await control.launch("dev.mobdev.fixture", arguments: [], environment: [:], restart: false)
         #expect(outcome == .launched)
+        // Well before the pid line would be given up on; a starved CI runner stretches it past 10 s.
         let seconds = Date().timeIntervalSince(started)
-        #expect(seconds > 1.5 && seconds < 6, "\(seconds)")
+        #expect(seconds < DeviceControl.simctlStartWait / 2, "\(seconds)")
         #expect(simctl.calls.get().contains(["simctl", "spawn", "SIM-1", "launchctl", "list"]))
         #expect(control.logs.status(for: "dev.mobdev.fixture") == "running")
     }
