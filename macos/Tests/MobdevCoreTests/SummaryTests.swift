@@ -67,6 +67,17 @@ import Testing
         #expect(throws: (any Error).self) { try TestCommand.parse(["p", "--language"]) }
     }
 
+    @Test func emulatorsAreAVDsOnFreePorts() throws {
+        let options = try TestCommand.parse(["p", "--emulator", "Pixel_9_Pro", "--emulator", "Pixel_9_Pro"])
+        #expect(options.emulators == ["Pixel_9_Pro", "Pixel_9_Pro"])
+        #expect(throws: (any Error).self) { try TestCommand.parse(["p", "--emulator", "Pixel 9; rm"]) }
+        #expect(
+            AndroidEmulators.emulatorTool(nextTo: URL(fileURLWithPath: "/sdk/platform-tools/adb")).path == "/sdk/emulator/emulator")
+        // 5554 is listed, 5557 is bound: the first pair with both ports free is 5558/5559.
+        #expect(AndroidEmulators.freePort(taken: ["emulator-5554"], isFree: { $0 != 5557 }) == 5558)
+        #expect(AndroidEmulators.freePort(taken: [], isFree: { _ in false }) == nil)
+    }
+
     @Test func simulatorAndAndroidLanguagesReadBack() {
         #expect(DeviceControl.plistStrings("(\n    \"en-US\",\n    de\n)\n") == ["en-US", "de"])
         #expect(DeviceControl.plistStrings("") == [])

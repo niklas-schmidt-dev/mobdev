@@ -1,6 +1,6 @@
 import Foundation
 
-/// `Mobdev test <project> [--device <id or name>]… [--simulator <type>]… [--language <tag>]…
+/// `Mobdev test <project> [--device <id or name>]… [--simulator <type>]… [--emulator <avd>]… [--language <tag>]…
 /// [--artifacts <dir>] [--test <name>]… [--var NAME=value]… [--no-video] [--wait <seconds>]`: runs a project's tests on a booted iOS
 /// simulator or Android device without the app, for scripts and CI. iPhones need the running app;
 /// there, call `run_tests` through MCP or the HTTP API.
@@ -11,7 +11,7 @@ import Foundation
 /// current step and still writes the results.
 public enum TestCommand {
     static let usage = """
-        Usage: Mobdev test <project> [--device <id or name>]... [--simulator <device type>]... [--language <tag>]... [--artifacts <dir>] [--test <name>]... [--var NAME=value]... [--no-video] [--wait <seconds>]
+        Usage: Mobdev test <project> [--device <id or name>]... [--simulator <device type>]... [--emulator <avd>]... [--language <tag>]... [--artifacts <dir>] [--test <name>]... [--var NAME=value]... [--no-video] [--wait <seconds>]
 
         Runs the tests of a project (a folder with tests/*.json or Maestro tests/*.yaml and
         mobdev.json, or one test file)
@@ -21,6 +21,9 @@ public enum TestCommand {
           --simulator  create, boot and afterwards delete a simulator of this type for the run,
                        e.g. "iPhone 17" or "iPhone 17,com.apple.CoreSimulator.SimRuntime.iOS-26-5";
                        repeatable, and combinable with --device
+          --emulator   start this Android Virtual Device read-only for the run and shut it down
+                       afterwards, e.g. Pixel_9_Pro; repeat it, even with the same AVD, for several
+                       at once. Nothing the run does is saved to the AVD
           --language   run the tests in this language, e.g. de-DE: the simulator's, or the Android
                        app's (needs app.bundle_id in mobdev.json). Repeat it to run every language
                        on each device in turn, in a folder per language. Steps see it as
@@ -50,6 +53,8 @@ public enum TestCommand {
         var moreDevices: [String] = []
         /// Simulators to create for the run, as "<device type>" or "<device type>,<runtime>".
         var simulators: [String] = []
+        /// Android Virtual Devices to start read-only for the run.
+        var emulators: [String] = []
         /// Languages to run the tests in, one after another on each device.
         var languages: [String] = []
 
@@ -64,12 +69,17 @@ public enum TestCommand {
         while let argument = rest.popFirst() {
             switch argument {
             case "--no-video": options.video = false
-            case "--device", "--artifacts", "--wait", "--test", "--var", "--simulator", "--language":
+            case "--device", "--artifacts", "--wait", "--test", "--var", "--simulator", "--emulator", "--language":
                 guard let value = rest.popFirst() else { throw ToolFailure("\(argument) needs a value.") }
                 switch argument {
                 case "--device":
                     if options.device == nil { options.device = value } else { options.moreDevices.append(value) }
                 case "--simulator": options.simulators.append(value)
+                case "--emulator":
+                    guard AndroidEmulators.isName(value) else {
+                        throw ToolFailure("--emulator needs the name of an Android Virtual Device, like Pixel_9_Pro.")
+                    }
+                    options.emulators.append(value)
                 case "--language":
                     guard !value.isEmpty, value.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" }) else {
                         throw ToolFailure("--language needs a language tag such as de-DE.")
@@ -130,8 +140,8 @@ public enum TestCommand {
             return 2
         }
 
-        if options.deviceQueries.count + options.simulators.count > 1 || !options.simulators.isEmpty
-            || options.languages.count > 1
+        if options.deviceQueries.count + options.simulators.count + options.emulators.count > 1
+            || !options.simulators.isEmpty || !options.emulators.isEmpty || options.languages.count > 1
         {
             return await runOnSeveral(project, selected: selected, options: options, home: home.url, output: output)
         }
@@ -171,7 +181,8 @@ public enum TestCommand {
     /// Runs the project on several devices at once, each into a folder of its own named after the
     /// device, with every line prefixed by the device's name. Each device runs the languages one
     /// after another, each into a folder of its own inside the device's. Simulators made for the
-    /// run are deleted afterwards. The exit code is the worst of all runs, and summary.md covers them all.
+    /// run are deleted afterwards, and emulators started for it shut down. The exit code is the
+    /// worst of all runs, and summary.md covers them all.
     static func runOnSeveral(
         _ project: TestProject, selected: [String], options: Options, home: URL,
         output: @escaping @Sendable (String) -> Void
@@ -188,7 +199,19 @@ public enum TestCommand {
                 return 2
             }
         }
-        let queries = options.deviceQueries + created
+        var started: [AndroidEmulators.Started] = []
+        defer { for emulator in started { AndroidEmulators.stop(emulator) } }
+        for avd in options.emulators {
+            do {
+                let emulator = try await AndroidEmulators.start(avd)
+                output("Started the emulator \(avd) read-only as \(emulator.serial).")
+                started.append(emulator)
+            } catch {
+                output("Could not start the emulator \(avd): \(error)")
+                return 2
+            }
+        }
+        let queries = options.deviceQueries + created + started.map(\.serial)
         guard let connection = await CommandSupport.connect(devices: queries, wait: options.wait, output: output) else {
             return 2
         }
@@ -200,8 +223,10 @@ public enum TestCommand {
                 + (options.languages.isEmpty ? "" : " in \(options.languages.joined(separator: ", "))"))
         let results = await withTaskGroup(of: [TestRunResult?].self) { group in
             for device in connection.devices {
+                // A UDID's start tells simulators apart; emulator serials differ only at the end.
+                let shortID = device.id.count <= 16 ? device.id : String(device.id.prefix(8))
                 let deviceFolder = home.appendingPathComponent(
-                    "\(TestProject.slug(device.name))-\(device.id.prefix(8))", isDirectory: true)
+                    "\(TestProject.slug(device.name))-\(TestProject.slug(shortID))", isDirectory: true)
                 let name = device.name, id = device.id, tools = connection.tools
                 group.addTask {
                     var results: [TestRunResult?] = []
@@ -290,6 +315,109 @@ enum Simulators {
             try? process.run()
             process.waitUntilExit()
         }
+    }
+}
+
+/// Android Virtual Devices that `Mobdev test --emulator` starts for one run. They run read-only,
+/// so several copies of one AVD run at once and nothing they do is saved to it.
+enum AndroidEmulators {
+    struct Started: Sendable {
+        let avd: String
+        let serial: String
+        let process: Process
+    }
+
+    /// AVD names are letters, digits, dots, dashes and underscores.
+    static func isName(_ name: String) -> Bool {
+        !name.isEmpty && name.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber || "._-".contains($0)) }
+    }
+
+    /// The SDK's `emulator` next to its `platform-tools/adb`.
+    static func emulatorTool(nextTo adb: URL) -> URL {
+        adb.deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("emulator/emulator")
+    }
+
+    /// The first console port from 5554 whose pair (console, adb) is free and that no listed device uses.
+    static func freePort(taken serials: Set<String>, isFree: (Int) -> Bool = AndroidEmulators.canBind) -> Int? {
+        stride(from: 5554, through: 5682, by: 2).first { port in
+            !serials.contains("emulator-\(port)") && isFree(port) && isFree(port + 1)
+        }
+    }
+
+    static func canBind(_ port: Int) -> Bool {
+        let socket = Darwin.socket(AF_INET, SOCK_STREAM, 0)
+        guard socket >= 0 else { return false }
+        defer { close(socket) }
+        var address = sockaddr_in()
+        address.sin_family = sa_family_t(AF_INET)
+        address.sin_port = in_port_t(UInt16(port).bigEndian)
+        address.sin_addr.s_addr = inet_addr("127.0.0.1")
+        return withUnsafePointer(to: &address) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                Darwin.bind(socket, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) == 0
+            }
+        }
+    }
+
+    /// Starts the AVD without a window and waits until Android has finished booting.
+    static func start(_ avd: String, timeout: TimeInterval = 600) async throws -> Started {
+        guard let adb = ADB.find() else { throw ToolFailure("adb is missing; install the Android SDK, e.g. with Android Studio.") }
+        let tool = emulatorTool(nextTo: adb.executable)
+        guard FileManager.default.isExecutableFile(atPath: tool.path) else {
+            throw ToolFailure("The Android emulator is missing at \(tool.path); install it in Android Studio's SDK Manager.")
+        }
+        let listed = try await adb.runner.run(tool, ["-list-avds"], timeout: 30)
+        let avds = listed.output.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }
+        guard avds.contains(avd) else {
+            throw ToolFailure("There is no AVD named \(avd). AVDs: \(avds.isEmpty ? "none" : avds.joined(separator: ", ")).")
+        }
+        let devices = try await adb.runner.run(adb.executable, ["devices"], timeout: 30)
+        let serials = Set(devices.output.split(whereSeparator: \.isNewline).compactMap { $0.split(separator: "\t").first.map(String.init) })
+        guard let port = freePort(taken: serials) else { throw ToolFailure("No free emulator port between 5554 and 5682.") }
+
+        let log = FileManager.default.temporaryDirectory.appendingPathComponent("mobdev-emulator-\(port).log")
+        FileManager.default.createFile(atPath: log.path, contents: nil)
+        let handle = try FileHandle(forWritingTo: log)
+        let process = Process()
+        process.executableURL = tool
+        process.arguments = [
+            "-avd", avd, "-read-only", "-no-snapshot-save", "-no-window", "-no-audio", "-no-boot-anim", "-port", "\(port)",
+        ]
+        process.standardOutput = handle
+        process.standardError = handle
+        try process.run()
+        let started = Started(avd: avd, serial: "emulator-\(port)", process: process)
+
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            try await Task.sleep(nanoseconds: 2_000_000_000)
+            guard process.isRunning else {
+                let tail = (try? String(contentsOf: log, encoding: .utf8))?.split(whereSeparator: \.isNewline).suffix(3)
+                    .joined(separator: " ") ?? ""
+                throw ToolFailure("It quit while booting. \(tail)")
+            }
+            if Task.isCancelled { break }
+            let booted = try? await adb.run(started.serial, ["shell", "getprop", "sys.boot_completed"], timeout: 10)
+            if booted?.output.trimmingCharacters(in: .whitespacesAndNewlines) == "1" { return started }
+        }
+        stop(started)
+        throw ToolFailure("It did not finish booting within \(Int(timeout)) s.")
+    }
+
+    /// Asks the emulator to quit through adb and ends its process if it has not after 30 s.
+    static func stop(_ started: Started) {
+        if let adb = ADB.find() {
+            let kill = Process()
+            kill.executableURL = adb.executable
+            kill.arguments = ["-s", started.serial, "emu", "kill"]
+            kill.standardOutput = FileHandle.nullDevice
+            kill.standardError = FileHandle.nullDevice
+            try? kill.run()
+            kill.waitUntilExit()
+        }
+        let deadline = Date().addingTimeInterval(30)
+        while started.process.isRunning, Date() < deadline { Thread.sleep(forTimeInterval: 0.5) }
+        if started.process.isRunning { started.process.terminate() }
     }
 }
 

@@ -652,7 +652,11 @@ iOS, and the other way round.
   `run_tests` over MCP or the HTTP API.
 - **Several devices and languages.** Repeat `--device` to run on several booted devices at once,
   and add `--simulator "iPhone 17"` (or `"iPhone 17,<runtime id>"`) to create and boot a simulator
-  of that type for the run and delete it afterwards. `--language de-DE` runs the tests in that
+  of that type for the run and delete it afterwards. `--emulator Pixel_9_Pro` starts that Android
+  Virtual Device read-only for the run and shuts it down afterwards; repeat it, also with the same
+  AVD, for several copies at once. Read-only means nothing the run does is saved to the AVD, and
+  every running copy of an AVD must be read-only, so close one you started without it first.
+  `--language de-DE` runs the tests in that
   language: the simulator's, or on Android the app's (Android 13 and later, and it needs
   `app.bundle_id`). Repeated, each device runs every language in turn. The run stops a running
   iOS app so it starts in the new language, passes the language to the steps as `${LANGUAGE}`, and
@@ -661,7 +665,7 @@ iOS, and the other way round.
 
   ```sh
   Mobdev test mobdev/ --simulator "iPhone 17" --simulator "iPhone SE (3rd generation)" \
-    --language en-US --language de-DE --artifacts test-artifacts
+    --emulator Pixel_9_Pro --language en-US --language de-DE --artifacts test-artifacts
   ```
 
 [`examples/tests`](../examples/tests) is a project for the example app, and

@@ -503,7 +503,9 @@ function Docs() {
                 <p>
                   Repeat <code className={code}>--device</code> to run on several devices at once,
                   or add <code className={code}>--simulator "iPhone 17"</code> to make a simulator of that type for the
-                  run and delete it afterwards. <code className={code}>--language de-DE</code> runs the tests in that
+                  run and delete it afterwards. <code className={code}>--emulator Pixel_9_Pro</code> starts that Android
+                  Virtual Device read-only for the run, also several copies at once, and shuts it down
+                  again. <code className={code}>--language de-DE</code> runs the tests in that
                   language, repeated in each language in turn, and puts the old one back afterwards. Each device and
                   language gets its own folder, and <code className={code}>summary.md</code> is ready for a CI job summary. When an agent has found a path through the
                   app, <code className={code}>recent_steps</code> hands it the actions that worked, to save with <code className={code}>save_test</code>.

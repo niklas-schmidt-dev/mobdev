@@ -1092,7 +1092,7 @@
       " sowie ein Video und einen Screenshot je Test."
     ]
   },
-  "8bc6f0bafbb557b2": {
+  "6b2b8f276a114240": {
     "t": "p",
     "i": 1,
     "c": [
@@ -1112,24 +1112,30 @@
       {
         "t": "code",
         "i": 4,
+        "c": "--emulator Pixel_9_Pro"
+      },
+      " startet dieses Android Virtual Device schreibgeschützt für den Lauf, auch mehrere Kopien gleichzeitig, und beendet es danach wieder. ",
+      {
+        "t": "code",
+        "i": 5,
         "c": "--language de-DE"
       },
       " führt die Tests in dieser Sprache aus, wiederholt in jeder Sprache nacheinander, und stellt danach die alte wieder ein. Jedes Gerät und jede Sprache bekommt einen eigenen Ordner, und ",
       {
         "t": "code",
-        "i": 5,
+        "i": 6,
         "c": "summary.md"
       },
       " passt direkt in eine CI-Job-Zusammenfassung. Hat ein Agent einen Weg durch die App gefunden, gibt ihm ",
       {
         "t": "code",
-        "i": 6,
+        "i": 7,
         "c": "recent_steps"
       },
       " die Aktionen, die geklappt haben, zum Speichern mit ",
       {
         "t": "code",
-        "i": 7,
+        "i": 8,
         "c": "save_test"
       },
       "."

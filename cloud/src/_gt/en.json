@@ -1090,7 +1090,7 @@
       " and a video and a screenshot per test."
     ]
   },
-  "8bc6f0bafbb557b2": {
+  "6b2b8f276a114240": {
     "t": "p",
     "i": 1,
     "c": [
@@ -1110,24 +1110,30 @@
       {
         "t": "code",
         "i": 4,
+        "c": "--emulator Pixel_9_Pro"
+      },
+      " starts that Android Virtual Device read-only for the run, also several copies at once, and shuts it down again. ",
+      {
+        "t": "code",
+        "i": 5,
         "c": "--language de-DE"
       },
       " runs the tests in that language, repeated in each language in turn, and puts the old one back afterwards. Each device and language gets its own folder, and ",
       {
         "t": "code",
-        "i": 5,
+        "i": 6,
         "c": "summary.md"
       },
       " is ready for a CI job summary. When an agent has found a path through the app, ",
       {
         "t": "code",
-        "i": 6,
+        "i": 7,
         "c": "recent_steps"
       },
       " hands it the actions that worked, to save with ",
       {
         "t": "code",
-        "i": 7,
+        "i": 8,
         "c": "save_test"
       },
       "."
