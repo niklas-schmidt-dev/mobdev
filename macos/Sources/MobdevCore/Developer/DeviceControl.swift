@@ -527,9 +527,18 @@ public final class DeviceControl: AppBackend, @unchecked Sendable {
             // simulators that takes a while right after an install, and now and then simctl
             // refuses the launch instead: it prints why and exits before the line (2026-10-07).
             // Such a launch is tried again; one that never gets there is not "Launched".
+            // The pid line goes through the terminal `script` gives simctl, which lost simctl's
+            // and the app's stdout once on GitHub (2026-10-07) while stderr came through; the
+            // simulator's launchd knows whether the app runs either way.
             let deadline = Date().addingTimeInterval(Self.simctlStartWait)
+            var polls = 0
             while !launch.sawStart, !launch.hasEnded, Date() < deadline {
                 try? await Task.sleep(nanoseconds: 250_000_000)
+                polls += 1
+                if polls % 8 == 0, await appRunsOnSimulator(bundleID) {
+                    launch.noteStart()
+                    break
+                }
             }
             if !launch.sawStart {
                 launch.detach()
@@ -559,6 +568,18 @@ public final class DeviceControl: AppBackend, @unchecked Sendable {
             return .launched
         }
         throw DeveloperError("simctl could not launch \(bundleID).")
+    }
+
+    /// Whether the simulator's launchd lists the app's process: "12345  0  UIKitApplication:<bundle>[…]".
+    private func appRunsOnSimulator(_ bundleID: String) async -> Bool {
+        guard let result = try? await runner.run(Self.xcrun, ["simctl", "spawn", udid, "launchctl", "list"], timeout: 15),
+            result.status == 0
+        else { return false }
+        return result.output.split(separator: "\n").contains { line in
+            let columns = line.split(separator: "\t", omittingEmptySubsequences: false)
+            guard columns.count >= 3, let pid = Int(columns[0].trimmingCharacters(in: .whitespaces)), pid > 0 else { return false }
+            return columns[2].hasPrefix("UIKitApplication:\(bundleID)[")
+        }
     }
 
     /// How often a launch simctl refuses is tried, how long its pid line is waited for, and the
@@ -747,6 +768,12 @@ private final class ConsoleLaunch: Sendable {
     var hasEnded: Bool { state.get().ended }
     var isDetached: Bool { state.get().detached }
     var sawStart: Bool { state.get().sawStart }
+
+    /// The app runs, known from elsewhere than simctl's pid line (launchd lists it).
+    func noteStart() {
+        state.withLock { $0.sawStart = true }
+        markStarted()
+    }
     var failure: String? { DeviceControl.message(fromConsole: state.get().failure.joined(separator: "\n")) }
     var lastLines: String { state.get().failure.suffix(3).joined(separator: " ") }
 

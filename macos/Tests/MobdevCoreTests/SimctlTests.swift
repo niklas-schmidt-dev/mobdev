@@ -12,10 +12,13 @@ import Testing
         /// When set, the console ends with this status right after its lines, as simctl does when
         /// it could not launch the app.
         var exitStatus: Int32?
+        /// What `simctl spawn <udid> launchctl list` prints.
+        var launchctl = ""
 
         func run(_ executable: URL, _ arguments: [String], timeout: TimeInterval) async throws -> CommandResult {
             calls.withLock { $0.append(arguments) }
             if arguments.dropFirst().first == "listapps" { return CommandResult(status: 0, output: listapps) }
+            if arguments.dropFirst().first == "spawn" { return CommandResult(status: 0, output: launchctl) }
             return CommandResult(status: 0, output: "")
         }
 
@@ -131,6 +134,25 @@ import Testing
         #expect(control.logs.read(app: "dev.mobdev.fixture", after: nil, limit: 10, contains: nil).lines.map(\.text) == ["fixture: launched"])
         #expect(control.logs.status(for: "dev.mobdev.fixture") == "running")
         #expect(simctl.calls.get().filter { $0.first == "/usr/bin/env" }.count == 1)
+    }
+
+    /// The terminal lost simctl's stdout once on GitHub, so no pid line came while the app ran;
+    /// the simulator's launchd listing the process counts as the start then.
+    @Test func aRunningProcessCountsAsTheStartWithoutAPidLine() async throws {
+        let simctl = FakeSimctl()
+        simctl.listapps = Self.listapps
+        simctl.console = ["2026-10-07 14:34:20 MobdevFixture[11001:36841] [General] Failed to send CA Event"]
+        simctl.launchctl = "PID\tStatus\tLabel\n11001\t0\tUIKitApplication:dev.mobdev.fixture[0x8a2f][rb-legacy]\n-\t0\tcom.apple.other\n"
+        let control = DeviceControl(
+            udid: "SIM-1", runner: simctl, reportsFolder: FileManager.default.temporaryDirectory, simulator: true,
+            simctl: true)
+        let started = Date()
+        let outcome = try await control.launch("dev.mobdev.fixture", arguments: [], environment: [:], restart: false)
+        #expect(outcome == .launched)
+        let seconds = Date().timeIntervalSince(started)
+        #expect(seconds > 1.5 && seconds < 6, "\(seconds)")
+        #expect(simctl.calls.get().contains(["simctl", "spawn", "SIM-1", "launchctl", "list"]))
+        #expect(control.logs.status(for: "dev.mobdev.fixture") == "running")
     }
 
     /// A simctl that cannot launch the app prints why and exits before its pid line. GitHub's
