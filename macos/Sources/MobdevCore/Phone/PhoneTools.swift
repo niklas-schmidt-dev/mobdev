@@ -52,6 +52,8 @@ public final class PhoneTools: Sendable {
     private let settleDelay: TimeInterval
     /// Every line of an image (query nil) or where a query is; Vision unless a test replaces it.
     let readText: @Sendable (CGImage, String?) throws -> [TextMatch]
+    /// How long past its timeout an element wait keeps trying a tree that cannot be read yet.
+    let unreadableGrace: TimeInterval
     /// Collects this device's calls while a flow is being recorded.
     public let recorder = FlowRecorder()
 
@@ -61,11 +63,13 @@ public final class PhoneTools: Sendable {
 
     init(
         phone: PhoneBackend, activity: ActivityLog, settleDelay: TimeInterval,
+        unreadableGrace: TimeInterval = PhoneTools.unreadableGrace,
         readText: @escaping @Sendable (CGImage, String?) throws -> [TextMatch]
     ) {
         self.phone = phone
         self.activity = activity
         self.settleDelay = settleDelay
+        self.unreadableGrace = unreadableGrace
         self.readText = readText
     }
 

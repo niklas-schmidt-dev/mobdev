@@ -124,7 +124,8 @@ import Testing
     @Test func anUnreadableTreeIsWaitedForPastTheTimeout() async throws {
         let phone = try phone()
         phone.unreadableReads.set(2)
-        let tools = PhoneTools(phone: phone, activity: ActivityLog(), settleDelay: 0)
+        // A grace GitHub's starved runner cannot use up between two reads; the default is 15 s.
+        let tools = PhoneTools(phone: phone, activity: ActivityLog(), settleDelay: 0, unreadableGrace: 600) { _, _ in [] }
         let found = try await tools.call(
             "wait_for_element", arguments: ["id": "search_bar", "timeout": 0], source: "test", screenshotByDefault: false)
         #expect(!found.isError, "\(found.text)")

@@ -224,7 +224,7 @@ extension PhoneTools {
             let now = Date()
             if now >= deadline {
                 guard unreadable != nil else { return nil }
-                let chance = lastChance ?? now.addingTimeInterval(Self.unreadableGrace)
+                let chance = lastChance ?? now.addingTimeInterval(unreadableGrace)
                 lastChance = chance
                 if now >= chance { throw unreadable! }
             }
