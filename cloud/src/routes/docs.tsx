@@ -23,6 +23,7 @@ const sections = [
   ["state", msg("Device state")],
   ["emulators", msg("Simulators and Android")],
   ["developer", msg("Build, run and debug")],
+  ["projects", msg("Projects")],
   ["flows", msg("Flows and CI")],
   ["tests", msg("Tests")],
   ["checks", msg("Checks")],
@@ -59,7 +60,8 @@ const tools = [
   ["scroll_until_visible", "text, id, direction, max_scrolls", msg("Scroll until something shows; stops at the end of the list")],
   ["wait_for_idle", "timeout, stable", msg("Wait until the screen stops changing")],
   ["press_button", "button", msg("Volume, mute, play/pause; lock on simulators and Android")],
-  ["start_recording", "path", msg("Record the screen to an .mp4")],
+  ["start_recording", "path", msg("Record the screen to an .mp4, by default into the project")],
+  ["save_screenshot", "path", msg("Save the screen at full resolution into the project's screenshots, e.g. for the App Store")],
   ["stop_recording", "", msg("End the recording and say where it is")],
   ["recent_steps", "count, clear", msg("The newest actions that worked, as steps for a test")],
   ["run_shortcut", "name", msg("Run a shortcut from Apple’s Shortcuts app")],
@@ -72,9 +74,13 @@ const tools = [
   ["assert_with_ai", "question, expect", msg("Ask Apple Intelligence on the Mac a yes/no question about the screen")],
   ["crawl_app", "bundle_id, max_actions, seconds, avoid", msg("Explore an app by itself and keep every crash with its steps")],
   ["navigate_to", "bundle_id, screen", msg("Go to a screen that crawl_app mapped")],
+  ["list_projects", "", msg("The projects Mobdev knows, which is active, and which one your calls use")],
+  ["create_project", "path, name, bundle_id, builds", msg("Make a project in the app's repository and make it active")],
+  ["open_project", "project", msg("Make a project active: its folder, a repository with mobdev/, or its name")],
   ["run_tests", "project, tests, variables, video, language", msg("Run a project's tests: every result, the first failure's screen, results.json and junit.xml")],
   ["list_tests", "project", msg("A project's tests and its newest results")],
   ["save_test", "project, name, steps, description, platforms, file", msg("Write a test into a project, creating it when needed")],
+  ["save_flow", "project, name, steps, file", msg("Write a flow into the project's flows/")],
   ["test_result", "project, run", msg("The newest run's results with each failure's step, screenshot and video")],
 ];
 
@@ -491,12 +497,47 @@ function Docs() {
               </Code>
             </Section>
 
+            <Section id="projects">
+              <T>
+                <p>
+                  A project is a folder in your app’s repository, usually <code className={code}>mobdev/</code>, with
+                  everything Mobdev keeps for the app. Commit it all but <code className={code}>output/</code>, which
+                  brings its own <code className={code}>.gitignore</code> and appears only when Mobdev first writes there.
+                </p>
+              </T>
+              <Code>
+                {"mobdev/\n  mobdev.json    the app, its builds and what every test starts with\n  tests/         tests\n  flows/         saved flows\n  baselines/     assert_screenshot's reference pictures\n  screenshots/   save_screenshot's pictures, such as store screenshots\n  maps/          crawl_app's map of each app\n  output/        test runs, recordings, crawls, failed checks and flow videos"}
+              </Code>
+              <T>
+                <ul className="list-disc space-y-2 pl-5">
+                  <li>
+                    <strong>New Project…</strong> in the app writes <code className={code}>mobdev/mobdev.json</code> into
+                    the repository you choose, and <strong>Open Project…</strong> adds an existing one. Projects come first
+                    in the sidebar, each with its tests, flows, screenshots, app map, recordings and runs.
+                  </li>
+                  <li>
+                    The project you select is the active one: recordings, screenshots, saved flows and tests, crawls and
+                    named baselines land there without a path.
+                  </li>
+                  <li>
+                    An agent’s working folder comes first: <code className={code}>Mobdev mcp</code> sends the project of the
+                    folder it runs in, so agents in two repositories, or two worktrees of one, never save into each
+                    other’s project. Agents find projects with <code className={code}>list_projects</code> and switch
+                    with <code className={code}>open_project</code>.
+                  </li>
+                  <li>
+                    A test run stays in its project, even when another one becomes active meanwhile.
+                  </li>
+                </ul>
+              </T>
+            </Section>
+
             <Section id="tests">
               <T>
                 <p>
-                  A project is a folder in your repository with the tests of one
-                  app: <code className={code}>mobdev.json</code> names the app, its builds per platform and the steps
-                  every test starts with, and each file in <code className={code}>tests/</code> is one test, a flow with
+                  A project’s tests are files in its <code className={code}>tests/</code> folder,
+                  and <code className={code}>mobdev.json</code> names the app, its builds per platform and the steps
+                  every test starts with. Each file is one test, a flow with
                   a name, a description and the platforms it runs on. A test passes when every step does, so it ends
                   with a wait that proves the result. <code className={code}>{"${NAME}"}</code> takes a variable from the
                   project, the environment or the run, and a secret’s value never appears in results.
@@ -507,7 +548,7 @@ function Docs() {
               </Code>
               <T>
                 <p>
-                  <strong>Tests</strong> in the app opens a project, runs it on a device and shows every result with its
+                  A project’s <strong>Tests</strong> in the app runs them on a device and shows every result with its
                   steps, the screenshot of a failure and the video. Agents get the same
                   through <code className={code}>list_tests</code>, <code className={code}>save_test</code>, <code className={code}>run_tests</code> and <code className={code}>test_result</code>:
                   they drive the app until a path works, save it as a test, run it and fix it from the failing
@@ -527,7 +568,9 @@ function Docs() {
                   Virtual Device read-only for the run, also several copies at once, and shuts it down
                   again. <code className={code}>--language de-DE</code> runs the tests in that
                   language, repeated in each language in turn, and puts the old one back afterwards. Each device and
-                  language gets its own folder, and <code className={code}>summary.md</code> is ready for a CI job summary. When an agent has found a path through the
+                  language gets its own folder, and <code className={code}>summary.md</code> is ready for a CI job summary. A
+                  test step like <code className={code}>{'{"save_screenshot": {"path": "${LANGUAGE}/01-home"}}'}</code> saves
+                  store screenshots in every language. When an agent has found a path through the
                   app, <code className={code}>recent_steps</code> hands it the actions that worked, to save with <code className={code}>save_test</code>.
                 </p>
               </T>
@@ -547,8 +590,9 @@ function Docs() {
                 <ul className="list-disc space-y-2 pl-5">
                   <li>
                     <code className={code}>assert_screenshot</code> compares the screen with a baseline picture. The first
-                    run records it; keep the <code className={code}>baselines</code> folder with your tests. A failure
-                    keeps a diff image with the changed regions marked. The status bar is left out,
+                    run records it in the project’s <code className={code}>baselines</code> folder; commit it with your
+                    tests. A failure keeps a diff image with the changed regions marked, in the run or the
+                    project’s <code className={code}>output/</code>. The status bar is left out,
                     and <code className={code}>mask</code> leaves out more, such as a clock or a map.
                   </li>
                   <li>
@@ -570,8 +614,9 @@ function Docs() {
                   <code className={code}>crawl_app</code> explores an app by itself, without a model: it launches the
                   app, taps every element it has not tried, maps the screens with screenshots and keeps every crash with
                   the steps that cause it as a flow to replay. It never taps text fields or anything that reads like
-                  delete, pay, buy, send or sign out. <code className={code}>navigate_to</code> then goes straight to a
-                  mapped screen by its title.
+                  delete, pay, buy, send or sign out. The map goes into the project’s <code className={code}>maps/</code> and
+                  the screenshots into its <code className={code}>output/</code>. <code className={code}>navigate_to</code> then
+                  goes straight to a mapped screen by its title.
                 </p>
               </T>
               <Code>{'{"crawl_app": {"bundle_id": "com.example.MyApp", "max_actions": 60}}\n{"navigate_to": {"bundle_id": "com.example.MyApp", "screen": "Settings"}}'}</Code>

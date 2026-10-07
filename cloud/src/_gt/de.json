@@ -420,6 +420,7 @@
   "6540bc4928de5ace": "Gerätezustand",
   "fd71b8f02b0decc0": "Simulatoren und Android",
   "c904a627a968008d": "Bauen, starten und debuggen",
+  "cc84bfe0ee5d0174": "Projekte",
   "af71ec8d1bc09ba6": "Flows und CI",
   "42cce71308122e86": "Tests",
   "655ace1b049d1c8e": "Prüfungen",
@@ -448,7 +449,8 @@
   "e97c56872b216d2e": "Scrollen, bis etwas erscheint; hält am Ende der Liste an",
   "1f0cb2041827c727": "Warten, bis sich der Bildschirm nicht mehr ändert",
   "d0a651a2da2b92fe": "Lautstärke, Stumm, Wiedergabe/Pause; Sperren auf Simulatoren und Android",
-  "a3c7307f1f2a4367": "Den Bildschirm als .mp4 aufnehmen",
+  "5dd41126f1f26961": "Den Bildschirm als .mp4 aufnehmen, standardmäßig ins Projekt",
+  "7a9c982c3c87fb49": "Den Bildschirm in voller Auflösung in die Screenshots des Projekts speichern, etwa für den App Store",
   "f41a62a71376e00b": "Die Aufnahme beenden und sagen, wo sie liegt",
   "7ac9020db1a7cd6e": "Die neuesten Aktionen, die geklappt haben, als Schritte für einen Test",
   "bb53097697b33342": "Einen Kurzbefehl aus Apples Kurzbefehle-App ausführen",
@@ -461,9 +463,13 @@
   "800b2afbc83d0e1b": "Apple Intelligence auf dem Mac eine Ja/Nein-Frage zum Bildschirm stellen",
   "c8efe91c7f37fade": "Eine App selbstständig erkunden und jeden Absturz mit seinen Schritten festhalten",
   "67537938978ed6ca": "Zu einem Bildschirm gehen, den crawl_app erfasst hat",
+  "d899872fd22e71b0": "Die Projekte, die Mobdev kennt, welches aktiv ist und welches deine Aufrufe nutzen",
+  "aeb87e33ecc4e46f": "Ein Projekt im Repository der App anlegen und aktiv machen",
+  "c08d59f3e5add780": "Ein Projekt aktiv machen: über seinen Ordner, ein Repository mit mobdev/ oder seinen Namen",
   "ef679b1a39cb3a6e": "Die Tests eines Projekts ausführen: jedes Ergebnis, der Bildschirm des ersten Fehlschlags, results.json und junit.xml",
   "1488e7f0ea8303a7": "Die Tests eines Projekts und seine neuesten Ergebnisse",
   "81f56d55045933fc": "Einen Test in ein Projekt schreiben; legt es bei Bedarf an",
+  "fab100381a47a28a": "Einen Flow in den Ordner flows/ des Projekts schreiben",
   "b95b3c240b2d36e0": "Die Ergebnisse des neuesten Laufs mit Schritt, Screenshot und Video jedes Fehlschlags",
   "af08407c2398abf1": "Ein simulierter Standort oder eine Route, der das Gerät folgt",
   "0d4971d236379131": "Standort, Fotos, Kamera und mehr ohne Nachfrage erlauben, entziehen oder zurücksetzen",
@@ -1162,23 +1168,113 @@
     "i": 1,
     "c": "Auf GitHub erledigt die Mobdev-Action all das auf einem gehosteten Mac: Sie startet einen Simulator, installiert deinen Build, führt ein Testprojekt oder einen Flow aus, schreibt die Ergebnisse in die Job-Zusammenfassung und auf Wunsch in einen Kommentar zum Pull Request und bewahrt Videos und Screenshots als Artefakt auf."
   },
-  "a8ffb6f7d9366935": {
+  "e7fd80693e57fbf5": {
     "t": "p",
     "i": 1,
     "c": [
-      "Ein Projekt ist ein Ordner in deinem Repository mit den Tests einer App: ",
+      "Ein Projekt ist ein Ordner im Repository deiner App, meist ",
       {
         "t": "code",
         "i": 2,
-        "c": "mobdev.json"
+        "c": "mobdev/"
       },
-      " nennt die App, ihre Builds je Plattform und die Schritte, mit denen jeder Test beginnt, und jede Datei in ",
+      ", mit allem, was Mobdev für die App aufbewahrt. Committe alles außer ",
       {
         "t": "code",
         "i": 3,
+        "c": "output/"
+      },
+      ": Dieser Ordner bringt seine eigene ",
+      {
+        "t": "code",
+        "i": 4,
+        "c": ".gitignore"
+      },
+      " mit und entsteht erst, wenn Mobdev zum ersten Mal etwas hineinschreibt."
+    ]
+  },
+  "9ebe031fbc87fb7c": {
+    "t": "ul",
+    "i": 1,
+    "c": [
+      {
+        "t": "li",
+        "i": 2,
+        "c": [
+          {
+            "t": "strong",
+            "i": 3,
+            "c": "New Project…"
+          },
+          " in der App schreibt ",
+          {
+            "t": "code",
+            "i": 4,
+            "c": "mobdev/mobdev.json"
+          },
+          " in das Repository, das du auswählst, und ",
+          {
+            "t": "strong",
+            "i": 5,
+            "c": "Open Project…"
+          },
+          " fügt ein vorhandenes hinzu. Projekte stehen oben in der Seitenleiste, jedes mit seinen Tests, Flows, Screenshots, App-Karte, Aufnahmen und Läufen."
+        ]
+      },
+      {
+        "t": "li",
+        "i": 6,
+        "c": "Das Projekt, das du auswählst, ist das aktive: Aufnahmen, Screenshots, gespeicherte Flows und Tests, Crawls und benannte Referenzbilder landen ohne Pfad dort."
+      },
+      {
+        "t": "li",
+        "i": 7,
+        "c": [
+          "Der Arbeitsordner eines Agenten geht vor: ",
+          {
+            "t": "code",
+            "i": 8,
+            "c": "Mobdev mcp"
+          },
+          " schickt das Projekt des Ordners, in dem es läuft. So speichern Agenten in zwei Repositorys, oder in zwei Worktrees eines Repositorys, nie in das Projekt des anderen. Agenten finden Projekte mit ",
+          {
+            "t": "code",
+            "i": 9,
+            "c": "list_projects"
+          },
+          " und wechseln mit ",
+          {
+            "t": "code",
+            "i": 10,
+            "c": "open_project"
+          },
+          "."
+        ]
+      },
+      {
+        "t": "li",
+        "i": 11,
+        "c": "Ein Testlauf bleibt in seinem Projekt, auch wenn währenddessen ein anderes aktiv wird."
+      }
+    ]
+  },
+  "dad194319fe853ac": {
+    "t": "p",
+    "i": 1,
+    "c": [
+      "Die Tests eines Projekts sind Dateien in seinem Ordner ",
+      {
+        "t": "code",
+        "i": 2,
         "c": "tests/"
       },
-      " ist ein Test: ein Flow mit Name, Beschreibung und den Plattformen, auf denen er läuft. Ein Test besteht, wenn jeder Schritt besteht, darum endet er mit einem Warten, das das Ergebnis belegt. ",
+      ", und ",
+      {
+        "t": "code",
+        "i": 3,
+        "c": "mobdev.json"
+      },
+      " nennt die App, ihre Builds je Plattform und die Schritte, mit denen jeder Test beginnt. Jede Datei ist ein Test: ein Flow mit Name, Beschreibung und den Plattformen, auf denen er läuft. Ein Test besteht, wenn jeder Schritt besteht, darum endet er mit einem Warten, das das Ergebnis belegt. ",
       {
         "t": "code",
         "i": 4,
@@ -1187,7 +1283,7 @@
       " nimmt eine Variable aus dem Projekt, der Umgebung oder dem Lauf, und der Wert eines Secrets taucht nie in Ergebnissen auf."
     ]
   },
-  "d8d1b008f0f6166e": {
+  "655bd7c01b4093de": {
     "t": "p",
     "i": 1,
     "c": [
@@ -1196,7 +1292,7 @@
         "i": 2,
         "c": "Tests"
       },
-      " in der App öffnet ein Projekt, führt es auf einem Gerät aus und zeigt jedes Ergebnis mit seinen Schritten, dem Screenshot eines Fehlschlags und dem Video. Agenten bekommen dasselbe über ",
+      " eines Projekts in der App führt sie auf einem Gerät aus und zeigt jedes Ergebnis mit seinen Schritten, dem Screenshot eines Fehlschlags und dem Video. Agenten bekommen dasselbe über ",
       {
         "t": "code",
         "i": 3,
@@ -1241,7 +1337,7 @@
       " sowie ein Video und einen Screenshot je Test."
     ]
   },
-  "6b2b8f276a114240": {
+  "999e2f07e4d44705": {
     "t": "p",
     "i": 1,
     "c": [
@@ -1275,16 +1371,22 @@
         "i": 6,
         "c": "summary.md"
       },
-      " passt direkt in eine CI-Job-Zusammenfassung. Hat ein Agent einen Weg durch die App gefunden, gibt ihm ",
+      " passt direkt in eine CI-Job-Zusammenfassung. Ein Testschritt wie ",
       {
         "t": "code",
         "i": 7,
+        "c": "{\"save_screenshot\": {\"path\": \"${LANGUAGE}/01-home\"}}"
+      },
+      " speichert Store-Screenshots in jeder Sprache. Hat ein Agent einen Weg durch die App gefunden, gibt ihm ",
+      {
+        "t": "code",
+        "i": 8,
         "c": "recent_steps"
       },
       " die Aktionen, die geklappt haben, zum Speichern mit ",
       {
         "t": "code",
-        "i": 8,
+        "i": 9,
         "c": "save_test"
       },
       "."
@@ -1295,7 +1397,7 @@
     "i": 1,
     "c": "Drei Tools beurteilen den Bildschirm und lassen ihren Schritt fehlschlagen, wenn er nicht besteht. So prüft ein Test, wie ein Bildschirm aussieht, nicht nur, was darauf steht."
   },
-  "c6eecc06c1d11f90": {
+  "2667ed6573af8445": {
     "t": "ul",
     "i": 1,
     "c": [
@@ -1308,16 +1410,22 @@
             "i": 3,
             "c": "assert_screenshot"
           },
-          " vergleicht den Bildschirm mit einem Referenzbild. Der erste Lauf nimmt es auf; leg den Ordner ",
+          " vergleicht den Bildschirm mit einem Referenzbild. Der erste Lauf nimmt es im Ordner ",
           {
             "t": "code",
             "i": 4,
             "c": "baselines"
           },
-          " zu deinen Tests. Bei einem Fehlschlag bleibt ein Differenzbild mit markierten Änderungen. Die Statusleiste wird ausgelassen, und ",
+          " des Projekts auf; committe ihn mit deinen Tests. Bei einem Fehlschlag bleibt ein Differenzbild mit markierten Änderungen, im Lauf oder in ",
           {
             "t": "code",
             "i": 5,
+            "c": "output/"
+          },
+          " des Projekts. Die Statusleiste wird ausgelassen, und ",
+          {
+            "t": "code",
+            "i": 6,
             "c": "mask"
           },
           " lässt mehr aus, etwa eine Uhr oder eine Karte."
@@ -1325,11 +1433,11 @@
       },
       {
         "t": "li",
-        "i": 6,
+        "i": 7,
         "c": [
           {
             "t": "code",
-            "i": 7,
+            "i": 8,
             "c": "accessibility_audit"
           },
           " findet Tasten ohne Beschriftung, Tippflächen, die kleiner sind, als iOS und Android empfehlen, Text unter den Kontrastwerten der WCAG und Beschriftungen, die wie Dateinamen oder Kennungen klingen."
@@ -1337,11 +1445,11 @@
       },
       {
         "t": "li",
-        "i": 8,
+        "i": 9,
         "c": [
           {
             "t": "code",
-            "i": 9,
+            "i": 10,
             "c": "assert_with_ai"
           },
           " stellt Apple Intelligence auf dem Mac eine Ja/Nein-Frage zum Bildschirm. Der Screenshot bleibt auf dem Mac, auf dem Apple Intelligence eingeschaltet sein muss."
@@ -1349,7 +1457,7 @@
       }
     ]
   },
-  "1270954770885374": {
+  "f10efb17f9c3616f": {
     "t": "p",
     "i": 1,
     "c": [
@@ -1358,10 +1466,22 @@
         "i": 2,
         "c": "crawl_app"
       },
-      " erkundet eine App selbstständig, ohne Modell: Es startet die App, tippt jedes Element an, das es noch nicht probiert hat, erfasst die Bildschirme mit Screenshots und hält jeden Absturz mit den Schritten fest, die ihn auslösen, als Flow zum Abspielen. Textfelder tippt es nie an, ebenso wenig alles, was nach Löschen, Bezahlen, Kaufen, Senden oder Abmelden klingt. ",
+      " erkundet eine App selbstständig, ohne Modell: Es startet die App, tippt jedes Element an, das es noch nicht probiert hat, erfasst die Bildschirme mit Screenshots und hält jeden Absturz mit den Schritten fest, die ihn auslösen, als Flow zum Abspielen. Textfelder tippt es nie an, ebenso wenig alles, was nach Löschen, Bezahlen, Kaufen, Senden oder Abmelden klingt. Die Karte kommt in den Ordner ",
       {
         "t": "code",
         "i": 3,
+        "c": "maps/"
+      },
+      " des Projekts, die Screenshots in seinen Ordner ",
+      {
+        "t": "code",
+        "i": 4,
+        "c": "output/"
+      },
+      ". ",
+      {
+        "t": "code",
+        "i": 5,
         "c": "navigate_to"
       },
       " geht danach direkt zu einem erfassten Bildschirm, über seinen Titel."

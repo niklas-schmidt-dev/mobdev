@@ -420,6 +420,7 @@
   "6540bc4928de5ace": "Device state",
   "fd71b8f02b0decc0": "Simulators and Android",
   "c904a627a968008d": "Build, run and debug",
+  "cc84bfe0ee5d0174": "Projects",
   "af71ec8d1bc09ba6": "Flows and CI",
   "42cce71308122e86": "Tests",
   "655ace1b049d1c8e": "Checks",
@@ -448,7 +449,8 @@
   "e97c56872b216d2e": "Scroll until something shows; stops at the end of the list",
   "1f0cb2041827c727": "Wait until the screen stops changing",
   "d0a651a2da2b92fe": "Volume, mute, play/pause; lock on simulators and Android",
-  "a3c7307f1f2a4367": "Record the screen to an .mp4",
+  "5dd41126f1f26961": "Record the screen to an .mp4, by default into the project",
+  "7a9c982c3c87fb49": "Save the screen at full resolution into the project's screenshots, e.g. for the App Store",
   "f41a62a71376e00b": "End the recording and say where it is",
   "7ac9020db1a7cd6e": "The newest actions that worked, as steps for a test",
   "bb53097697b33342": "Run a shortcut from Apple’s Shortcuts app",
@@ -461,9 +463,13 @@
   "800b2afbc83d0e1b": "Ask Apple Intelligence on the Mac a yes/no question about the screen",
   "c8efe91c7f37fade": "Explore an app by itself and keep every crash with its steps",
   "67537938978ed6ca": "Go to a screen that crawl_app mapped",
+  "d899872fd22e71b0": "The projects Mobdev knows, which is active, and which one your calls use",
+  "aeb87e33ecc4e46f": "Make a project in the app's repository and make it active",
+  "c08d59f3e5add780": "Make a project active: its folder, a repository with mobdev/, or its name",
   "ef679b1a39cb3a6e": "Run a project's tests: every result, the first failure's screen, results.json and junit.xml",
   "1488e7f0ea8303a7": "A project's tests and its newest results",
   "81f56d55045933fc": "Write a test into a project, creating it when needed",
+  "fab100381a47a28a": "Write a flow into the project's flows/",
   "b95b3c240b2d36e0": "The newest run's results with each failure's step, screenshot and video",
   "af08407c2398abf1": "A simulated position, or a route the device follows",
   "0d4971d236379131": "Grant, revoke or reset location, photos, camera and more without the prompt",
@@ -1160,23 +1166,113 @@
     "i": 1,
     "c": "On GitHub, the Mobdev action does all of it on a hosted Mac: it boots a simulator, installs your build, runs a test project or a flow, puts the results into the job summary and, if you want, a pull request comment, and keeps the videos and screenshots as an artifact."
   },
-  "a8ffb6f7d9366935": {
+  "e7fd80693e57fbf5": {
     "t": "p",
     "i": 1,
     "c": [
-      "A project is a folder in your repository with the tests of one app: ",
+      "A project is a folder in your app’s repository, usually ",
       {
         "t": "code",
         "i": 2,
-        "c": "mobdev.json"
+        "c": "mobdev/"
       },
-      " names the app, its builds per platform and the steps every test starts with, and each file in ",
+      ", with everything Mobdev keeps for the app. Commit it all but ",
       {
         "t": "code",
         "i": 3,
+        "c": "output/"
+      },
+      ", which brings its own ",
+      {
+        "t": "code",
+        "i": 4,
+        "c": ".gitignore"
+      },
+      " and appears only when Mobdev first writes there."
+    ]
+  },
+  "9ebe031fbc87fb7c": {
+    "t": "ul",
+    "i": 1,
+    "c": [
+      {
+        "t": "li",
+        "i": 2,
+        "c": [
+          {
+            "t": "strong",
+            "i": 3,
+            "c": "New Project…"
+          },
+          " in the app writes ",
+          {
+            "t": "code",
+            "i": 4,
+            "c": "mobdev/mobdev.json"
+          },
+          " into the repository you choose, and ",
+          {
+            "t": "strong",
+            "i": 5,
+            "c": "Open Project…"
+          },
+          " adds an existing one. Projects come first in the sidebar, each with its tests, flows, screenshots, app map, recordings and runs."
+        ]
+      },
+      {
+        "t": "li",
+        "i": 6,
+        "c": "The project you select is the active one: recordings, screenshots, saved flows and tests, crawls and named baselines land there without a path."
+      },
+      {
+        "t": "li",
+        "i": 7,
+        "c": [
+          "An agent’s working folder comes first: ",
+          {
+            "t": "code",
+            "i": 8,
+            "c": "Mobdev mcp"
+          },
+          " sends the project of the folder it runs in, so agents in two repositories, or two worktrees of one, never save into each other’s project. Agents find projects with ",
+          {
+            "t": "code",
+            "i": 9,
+            "c": "list_projects"
+          },
+          " and switch with ",
+          {
+            "t": "code",
+            "i": 10,
+            "c": "open_project"
+          },
+          "."
+        ]
+      },
+      {
+        "t": "li",
+        "i": 11,
+        "c": "A test run stays in its project, even when another one becomes active meanwhile."
+      }
+    ]
+  },
+  "dad194319fe853ac": {
+    "t": "p",
+    "i": 1,
+    "c": [
+      "A project’s tests are files in its ",
+      {
+        "t": "code",
+        "i": 2,
         "c": "tests/"
       },
-      " is one test, a flow with a name, a description and the platforms it runs on. A test passes when every step does, so it ends with a wait that proves the result. ",
+      " folder, and ",
+      {
+        "t": "code",
+        "i": 3,
+        "c": "mobdev.json"
+      },
+      " names the app, its builds per platform and the steps every test starts with. Each file is one test, a flow with a name, a description and the platforms it runs on. A test passes when every step does, so it ends with a wait that proves the result. ",
       {
         "t": "code",
         "i": 4,
@@ -1185,16 +1281,17 @@
       " takes a variable from the project, the environment or the run, and a secret’s value never appears in results."
     ]
   },
-  "d8d1b008f0f6166e": {
+  "655bd7c01b4093de": {
     "t": "p",
     "i": 1,
     "c": [
+      "A project’s ",
       {
         "t": "strong",
         "i": 2,
         "c": "Tests"
       },
-      " in the app opens a project, runs it on a device and shows every result with its steps, the screenshot of a failure and the video. Agents get the same through ",
+      " in the app runs them on a device and shows every result with its steps, the screenshot of a failure and the video. Agents get the same through ",
       {
         "t": "code",
         "i": 3,
@@ -1239,7 +1336,7 @@
       " and a video and a screenshot per test."
     ]
   },
-  "6b2b8f276a114240": {
+  "999e2f07e4d44705": {
     "t": "p",
     "i": 1,
     "c": [
@@ -1273,16 +1370,22 @@
         "i": 6,
         "c": "summary.md"
       },
-      " is ready for a CI job summary. When an agent has found a path through the app, ",
+      " is ready for a CI job summary. A test step like ",
       {
         "t": "code",
         "i": 7,
+        "c": "{\"save_screenshot\": {\"path\": \"${LANGUAGE}/01-home\"}}"
+      },
+      " saves store screenshots in every language. When an agent has found a path through the app, ",
+      {
+        "t": "code",
+        "i": 8,
         "c": "recent_steps"
       },
       " hands it the actions that worked, to save with ",
       {
         "t": "code",
-        "i": 8,
+        "i": 9,
         "c": "save_test"
       },
       "."
@@ -1293,7 +1396,7 @@
     "i": 1,
     "c": "Three tools judge the screen and fail their step when it does not pass, so a test checks how a screen looks, not only what is on it."
   },
-  "c6eecc06c1d11f90": {
+  "2667ed6573af8445": {
     "t": "ul",
     "i": 1,
     "c": [
@@ -1306,16 +1409,22 @@
             "i": 3,
             "c": "assert_screenshot"
           },
-          " compares the screen with a baseline picture. The first run records it; keep the ",
+          " compares the screen with a baseline picture. The first run records it in the project’s ",
           {
             "t": "code",
             "i": 4,
             "c": "baselines"
           },
-          " folder with your tests. A failure keeps a diff image with the changed regions marked. The status bar is left out, and ",
+          " folder; commit it with your tests. A failure keeps a diff image with the changed regions marked, in the run or the project’s ",
           {
             "t": "code",
             "i": 5,
+            "c": "output/"
+          },
+          ". The status bar is left out, and ",
+          {
+            "t": "code",
+            "i": 6,
             "c": "mask"
           },
           " leaves out more, such as a clock or a map."
@@ -1323,11 +1432,11 @@
       },
       {
         "t": "li",
-        "i": 6,
+        "i": 7,
         "c": [
           {
             "t": "code",
-            "i": 7,
+            "i": 8,
             "c": "accessibility_audit"
           },
           " finds buttons without a label, tap targets smaller than iOS and Android recommend, text below WCAG’s contrast ratios and labels that read like file names or identifiers."
@@ -1335,11 +1444,11 @@
       },
       {
         "t": "li",
-        "i": 8,
+        "i": 9,
         "c": [
           {
             "t": "code",
-            "i": 9,
+            "i": 10,
             "c": "assert_with_ai"
           },
           " asks Apple Intelligence on the Mac a yes/no question about the screen. The screenshot stays on the Mac, which needs Apple Intelligence turned on."
@@ -1347,7 +1456,7 @@
       }
     ]
   },
-  "1270954770885374": {
+  "f10efb17f9c3616f": {
     "t": "p",
     "i": 1,
     "c": [
@@ -1356,10 +1465,22 @@
         "i": 2,
         "c": "crawl_app"
       },
-      " explores an app by itself, without a model: it launches the app, taps every element it has not tried, maps the screens with screenshots and keeps every crash with the steps that cause it as a flow to replay. It never taps text fields or anything that reads like delete, pay, buy, send or sign out. ",
+      " explores an app by itself, without a model: it launches the app, taps every element it has not tried, maps the screens with screenshots and keeps every crash with the steps that cause it as a flow to replay. It never taps text fields or anything that reads like delete, pay, buy, send or sign out. The map goes into the project’s ",
       {
         "t": "code",
         "i": 3,
+        "c": "maps/"
+      },
+      " and the screenshots into its ",
+      {
+        "t": "code",
+        "i": 4,
+        "c": "output/"
+      },
+      ". ",
+      {
+        "t": "code",
+        "i": 5,
         "c": "navigate_to"
       },
       " then goes straight to a mapped screen by its title."
