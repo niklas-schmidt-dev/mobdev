@@ -189,14 +189,15 @@ extension PhoneTools {
         var untried: [String: [UIElement]] = [:]
         var bySignature: [String: String] = [:]
         var keysByScreen: [String: (title: String, keys: Set<String>)] = [:]
-        /// The screen this is: the same signature, or the same title with mostly the same elements,
-        /// as a list scrolled a little shows.
+        /// The screen this is: the same signature, or the same title with a good part of the same
+        /// elements, as a list shows after scrolling (a quarter was enough in Settings; half left
+        /// "Accessibility" and "Siri" in twice, 2026-10-07).
         func known(_ snapshot: Snapshot) -> String? {
             if let id = bySignature[snapshot.signature] { return id }
             let similar = keysByScreen.first { _, screen in
                 guard screen.title == snapshot.title, !screen.keys.isEmpty || !snapshot.keys.isEmpty else { return false }
                 let shared = Double(screen.keys.intersection(snapshot.keys).count)
-                return shared / Double(screen.keys.union(snapshot.keys).count) >= 0.5
+                return shared / Double(screen.keys.union(snapshot.keys).count) >= 0.25
             }
             if let id = similar?.key { bySignature[snapshot.signature] = id }
             return similar?.key
