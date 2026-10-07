@@ -117,6 +117,30 @@ final class FakePhone: PhoneBackend, @unchecked Sendable {
     }
 }
 
+/// An app backend with no apps that remembers the URLs it was asked to open.
+final class FakeApps: AppBackend, @unchecked Sendable {
+    let logs = AppLogs()
+    let platform: AppPlatform
+    let opened = Locked<[URL]>([])
+
+    init(platform: AppPlatform = .simulator) { self.platform = platform }
+
+    func activate(_ bundleID: String) async throws {}
+    func apps(all: Bool) async throws -> [InstalledApp] { [] }
+    func app(_ bundleID: String) async throws -> InstalledApp? { nil }
+    func install(at path: URL) async throws -> InstalledApp { throw DeveloperError("FakeApps installs nothing.") }
+    func uninstall(_ bundleID: String) async throws -> InstalledApp { throw DeveloperError("FakeApps has no apps.") }
+    func launch(_ bundleID: String, arguments: [String], environment: [String: String], restart: Bool) async throws
+        -> LaunchOutcome
+    { .launched }
+    func stop(_ bundleID: String) async throws -> Bool { false }
+    func open(_ url: URL) async throws { opened.withLock { $0.append(url) } }
+    func crashReports() async throws -> [CrashReportFile] { [] }
+    func crashReport(named name: String) async throws -> (report: CrashReport?, file: URL) {
+        throw DeveloperError("FakeApps has no reports.")
+    }
+}
+
 /// Records HID reports without Bluetooth.
 final class RecordingSink: ReportSink, @unchecked Sendable {
     let reports = Locked<[(ReportID, [UInt8])]>([])

@@ -164,7 +164,7 @@ only device, or the connected iPhone when simulators or Android devices run next
 | `uninstall_app` | `bundle_id` | Only apps installed for development |
 | `launch_app` | `bundle_id`, `arguments`, `environment`, `restart` | Captures what the app prints |
 | `stop_app` | `bundle_id` | |
-| `open_url` | `url` | Deep links, universal links, web pages |
+| `open_url` | `url` | Deep links, universal links, web pages; confirms iOS's "Open in …?" where there is a UI tree |
 | `logs` | `bundle_id`, `after`, `lines`, `contains` | Output of launched apps and how they ended |
 | `crash_reports` | `app`, `name`, `limit` | Lists reports; `name` reads one |
 
@@ -457,8 +457,8 @@ the Mac.
 - Simulator input uses Xcode's private SimulatorKit; tested with Xcode 27 and 26.6. A later Xcode
   can change it, as it did for idb and AXe. Simulator screens show the main display only.
 - Before Xcode 27, `devicectl` does not know simulators, so their apps go through `simctl`. Then
-  iOS asks before `open_url` opens an app's own URL scheme ("Open in …?"); tap its Open button,
-  e.g. with `tap_element`.
+  iOS asks before `open_url` opens an app's own URL scheme ("Open in …?"); `open_url` taps its
+  Open button itself where there is a UI tree, so a flow or test needs no step for it.
 - Android types ASCII text only (`input text`), and adb does not know app names, so `open_app`
   matches package names.
 - `ui_tree` reads the simulator through macOS's private accessibility translation; tested with

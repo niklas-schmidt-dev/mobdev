@@ -49,7 +49,8 @@ extension PhoneTools {
                 inputSchema: schema(["bundle_id": bundleID], required: ["bundle_id"]), readOnly: false),
             ToolDefinition(
                 name: "open_url", title: "Open URL",
-                description: "Open a URL on the phone: a deep link such as myapp://settings, a universal link or a web page.",
+                description:
+                    "Open a URL on the phone: a deep link such as myapp://settings, a universal link or a web page. When iOS asks \"Open in <app>?\" for a deep link and the device has a UI tree, Mobdev taps Open.",
                 inputSchema: schema(["url": ["type": "string"]], required: ["url"]), readOnly: false),
             ToolDefinition(
                 name: "logs", title: "App logs",
@@ -128,6 +129,9 @@ extension PhoneTools {
                 throw ToolFailure("url must be a full URL with a scheme, e.g. myapp://settings or https://example.com.")
             }
             try await requireApps().open(url)
+            if await confirmOpenPrompt(for: url) {
+                return ToolOutput(text: "Opened \(text). iOS asked whether to open it in the app; Mobdev tapped Open.")
+            }
             return ToolOutput(text: "Opened \(text).")
         case "logs":
             return try readLogs(args)
@@ -136,6 +140,38 @@ extension PhoneTools {
         default:
             throw UnknownToolError(name: name)
         }
+    }
+
+    /// How long iOS gets to show "Open in “App”?" after a custom-scheme URL was opened from outside
+    /// the app. GitHub's simulators show it, a developer's often does not, so the wait is short.
+    static let openPromptWait: TimeInterval = 2.5
+
+    /// Taps Open in iOS's "Open in “App”?" prompt when it appears for a custom URL scheme on a
+    /// device with a UI tree. Left alone, the prompt stays over SpringBoard, hides the app from
+    /// the tree and fails every later step. Web links open without one. True when it was tapped.
+    private func confirmOpenPrompt(for url: URL) async -> Bool {
+        guard let scheme = url.scheme?.lowercased(), scheme != "http", scheme != "https" else { return false }
+        let deadline = Date().addingTimeInterval(Self.openPromptWait)
+        while true {
+            guard let tree = try? await phone.uiTree() else { return false }
+            if let open = Self.openPromptButton(in: tree) {
+                guard (try? requireTouch()) != nil, (try? await phone.tap(at: open.center, hold: 0.08)) != nil else { return false }
+                // Until the prompt is gone, so the next step sees the app.
+                let gone = Date().addingTimeInterval(Self.openPromptWait)
+                while Date() < gone, let after = try? await phone.uiTree(), Self.openPromptButton(in: after) != nil {
+                    try? await pause(0.25)
+                }
+                return true
+            }
+            if Date() >= deadline { return false }
+            try? await pause(0.25)
+        }
+    }
+
+    /// The prompt's Open button: a tappable "Open" next to a title that starts with "Open in".
+    static func openPromptButton(in tree: [UIElement]) -> UIElement? {
+        guard tree.contains(where: { ElementQuery.folded($0.label).hasPrefix("open in") }) else { return nil }
+        return tree.first { $0.tappable && ElementQuery.folded($0.label) == "open" }
     }
 
     private func requireApps() throws -> AppBackend {
