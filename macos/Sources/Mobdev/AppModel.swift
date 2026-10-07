@@ -664,6 +664,62 @@ final class AppModel {
         }
     }
 
+    // MARK: Tests
+
+    /// Projects opened in Tests, newest first, remembered across launches.
+    var testProjects: [URL] { settings.testProjects.map { URL(fileURLWithPath: $0, isDirectory: true) } }
+
+    /// Opens a project folder in Tests, or moves it to the front.
+    func addTestProject(_ folder: URL) {
+        let path = folder.standardizedFileURL.path
+        settings.testProjects.removeAll { $0 == path }
+        settings.testProjects.insert(path, at: 0)
+        save()
+    }
+
+    func removeTestProject(_ folder: URL) {
+        settings.testProjects.removeAll { $0 == folder.standardizedFileURL.path }
+        save()
+    }
+
+    /// Project folders whose tests run right now.
+    private(set) var runningTests: Set<String> = []
+    /// A running project's tests as they finish.
+    private(set) var liveTests: [String: [TestRunResult.Test]] = [:]
+    /// The newest run of each project shown in Tests.
+    private(set) var testResults: [String: TestRunResult] = [:]
+    @ObservationIgnored private var testTasks: [String: Task<Void, Never>] = [:]
+
+    /// Loads a project's newest saved run, from the app, an agent or `Mobdev test` in the app's folder.
+    func loadTestResult(for project: TestProject) {
+        let key = project.folder.path
+        guard !runningTests.contains(key) else { return }
+        testResults[key] = TestRuns.result(for: project)
+    }
+
+    /// Runs a project's tests on a device, every step through the same tools as an agent's calls.
+    func runTests(_ project: TestProject, on device: String, tests: [String] = []) {
+        let key = project.folder.path
+        guard !runningTests.contains(key), let output = try? TestRuns.newRunFolder(for: project) else { return }
+        runningTests.insert(key)
+        liveTests[key] = []
+        let tools = self.tools
+        testTasks[key] = Task { [weak self] in
+            let options = TestRunOptions(output: output, tests: tests)
+            let result = try? await tools.runTests(project, on: device, options: options, source: "app") { test in
+                Task { @MainActor in self?.liveTests[key, default: []].append(test) }
+            }
+            guard let self else { return }
+            self.runningTests.remove(key)
+            self.testTasks[key] = nil
+            self.liveTests[key] = nil
+            self.testResults[key] = result ?? TestRuns.result(for: project)
+        }
+    }
+
+    /// Stops after the current step; what ran so far is kept as the run's result.
+    func stopTests(_ project: TestProject) { testTasks[project.folder.path]?.cancel() }
+
     // MARK: Flows
 
     /// Devices recording a flow. The steps themselves live with the device's tools, which record

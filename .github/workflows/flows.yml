@@ -1,13 +1,14 @@
 name: Flows
-# Runs the example flow in examples/flows on an iOS simulator on a GitHub-hosted Mac, the way the
-# README tells people to run flows in CI. Changes to the app run it with Mobdev built from that
-# commit; after every Mac release it runs again with the released app from the DMG.
+# Runs the example flow in examples/flows and the example tests in examples/tests on an iOS
+# simulator on a GitHub-hosted Mac, the way the README tells people to run them in CI. Changes to
+# the app run them with Mobdev built from that commit; after every Mac release they run again with
+# the released app from the DMG.
 on:
   push:
     branches: [main]
-    paths: ["macos/**", "examples/flows/**", ".github/workflows/flows.yml"]
+    paths: ["macos/**", "examples/**", ".github/workflows/flows.yml"]
   pull_request:
-    paths: ["macos/**", "examples/flows/**", ".github/workflows/flows.yml"]
+    paths: ["macos/**", "examples/**", ".github/workflows/flows.yml"]
   workflow_run:
     workflows: ["Mac app"]
     types: [completed]
@@ -70,8 +71,13 @@ jobs:
       - name: Run the flow
         working-directory: examples/flows
         run: '"$MOBDEV" flow smoke.json --device "$UDID" --artifacts "$RUNNER_TEMP/flow-artifacts"'
+      - name: Run the tests
+        if: always()
+        run: '"$MOBDEV" test examples/tests --device "$UDID" --artifacts "$RUNNER_TEMP/test-artifacts"'
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: flow-artifacts
-          path: ${{ runner.temp }}/flow-artifacts
+          path: |
+            ${{ runner.temp }}/flow-artifacts
+            ${{ runner.temp }}/test-artifacts

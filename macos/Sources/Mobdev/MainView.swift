@@ -2,7 +2,7 @@ import MobdevCore
 import SwiftUI
 
 enum Pane: Hashable {
-    case overview, device(String), remoteDevice(mac: String, id: String), agents, activity, remote
+    case overview, device(String), remoteDevice(mac: String, id: String), tests, agents, activity, remote
 
     /// Stored in user defaults as "overview", "device:<id>", "remote-device:<mac>/<id>", "agents", …
     var rawValue: String {
@@ -10,6 +10,7 @@ enum Pane: Hashable {
         case .overview: "overview"
         case .device(let id): "device:\(id)"
         case .remoteDevice(let mac, let id): "remote-device:\(mac)/\(id)"
+        case .tests: "tests"
         case .agents: "agents"
         case .activity: "activity"
         case .remote: "remote"
@@ -18,6 +19,7 @@ enum Pane: Hashable {
 
     init(rawValue: String) {
         switch rawValue {
+        case "tests": self = .tests
         case "agents": self = .agents
         case "activity": self = .activity
         case "remote": self = .remote
@@ -61,6 +63,7 @@ struct MainView: View {
                 } else {
                     DevicesOverview()
                 }
+            case .tests: TestsView()
             case .agents: AgentsView()
             case .activity: ActivityView()
             case .remote: RemoteView()
@@ -126,6 +129,13 @@ private struct Sidebar: View {
                         }
                     }
                 }
+            }
+            Section("Projects") {
+                NavigationLink(value: Pane.tests) {
+                    Label("Tests", systemImage: "checklist")
+                }
+                .badge(model.runningTests.isEmpty ? nil : Text("Running"))
+                .tag(Pane.tests)
             }
             Section("Agents") {
                 NavigationLink(value: Pane.agents) {

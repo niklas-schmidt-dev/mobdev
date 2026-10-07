@@ -208,12 +208,16 @@ import Testing
         #expect(missing.text.contains("No device is connected"))
     }
 
-    @Test func everyToolTakesADeviceAndListDevicesExists() {
+    @Test func everyDeviceToolTakesADeviceAndListDevicesExists() {
         let names = DeviceTools.definitions.map(\.name)
         #expect(names.first == "list_devices")
-        #expect(Set(names) == Set(PhoneTools.definitions.map(\.name) + ["list_devices"]))
+        let projectTools = ProjectTools.definitions.map(\.name)
+        #expect(Set(projectTools) == ["list_tests", "save_test", "test_result"])
+        #expect(Set(names) == Set(PhoneTools.definitions.map(\.name) + ["list_devices"] + projectTools))
         for definition in DeviceTools.definitions where definition.name != "list_devices" {
-            #expect(definition.inputSchema["properties"]?["device"]?["type"] == "string", "\(definition.name)")
+            // A project's files need no device; everything else acts on one.
+            let takesDevice = definition.inputSchema["properties"]?["device"]?["type"] == "string"
+            #expect(takesDevice == !projectTools.contains(definition.name), "\(definition.name)")
         }
     }
 

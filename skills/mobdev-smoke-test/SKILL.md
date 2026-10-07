@@ -45,8 +45,10 @@ After each path, check `logs` with the last `cursor` for errors and warnings. Wh
 call `crash_reports` for it and read the newest report. Relaunch and continue with the next path.
 
 On simulators, Android and iPhones with the UI tree on, act with `tap_element` and check with
-`wait_for_element` where the app has accessibility identifiers. When a path passes, offer to save its steps as a flow file (see the
-`mobdev` skill), so the next smoke test, or CI with `Mobdev flow`, replays it without an agent.
+`wait_for_element` where the app has accessibility identifiers. When a path passes, offer to save
+it as a test with `save_test` into the app's project folder (ask where; `mobdev/` in the repository
+is a good default, see the `mobdev` skill), so the next smoke test runs it with `run_tests`, and CI
+with `Mobdev test`, without an agent.
 
 ## 4. Report
 

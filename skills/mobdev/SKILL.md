@@ -92,6 +92,21 @@ Pass `video` (an absolute .mp4 path on the Mac) to keep a recording of the run; 
 screen where the flow stopped. `Mobdev flow <file> --device <id> --artifacts <dir>` runs one
 without the app, in CI, and writes `run.mp4` to the directory.
 
+## Tests
+
+A project folder holds an app's tests: `tests/*.json`, each a flow with a `name`, a `description`
+and the `platforms` it runs on, and `mobdev.json` with the app's `bundle_id`, `builds` per
+platform, `before_each` steps (usually `launch_app` with `restart: true`), `variables` and
+`secrets`. `list_tests` shows a project with its newest results, `save_test` writes a test and
+creates the project when there is none, `run_tests` runs the tests on a device and returns every
+result with the first failure's screen, and `test_result` returns the newest results again.
+
+To add a test, drive the app with the tools above until the path works, then save the calls that
+mattered: `tap_element` and `wait_for_element` over coordinates, `${NAME}` for data such as an
+account from `mobdev.json`, and a final wait that proves the result. When a test fails, read the
+failing step and the screen, then fix the test or report the bug. `Mobdev test <folder> --device
+<id> --artifacts <dir>` runs a project in CI and writes `junit.xml`.
+
 ## Safety
 
 This is the user's own phone, signed in to their accounts. Ask before anything that sends a

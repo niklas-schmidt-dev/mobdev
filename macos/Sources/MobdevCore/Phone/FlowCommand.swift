@@ -22,23 +22,7 @@ public enum FlowCommand {
         """
 
     public static func run(_ arguments: [String]) -> Never {
-        let task = Task {
-            exit(await execute(arguments, output: { FileHandle.standardOutput.write(Data(($0 + "\n").utf8)) }))
-        }
-        // The first interrupt cancels the flow, which ends a wait at once and starts no further step,
-        // and the video is finished. A second one quits at once.
-        let signals = [SIGINT, SIGTERM].map { number in
-            signal(number, SIG_IGN)
-            let source = DispatchSource.makeSignalSource(signal: number, queue: .main)
-            source.setEventHandler {
-                if task.isCancelled { exit(130) }
-                FileHandle.standardError.write(Data("Stopping the flow…\n".utf8))
-                task.cancel()
-            }
-            source.resume()
-            return source
-        }
-        withExtendedLifetime(signals) { dispatchMain() }
+        CommandSupport.run { await execute(arguments, output: CommandSupport.print) }
     }
 
     struct Options: Equatable {
@@ -90,13 +74,8 @@ public enum FlowCommand {
         }
         // Keep the app's own logs and files out of it: activity and crash reports go to the
         // artifacts directory, or a temporary one.
-        let home =
-            options.artifacts.map { URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath, isDirectory: true) }
-            ?? FileManager.default.temporaryDirectory.appendingPathComponent(
-                "mobdev-flow-\(ProcessInfo.processInfo.processIdentifier)", isDirectory: true)
-        try? FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
-        defer { if options.artifacts == nil { try? FileManager.default.removeItem(at: home) } }
-        setenv("MOBDEV_HOME", home.path, 1)
+        let home = CommandSupport.home(artifacts: options.artifacts)
+        defer { if home.temporary { try? FileManager.default.removeItem(at: home.url) } }
 
         let flow: Flow
         do {
@@ -106,37 +85,17 @@ public enum FlowCommand {
             return 2
         }
 
-        let emulators = EmulatorHub(adb: ADB.find()) {}
-        let tools = DeviceTools(hub: DeviceHub(keyboardLayout: .us) {}, emulators: emulators, settleDelay: 0.3)
-        emulators.start()
-        defer { emulators.stop() }
-        let deadline = Date().addingTimeInterval(options.wait)
-        // Waits for the named device, or without a name for any; several booted without a name is
-        // a mistake to report at once.
-        var device: (any Device)?
-        var lastError = ""
-        while device == nil {
-            do {
-                device = try tools.phone(for: options.device) as? any Device
-            } catch {
-                lastError = String(describing: error)
-                let ambiguous = options.device == nil && !emulators.devices.isEmpty
-                guard Date() < deadline, !ambiguous, !Task.isCancelled else { break }
-                try? await Task.sleep(nanoseconds: 250_000_000)
-            }
-        }
-        guard let device else {
-            output(lastError.isEmpty ? "No booted simulator or Android device." : lastError)
-            if let reason = SimulatorKit.unavailableReason { output("Simulators are not available: \(reason)") }
-            return 2
-        }
+        guard let connection = await CommandSupport.connect(device: options.device, wait: options.wait, output: output)
+        else { return 2 }
+        defer { connection.emulators.stop() }
+        let device = connection.device
 
         output("Running \"\(flow.name)\" (\(flow.steps.count) steps) on \(device.name) (\(device.id))")
-        let video = options.artifacts != nil && options.video ? home.appendingPathComponent("run.mp4") : nil
+        let video = options.artifacts != nil && options.video ? home.url.appendingPathComponent("run.mp4") : nil
         let result: FlowResult
         do {
             result = try await Flow.recording(device, to: video) {
-                try await tools.run(flow, on: device.id, source: "cli") { index, step, stepOutput, seconds in
+                try await connection.tools.run(flow, on: device.id, source: "cli") { index, step, stepOutput, seconds in
                     let mark = stepOutput.isError ? "✗" : "✓"
                     let text = stepOutput.isError
                         ? stepOutput.text
@@ -154,7 +113,7 @@ public enum FlowCommand {
             return 0
         }
         if options.artifacts != nil, let frame = device.frame(), let image = ImageTools.encode(frame, png: true) {
-            let file = home.appendingPathComponent("failure.png")
+            let file = home.url.appendingPathComponent("failure.png")
             if (try? image.data.write(to: file)) != nil { output("Screenshot: \(file.path)") }
         }
         output("Failed at step \(result.steps.count) of \(flow.steps.count).")

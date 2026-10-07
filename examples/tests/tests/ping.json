@@ -1,0 +1,12 @@
+{
+  "name": "Ping counts presses",
+  "description": "Typing into the field and pressing Ping twice shows Pinged 2.",
+  "steps": [
+    {"tap_element": {"id": "fixture.field"}},
+    {"type_text": {"text": "${GREETING}", "submit": true}},
+    {"tap_element": {"text": "Ping"}},
+    {"wait_for_element": {"text": "Pinged 1"}},
+    {"tap_element": {"id": "fixture.ping"}},
+    {"wait_for_element": {"text": "Pinged 2"}}
+  ]
+}

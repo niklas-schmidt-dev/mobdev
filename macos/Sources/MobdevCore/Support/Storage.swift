@@ -101,6 +101,8 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var runnerTeam = ""
     /// UDIDs of the iPhones with the UI tree turned on: Mobdev Runner starts whenever one is connected.
     public var runnerDevices: [String] = []
+    /// Project folders opened in Tests, newest first.
+    public var testProjects: [String] = []
 
     public init() {}
 
@@ -125,6 +127,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         iPhoneSetupDeferred = try container.decodeIfPresent(Bool.self, forKey: .iPhoneSetupDeferred) ?? false
         runnerTeam = (try? container.decodeIfPresent(String.self, forKey: .runnerTeam)) ?? ""
         runnerDevices = (try? container.decodeIfPresent([String].self, forKey: .runnerDevices)) ?? []
+        testProjects = (try? container.decodeIfPresent([String].self, forKey: .testProjects)) ?? []
     }
 
     public static func load() -> AppSettings {

@@ -286,6 +286,7 @@
   "fd71b8f02b0decc0": "Simulatoren und Android",
   "c904a627a968008d": "Bauen, starten und debuggen",
   "af71ec8d1bc09ba6": "Flows und CI",
+  "42cce71308122e86": "Tests",
   "75d18dac06f4f037": "Skills",
   "01a394b897c45b5a": "Fernzugriff",
   "755fc95de75d13e3": "Eigenes Relay betreiben",
@@ -309,6 +310,10 @@
   "631ced74c82986c2": "Auf ein Element per Identifier oder Label tippen",
   "cde6ef43d109ddbf": "Warten, bis ein Element erscheint oder verschwindet",
   "319fcd5a8366dc5a": "Einen Flow abspielen; stoppt beim ersten fehlgeschlagenen Schritt und kann ein Video speichern",
+  "ef679b1a39cb3a6e": "Die Tests eines Projekts ausführen: jedes Ergebnis, der Bildschirm des ersten Fehlschlags, results.json und junit.xml",
+  "1488e7f0ea8303a7": "Die Tests eines Projekts und seine neuesten Ergebnisse",
+  "81f56d55045933fc": "Einen Test in ein Projekt schreiben; legt es bei Bedarf an",
+  "b95b3c240b2d36e0": "Die Ergebnisse des neuesten Laufs mit Schritt, Screenshot und Video jedes Fehlschlags",
   "6661cfcb8d9efd9d": "Zur Entwicklung installierte Apps oder alle Apps",
   "5021ac0468eaa4e6": "Einen Build vom Mac installieren: .app/.ipa, Simulator-.app oder .apk",
   "f2d9c22dc9b53669": "Eine zur Entwicklung installierte App entfernen",
@@ -722,7 +727,7 @@
       " tippt auch Emoji. Der erste Build dauert ein bis zwei Minuten. Mit einem kostenlosen Apple Account vertraust du dem Entwickler einmal unter Einstellungen › Allgemein › VPN und Geräteverwaltung."
     ]
   },
-  "854dcb23fcb04f47": {
+  "b9b9c97857392266": {
     "t": "p",
     "i": 1,
     "c": [
@@ -799,6 +804,85 @@
         "c": "tap_element"
       },
       " als die Tools mit Texterkennung, denn die funktionieren auf den virtualisierten Macs von GitHub nicht."
+    ]
+  },
+  "a8ffb6f7d9366935": {
+    "t": "p",
+    "i": 1,
+    "c": [
+      "Ein Projekt ist ein Ordner in deinem Repository mit den Tests einer App: ",
+      {
+        "t": "code",
+        "i": 2,
+        "c": "mobdev.json"
+      },
+      " nennt die App, ihre Builds je Plattform und die Schritte, mit denen jeder Test beginnt, und jede Datei in ",
+      {
+        "t": "code",
+        "i": 3,
+        "c": "tests/"
+      },
+      " ist ein Test: ein Flow mit Name, Beschreibung und den Plattformen, auf denen er läuft. Ein Test besteht, wenn jeder Schritt besteht, darum endet er mit einem Warten, das das Ergebnis belegt. ",
+      {
+        "t": "code",
+        "i": 4,
+        "c": "${NAME}"
+      },
+      " nimmt eine Variable aus dem Projekt, der Umgebung oder dem Lauf, und der Wert eines Secrets taucht nie in Ergebnissen auf."
+    ]
+  },
+  "d8d1b008f0f6166e": {
+    "t": "p",
+    "i": 1,
+    "c": [
+      {
+        "t": "strong",
+        "i": 2,
+        "c": "Tests"
+      },
+      " in der App öffnet ein Projekt, führt es auf einem Gerät aus und zeigt jedes Ergebnis mit seinen Schritten, dem Screenshot eines Fehlschlags und dem Video. Agenten bekommen dasselbe über ",
+      {
+        "t": "code",
+        "i": 3,
+        "c": "list_tests"
+      },
+      ", ",
+      {
+        "t": "code",
+        "i": 4,
+        "c": "save_test"
+      },
+      ", ",
+      {
+        "t": "code",
+        "i": 5,
+        "c": "run_tests"
+      },
+      " und ",
+      {
+        "t": "code",
+        "i": 6,
+        "c": "test_result"
+      },
+      ": Sie fahren die App, bis ein Pfad funktioniert, speichern ihn als Test, führen ihn aus und reparieren ihn ab dem fehlgeschlagenen Schritt. ",
+      {
+        "t": "code",
+        "i": 7,
+        "c": "Mobdev test"
+      },
+      " führt ein Projekt in CI ohne die App aus und schreibt ",
+      {
+        "t": "code",
+        "i": 8,
+        "c": "results.json"
+      },
+      ", ",
+      {
+        "t": "code",
+        "i": 9,
+        "c": "junit.xml"
+      },
+      " sowie ein Video und einen Screenshot je Test."
     ]
   },
   "b52a625e5a15b378": {

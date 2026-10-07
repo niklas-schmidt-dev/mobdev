@@ -22,6 +22,7 @@ const sections = [
   ["emulators", msg("Simulators and Android")],
   ["developer", msg("Build, run and debug")],
   ["flows", msg("Flows and CI")],
+  ["tests", msg("Tests")],
   ["skills", msg("Skills")],
   ["remote", msg("Remote access")],
   ["self-host", msg("Run your own relay")],
@@ -53,6 +54,10 @@ const tools = [
   ["tap_element", "id, text, index, timeout", msg("Tap an element by identifier or label")],
   ["wait_for_element", "id, text, timeout, gone", msg("Wait for an element to appear or disappear")],
   ["run_flow", "path, steps, video", msg("Replay a flow; stops at the first failing step and can save a video")],
+  ["run_tests", "project, tests, variables, video", msg("Run a project's tests: every result, the first failure's screen, results.json and junit.xml")],
+  ["list_tests", "project", msg("A project's tests and its newest results")],
+  ["save_test", "project, name, steps, description, platforms, file", msg("Write a test into a project, creating it when needed")],
+  ["test_result", "project, run", msg("The newest run's results with each failure's step, screenshot and video")],
 ];
 
 /** Need Developer Mode on the iPhone and Xcode on the Mac. */
@@ -333,6 +338,36 @@ function Docs() {
               </T>
               <Code>
                 {"/Applications/Mobdev.app/Contents/MacOS/Mobdev flow sign-in.json \\\n  --device \"$UDID\" --artifacts flow-artifacts"}
+              </Code>
+            </Section>
+
+            <Section id="tests">
+              <T>
+                <p>
+                  A project is a folder in your repository with the tests of one
+                  app: <code className={code}>mobdev.json</code> names the app, its builds per platform and the steps
+                  every test starts with, and each file in <code className={code}>tests/</code> is one test, a flow with
+                  a name, a description and the platforms it runs on. A test passes when every step does, so it ends
+                  with a wait that proves the result. <code className={code}>{"${NAME}"}</code> takes a variable from the
+                  project, the environment or the run, and a secret’s value never appears in results.
+                </p>
+              </T>
+              <Code>
+                {'{\n  "name": "My App",\n  "app": {"bundle_id": "com.example.MyApp", "builds": {"simulator": "build/MyApp.app"}},\n  "before_each": [{"launch_app": {"bundle_id": "com.example.MyApp", "restart": true}}],\n  "variables": {"EMAIL": "me@example.com"},\n  "secrets": ["PASSWORD"]\n}'}
+              </Code>
+              <T>
+                <p>
+                  <strong>Tests</strong> in the app opens a project, runs it on a device and shows every result with its
+                  steps, the screenshot of a failure and the video. Agents get the same
+                  through <code className={code}>list_tests</code>, <code className={code}>save_test</code>, <code className={code}>run_tests</code> and <code className={code}>test_result</code>:
+                  they drive the app until a path works, save it as a test, run it and fix it from the failing
+                  step. <code className={code}>Mobdev test</code> runs a project in CI without the app and
+                  writes <code className={code}>results.json</code>, <code className={code}>junit.xml</code> and a video and a
+                  screenshot per test.
+                </p>
+              </T>
+              <Code>
+                {"/Applications/Mobdev.app/Contents/MacOS/Mobdev test mobdev/ \\\n  --device \"$UDID\" --artifacts test-artifacts"}
               </Code>
             </Section>
 

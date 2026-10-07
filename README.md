@@ -11,7 +11,7 @@ any MCP client get the same 27 tools on every device.
 | AI control | Screenshots, taps, swipes, typing, opening apps, tapping visible text (on-device OCR); the UI tree and tapping by accessibility identifier on simulators, Android and Developer Mode iPhones |
 | Build and run | Install builds, launch apps with arguments and environment, open deep links, by agent or in the app's Apps area |
 | Debug | Logs and crash reports of the apps you launch; Diagnose checks and fixes an iPhone's connection |
-| Flows | Record what you or an agent do, replay it from the app, an agent or CI (`Mobdev flow`) |
+| Tests and flows | A project folder with your app's tests: agents write and run them, the app shows the results, CI runs them with `Mobdev test` and JUnit output. Record what you or an agent do and replay it as a flow |
 | Test and research | [Skills](skills/README.md) for the dev loop, smoke tests, onboarding audits and competitor research |
 | Live mirror | Click, swipe and type on any device from the Mac |
 | Remote | Agents on other machines reach your devices through a hosted or self-hosted relay |

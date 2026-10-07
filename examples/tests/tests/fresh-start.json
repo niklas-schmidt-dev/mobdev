@@ -1,0 +1,8 @@
+{
+  "name": "Every test starts fresh",
+  "description": "The app is relaunched before each test, so nothing was pinged yet.",
+  "steps": [
+    {"wait_for_element": {"text": "Not pinged"}},
+    {"wait_for_element": {"text": "Pinged 1", "gone": true, "timeout": 1}}
+  ]
+}

@@ -646,6 +646,10 @@ struct ToolIcon: View {
         case "tap_element": "hand.point.up.braille.fill"
         case "wait_for_element": "hourglass.bottomhalf.filled"
         case "run_flow": "play.rectangle.fill"
+        case "run_tests": "checklist"
+        case "list_tests": "list.bullet.rectangle"
+        case "save_test": "square.and.pencil"
+        case "test_result": "doc.text.magnifyingglass"
         case "list_devices": "iphone.gen3"
         case "list_apps": "apps.iphone"
         case "install_app": "arrow.down.app.fill"
@@ -666,7 +670,7 @@ struct ToolIcon: View {
         case "type_text", "press_key": .indigo
         case "home", "open_app": .green
         case "screenshot", "read_screen", "find_text", "wait_for_text", "ui_tree", "wait_for_element": .orange
-        case "run_flow": .pink
+        case "run_flow", "run_tests", "list_tests", "save_test", "test_result": .pink
         case "install_app", "uninstall_app", "launch_app", "stop_app", "open_url": .teal
         case "list_apps", "logs", "crash_reports": .brown
         default: .gray

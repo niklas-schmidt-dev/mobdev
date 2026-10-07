@@ -112,7 +112,7 @@ public final class DeviceTools: ToolCalling {
             description:
                 "The iPhones and iPads on this Mac, booted iOS simulators and Android emulators and phones, with id, name, model, system version and whether each is ready. Pass `device` to the other tools to pick one.",
             inputSchema: ["type": "object", "properties": [:]], readOnly: true)
-        return [listDevices]
+        return [listDevices] + ProjectTools.definitions
             + PhoneTools.definitions.map { definition in
                 guard case .object(var schema) = definition.inputSchema,
                     case .object(var properties)? = schema["properties"]
@@ -133,6 +133,8 @@ public final class DeviceTools: ToolCalling {
         guard Self.definitions.contains(where: { $0.name == name }) else { throw UnknownToolError(name: name) }
         if name == "list_devices" { return listDevices() }
         do {
+            // A project's files need no device.
+            if ProjectTools.isProjectTool(name) { return try ProjectTools.call(name, Arguments(arguments ?? [:])) }
             // Only a missing (or null) `device` means "pick for me". A number, an empty string or
             // anything else is a mistake, and guessing could act on the wrong phone.
             let query: String?
@@ -169,6 +171,14 @@ public final class DeviceTools: ToolCalling {
         progress: (@Sendable (Int, Flow.Step, ToolOutput, TimeInterval) -> Void)? = nil
     ) async throws -> FlowResult {
         try await tools(for: resolve(device)).run(flow, source: source, progress: progress)
+    }
+
+    /// Runs a project's tests on one device as `run_tests` does, reporting each test as it finishes.
+    public func runTests(
+        _ project: TestProject, on device: String?, options: TestRunOptions, source: String,
+        progress: (@Sendable (TestRunResult.Test) -> Void)? = nil
+    ) async throws -> TestRunResult {
+        await tools(for: try resolve(device)).runTests(project, options: options, source: source, progress: progress)
     }
 
     /// iPhones first, then simulators, then Android devices.

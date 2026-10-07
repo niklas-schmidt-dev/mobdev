@@ -286,6 +286,7 @@
   "fd71b8f02b0decc0": "Simulators and Android",
   "c904a627a968008d": "Build, run and debug",
   "af71ec8d1bc09ba6": "Flows and CI",
+  "42cce71308122e86": "Tests",
   "75d18dac06f4f037": "Skills",
   "01a394b897c45b5a": "Remote access",
   "755fc95de75d13e3": "Run your own relay",
@@ -309,6 +310,10 @@
   "631ced74c82986c2": "Tap an element by identifier or label",
   "cde6ef43d109ddbf": "Wait for an element to appear or disappear",
   "319fcd5a8366dc5a": "Replay a flow; stops at the first failing step and can save a video",
+  "ef679b1a39cb3a6e": "Run a project's tests: every result, the first failure's screen, results.json and junit.xml",
+  "1488e7f0ea8303a7": "A project's tests and its newest results",
+  "81f56d55045933fc": "Write a test into a project, creating it when needed",
+  "b95b3c240b2d36e0": "The newest run's results with each failure's step, screenshot and video",
   "6661cfcb8d9efd9d": "Apps installed for development, or every app",
   "5021ac0468eaa4e6": "Install a build from the Mac: .app/.ipa, simulator .app or .apk",
   "f2d9c22dc9b53669": "Remove an app installed for development",
@@ -721,7 +726,7 @@
       " also types emoji. The first build takes a minute or two. With a free Apple Account, trust the developer once under Settings › General › VPN & Device Management."
     ]
   },
-  "854dcb23fcb04f47": {
+  "b9b9c97857392266": {
     "t": "p",
     "i": 1,
     "c": [
@@ -798,6 +803,85 @@
         "c": "tap_element"
       },
       " to the OCR tools, which do not work on GitHub’s virtualized Macs."
+    ]
+  },
+  "a8ffb6f7d9366935": {
+    "t": "p",
+    "i": 1,
+    "c": [
+      "A project is a folder in your repository with the tests of one app: ",
+      {
+        "t": "code",
+        "i": 2,
+        "c": "mobdev.json"
+      },
+      " names the app, its builds per platform and the steps every test starts with, and each file in ",
+      {
+        "t": "code",
+        "i": 3,
+        "c": "tests/"
+      },
+      " is one test, a flow with a name, a description and the platforms it runs on. A test passes when every step does, so it ends with a wait that proves the result. ",
+      {
+        "t": "code",
+        "i": 4,
+        "c": "${NAME}"
+      },
+      " takes a variable from the project, the environment or the run, and a secret’s value never appears in results."
+    ]
+  },
+  "d8d1b008f0f6166e": {
+    "t": "p",
+    "i": 1,
+    "c": [
+      {
+        "t": "strong",
+        "i": 2,
+        "c": "Tests"
+      },
+      " in the app opens a project, runs it on a device and shows every result with its steps, the screenshot of a failure and the video. Agents get the same through ",
+      {
+        "t": "code",
+        "i": 3,
+        "c": "list_tests"
+      },
+      ", ",
+      {
+        "t": "code",
+        "i": 4,
+        "c": "save_test"
+      },
+      ", ",
+      {
+        "t": "code",
+        "i": 5,
+        "c": "run_tests"
+      },
+      " and ",
+      {
+        "t": "code",
+        "i": 6,
+        "c": "test_result"
+      },
+      ": they drive the app until a path works, save it as a test, run it and fix it from the failing step. ",
+      {
+        "t": "code",
+        "i": 7,
+        "c": "Mobdev test"
+      },
+      " runs a project in CI without the app and writes ",
+      {
+        "t": "code",
+        "i": 8,
+        "c": "results.json"
+      },
+      ", ",
+      {
+        "t": "code",
+        "i": 9,
+        "c": "junit.xml"
+      },
+      " and a video and a screenshot per test."
     ]
   },
   "b52a625e5a15b378": {

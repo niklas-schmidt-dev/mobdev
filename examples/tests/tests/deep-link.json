@@ -1,0 +1,7 @@
+{
+  "name": "Deep link keeps the app in front",
+  "steps": [
+    {"open_url": {"url": "mobdevfixture://hello"}},
+    {"wait_for_element": {"id": "fixture.ping"}}
+  ]
+}

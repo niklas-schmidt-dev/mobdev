@@ -1,0 +1,8 @@
+{
+  "name": "Android goes home",
+  "description": "Only on Android; skipped on iOS, so the run shows a skipped test.",
+  "platforms": ["android"],
+  "steps": [
+    "home"
+  ]
+}

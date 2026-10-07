@@ -89,7 +89,10 @@ public final class PhoneTools: Sendable {
         On simulators, Android and iPhones with Mobdev Runner turned on, `ui_tree` lists the elements on \
         screen, and `tap_element` and `wait_for_element` find them by accessibility identifier or label: \
         prefer them to OCR there. \
-        `run_flow` replays a saved list of tool calls and stops at the first failing step.
+        `run_flow` replays a saved list of tool calls and stops at the first failing step. \
+        A project folder with tests/*.json holds an app's tests: `list_tests` shows them, `save_test` writes \
+        one, `run_tests` runs them on a device with a video and a screenshot of each failure, and \
+        `test_result` returns the newest results.
         """
 
     /// A tool's input schema. Tools with `screenshot` return a screenshot after acting.
@@ -209,7 +212,7 @@ public final class PhoneTools: Sendable {
                         "timeout": ["type": "number", "description": "Seconds, default 10, at most 60"],
                         "gone": ["type": "boolean"],
                     ], required: ["text"]), readOnly: true),
-        ] + treeDefinitions + appDefinitions + flowDefinitions
+        ] + treeDefinitions + appDefinitions + flowDefinitions + testDefinitions
     }()
 
     public static func definition(named name: String) -> ToolDefinition? {
@@ -225,7 +228,12 @@ public final class PhoneTools: Sendable {
         // An agent waiting for "Ready." polls status; repeats show as one entry with a count.
         let collapsing = name == "status"
         do {
-            var output = try await name == "run_flow" ? runFlowTool(args, source: source) : run(name, args)
+            var output: ToolOutput
+            switch name {
+            case "run_flow": output = try await runFlowTool(args, source: source)
+            case "run_tests": output = try await runTestsTool(args, source: source)
+            default: output = try await run(name, args)
+            }
             let wantsScreenshot = args.bool("screenshot") ?? screenshotByDefault
             let offersScreenshot = definition.inputSchema["properties"]?["screenshot"] != nil && !definition.readOnly
             if wantsScreenshot, output.image == nil, offersScreenshot {

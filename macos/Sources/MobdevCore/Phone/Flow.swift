@@ -26,7 +26,8 @@ public struct Flow: Sendable, Equatable {
         }
 
         var json: JSONValue { arguments.isEmpty ? .string(tool) : [tool: .object(arguments)] }
-        var summary: String { arguments.isEmpty ? tool : "\(tool) \(JSONValue.object(arguments).compactString)" }
+        /// "tap_element {"id":"email"}": the step on one line, as results and the window show it.
+        public var summary: String { arguments.isEmpty ? tool : "\(tool) \(JSONValue.object(arguments).compactString)" }
     }
 
     public var name: String
@@ -79,14 +80,17 @@ public struct Flow: Sendable, Equatable {
         }
         guard let value = try? JSONValue.parse(data) else { throw ToolFailure("\(url.lastPathComponent) is not JSON.") }
         var flow = try parse(value, name: url.deletingPathExtension().lastPathComponent)
-        // A build next to the flow file is found from wherever the flow runs: the app, an agent, CI.
-        let folder = url.deletingLastPathComponent()
-        for index in flow.steps.indices where flow.steps[index].tool == "install_app" {
-            guard let path = flow.steps[index].arguments["path"]?.stringValue, !path.hasPrefix("/"), !path.hasPrefix("~")
-            else { continue }
-            flow.steps[index].arguments["path"] = .string(folder.appendingPathComponent(path).standardizedFileURL.path)
-        }
+        flow.resolveInstallPaths(relativeTo: url.deletingLastPathComponent())
         return flow
+    }
+
+    /// A build next to the flow file is found from wherever the flow runs: the app, an agent, CI.
+    mutating func resolveInstallPaths(relativeTo folder: URL) {
+        for index in steps.indices where steps[index].tool == "install_app" {
+            guard let path = steps[index].arguments["path"]?.stringValue, !path.hasPrefix("/"), !path.hasPrefix("~")
+            else { continue }
+            steps[index].arguments["path"] = .string(folder.appendingPathComponent(path).standardizedFileURL.path)
+        }
     }
 
     /// One step per line, so a flow reads and diffs well.
@@ -120,8 +124,8 @@ extension PhoneTools {
             readOnly: false)
     ]
 
-    /// Tools a flow may not call: another flow, and nothing that picks a different device.
-    static let flowExcluded: Set<String> = ["run_flow", "list_devices"]
+    /// Tools a flow may not call: another flow or the tests, and nothing that picks a different device.
+    static let flowExcluded: Set<String> = ["run_flow", "run_tests", "list_devices"]
 
     func runFlowTool(_ args: Arguments, source: String) async throws -> ToolOutput {
         let flow: Flow
@@ -326,7 +330,7 @@ public final class FlowRecorder: Sendable {
     /// Calls that only look, and so replay nothing. Waits are kept: they are what a flow checks.
     static let skipped: Set<String> = [
         "status", "screenshot", "read_screen", "find_text", "ui_tree", "list_apps", "logs", "crash_reports",
-        "list_devices", "run_flow",
+        "list_devices", "run_flow", "run_tests",
     ]
 
     /// A successful tool call. Consecutive typing merges into one step.

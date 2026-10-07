@@ -42,6 +42,11 @@ if CommandLine.arguments.dropFirst().first == "flow" {
     FlowCommand.run(Array(CommandLine.arguments.dropFirst(2)))
 }
 
+// `Mobdev test <project>` runs a project's tests on a simulator or Android device without the app.
+if CommandLine.arguments.dropFirst().first == "test" {
+    TestCommand.run(Array(CommandLine.arguments.dropFirst(2)))
+}
+
 if CommandLine.arguments.dropFirst().first == "--version" {
     print("Mobdev \(MCPHandler.serverVersion)")
     exit(0)

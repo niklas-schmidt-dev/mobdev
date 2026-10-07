@@ -4,7 +4,7 @@ import en from "../src/_gt/en.json";
 import { localeOfPath, localizePath, stripLocale } from "../src/lib/locales";
 
 /** English entries that read the same in German. */
-const sameInGerman = new Set(["Dashboard", "Download", "Macs", "Offline", "Skills", "Tool", "Tools"]);
+const sameInGerman = new Set(["Dashboard", "Download", "Macs", "Offline", "Skills", "Tests", "Tool", "Tools"]);
 
 type Entries = Record<string, unknown>;
 

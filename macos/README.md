@@ -155,6 +155,10 @@ only device, or the connected iPhone when simulators or Android devices run next
 | `tap_element` | `id`, `text`, `index`, `timeout` | Taps an element by identifier or label, waiting up to 5 s for it |
 | `wait_for_element` | `id`, `text`, `timeout`, `gone` | Like `wait_for_text`, from the tree |
 | `run_flow` | `path`, `steps`, `video` | Replays a flow and stops at the first failing step; `video` saves a recording (.mp4) |
+| `run_tests` | `project`, `tests`, `variables`, `video` | Runs a project's tests on this device: every result, the first failure's screen, results.json and junit.xml |
+| `list_tests` | `project` | A project's tests and its newest results |
+| `save_test` | `project`, `name`, `steps`, `description`, `platforms`, `file` | Writes a test into the project, creating it when needed |
+| `test_result` | `project`, `run` | The newest run's results, with each failure's step, screenshot and video |
 | `list_apps` | `all` | Apps installed for development, or every app |
 | `install_app` | `path` | A build from a path on this Mac: `.app`/`.ipa` for iPhone, `.app` for simulators, `.apk` for Android |
 | `uninstall_app` | `bundle_id` | Only apps installed for development |
@@ -321,6 +325,74 @@ runs too.
 
 In CI, prefer `tap_element` and `wait_for_element` to the OCR tools: Vision text recognition does
 not return on GitHub's virtualized Macs, and Mobdev gives up on it after 90 seconds.
+
+### Tests
+
+A project is a folder in your repository with the tests of one app: `mobdev.json` names the app,
+and each file in `tests/` is one test, a flow with a name, a description and the platforms it
+runs on.
+
+```json
+{
+  "name": "My App",
+  "app": {
+    "bundle_id": "com.example.MyApp",
+    "builds": {"simulator": "build/Build/Products/Debug-iphonesimulator/MyApp.app", "android": "app/build/outputs/apk/debug/app-debug.apk"}
+  },
+  "before_each": [{"launch_app": {"bundle_id": "com.example.MyApp", "restart": true}}],
+  "variables": {"EMAIL": "me@example.com"},
+  "secrets": ["PASSWORD"]
+}
+```
+
+```json
+{
+  "name": "Sign in",
+  "description": "A member signs in and sees the welcome screen.",
+  "steps": [
+    {"tap_element": {"id": "email"}},
+    {"type_text": {"text": "${EMAIL}", "submit": true}},
+    {"tap_element": {"id": "password"}},
+    {"type_text": {"text": "${PASSWORD}", "submit": true}},
+    {"wait_for_element": {"text": "Welcome"}}
+  ]
+}
+```
+
+Every key of `mobdev.json` is optional. A run installs the build for the device's platform
+(`iphone`, `simulator` or `android`) once, then plays `before_each` and the test's steps. A test
+passes when every step does, so end it with a `wait_for_element` or `wait_for_text` that proves the
+result; when the launched app crashes during a test, the test fails with the crash. `${NAME}` takes
+a variable from the file, the environment or the run; a secret's value comes from the environment
+or the run only and never appears in results. A test with `"platforms": ["android"]` is skipped on
+iOS, and the other way round.
+
+- **Tests** in the sidebar opens a project folder, runs its tests on a device and shows every
+  result with its steps, the screenshot of a failure and the video of the run. The app keeps the
+  newest 20 runs per project.
+- Agents get the same: `list_tests` shows a project, `save_test` writes a test (and creates the
+  project when there is none), `run_tests` runs the tests and returns every result with the first
+  failure's screen, and `test_result` returns the newest results again. So an agent drives the
+  app with the tools above until a path works, saves the calls that mattered as a test, runs it,
+  and fixes it from the failing step.
+- `Mobdev test` runs a project without the app, for scripts and CI, on booted simulators and
+  Android devices:
+
+  ```sh
+  /Applications/Mobdev.app/Contents/MacOS/Mobdev test mobdev/ --device <udid> --artifacts test-artifacts
+  ```
+
+  It prints a line per test and exits 0 when every test passed, 1 when one failed and 2 when the
+  tests could not start. `--artifacts` gets `results.json`, `junit.xml`, a video and, after a
+  failure, a screenshot of every test in its own folder, the activity log and copied crash
+  reports. `--test <name>` runs one test (repeatable), `--var NAME=value` sets a variable,
+  `--no-video` and `--wait` work as for `Mobdev flow`. iPhones need the running app: call
+  `run_tests` over MCP or the HTTP API.
+
+[`examples/tests`](../examples/tests) is a project for the example app, and
+[`.github/workflows/flows.yml`](../.github/workflows/flows.yml) runs it on GitHub's `macos-26`
+runners next to the flow; a job for your app looks like the one above with `Mobdev test` in place
+of `Mobdev flow`, and `junit.xml` in the artifacts.
 
 ## HTTP API
 
