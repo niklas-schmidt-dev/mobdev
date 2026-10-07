@@ -1,0 +1,151 @@
+name: Mobdev test
+description: Run a Mobdev test project or flow on an iOS simulator and report the results in the job summary.
+author: Niklas Schmidt
+
+# Each step passes inputs to action.sh through the environment, never into the script itself, so
+# no input can inject shell code.
+inputs:
+  project:
+    description: Folder with mobdev.json and tests/*.json, run with `Mobdev test`. Set project or flow.
+    required: false
+  flow:
+    description: A flow file (.json), run with `Mobdev flow`. Set project or flow.
+    required: false
+  device:
+    description: Simulator device type for the simulator the action creates.
+    required: false
+    default: iPhone 17
+  runtime:
+    description: iOS runtime for that simulator, e.g. "iOS 27.0", "27.0" or com.apple.CoreSimulator.SimRuntime.iOS-27-0. Default the newest one installed.
+    required: false
+  simulator:
+    description: UDID of a simulator to use instead of creating one. It is booted if needed and left as it is afterwards.
+    required: false
+  app:
+    description: A simulator build (.app) to install before the run, for flows or projects without builds.simulator in mobdev.json.
+    required: false
+  tests:
+    description: Tests to run, one per line (file name without .json, or the test's name). Default all. Projects only.
+    required: false
+  variables:
+    description: Values for ${NAME} in the steps, one NAME=value per line. Projects only; pass secrets through env instead.
+    required: false
+  version:
+    description: Mobdev release to download, e.g. 0.2.27, or latest.
+    required: false
+    default: latest
+  mobdev:
+    description: Path to a Mobdev binary to use instead of downloading a release, e.g. one built with swift build.
+    required: false
+  artifacts:
+    description: Where Mobdev writes summary.md, results.json, junit.xml, videos, screenshots and logs. Default $RUNNER_TEMP/<artifact-name>.
+    required: false
+  artifact-name:
+    description: Name of the uploaded artifact; unique per workflow run. Empty skips the upload.
+    required: false
+    default: mobdev-results
+  comment:
+    description: "'true' posts summary.md as a pull request comment and updates it on later runs. Needs pull-requests: write."
+    required: false
+    default: "false"
+  github-token:
+    description: Token for the pull request comment.
+    required: false
+    default: ${{ github.token }}
+
+outputs:
+  passed:
+    description: "'true' when every test or step passed, else 'false'."
+    value: ${{ steps.run.outputs.passed }}
+  results:
+    description: The artifacts directory with summary.md and, for projects, results.json and junit.xml.
+    value: ${{ steps.prepare.outputs.artifacts }}
+
+runs:
+  using: composite
+  steps:
+    - name: Get Mobdev
+      id: prepare
+      shell: bash
+      env:
+        INPUT_PROJECT: ${{ inputs.project }}
+        INPUT_FLOW: ${{ inputs.flow }}
+        INPUT_TESTS: ${{ inputs.tests }}
+        INPUT_VARIABLES: ${{ inputs.variables }}
+        INPUT_VERSION: ${{ inputs.version }}
+        INPUT_MOBDEV: ${{ inputs.mobdev }}
+        INPUT_ARTIFACTS: ${{ inputs.artifacts }}
+        INPUT_ARTIFACT_NAME: ${{ inputs.artifact-name }}
+      run: bash "$GITHUB_ACTION_PATH/action.sh" prepare
+
+    - name: Boot the simulator
+      id: simulator
+      shell: bash
+      env:
+        INPUT_SIMULATOR: ${{ inputs.simulator }}
+        INPUT_DEVICE: ${{ inputs.device }}
+        INPUT_RUNTIME: ${{ inputs.runtime }}
+      run: bash "$GITHUB_ACTION_PATH/action.sh" simulator
+
+    - name: Install the app
+      if: inputs.app != ''
+      shell: bash
+      env:
+        INPUT_APP: ${{ inputs.app }}
+        UDID: ${{ steps.simulator.outputs.udid }}
+      run: bash "$GITHUB_ACTION_PATH/action.sh" install
+
+    - name: Run Mobdev
+      id: run
+      shell: bash
+      env:
+        INPUT_PROJECT: ${{ inputs.project }}
+        INPUT_FLOW: ${{ inputs.flow }}
+        INPUT_TESTS: ${{ inputs.tests }}
+        INPUT_VARIABLES: ${{ inputs.variables }}
+        MOBDEV_PATH: ${{ steps.prepare.outputs.mobdev }}
+        ARTIFACTS: ${{ steps.prepare.outputs.artifacts }}
+        UDID: ${{ steps.simulator.outputs.udid }}
+      run: bash "$GITHUB_ACTION_PATH/action.sh" run
+
+    - name: Write the job summary
+      if: always()
+      shell: bash
+      env:
+        ARTIFACTS: ${{ steps.prepare.outputs.artifacts }}
+        EXIT_CODE: ${{ steps.run.outputs.exit-code }}
+        INPUT_ARTIFACT_NAME: ${{ inputs.artifact-name }}
+      run: bash "$GITHUB_ACTION_PATH/action.sh" summary
+
+    - name: Upload the results
+      if: always() && inputs.artifact-name != '' && steps.prepare.outputs.artifacts != ''
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: ${{ steps.prepare.outputs.artifacts }}
+        if-no-files-found: warn
+
+    - name: Comment on the pull request
+      if: always() && inputs.comment == 'true'
+      shell: bash
+      env:
+        ARTIFACTS: ${{ steps.prepare.outputs.artifacts }}
+        EXIT_CODE: ${{ steps.run.outputs.exit-code }}
+        INPUT_ARTIFACT_NAME: ${{ inputs.artifact-name }}
+        GH_TOKEN: ${{ inputs.github-token }}
+      run: bash "$GITHUB_ACTION_PATH/action.sh" comment
+
+    - name: Clean up
+      if: always()
+      shell: bash
+      env:
+        UDID: ${{ steps.simulator.outputs.udid }}
+        CREATED: ${{ steps.simulator.outputs.created }}
+        MOUNT: ${{ steps.prepare.outputs.mount }}
+      run: bash "$GITHUB_ACTION_PATH/action.sh" cleanup
+
+    - name: Result
+      shell: bash
+      env:
+        EXIT_CODE: ${{ steps.run.outputs.exit-code }}
+      run: bash "$GITHUB_ACTION_PATH/action.sh" finish

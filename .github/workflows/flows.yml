@@ -1,14 +1,15 @@
 name: Flows
 # Runs the example flow in examples/flows and the example tests in examples/tests on an iOS
-# simulator on a GitHub-hosted Mac, the way the README tells people to run them in CI. Changes to
-# the app run them with Mobdev built from that commit; after every Mac release they run again with
+# simulator on a GitHub-hosted Mac, the way the README tells people to run them in CI, and the
+# example tests once more through the GitHub Action in actions/test. Changes to the app or the
+# action run them with Mobdev built from that commit; after every Mac release they run again with
 # the released app from the DMG.
 on:
   push:
     branches: [main]
-    paths: ["macos/**", "examples/**", ".github/workflows/flows.yml"]
+    paths: ["macos/**", "examples/**", "actions/**", ".github/workflows/flows.yml"]
   pull_request:
-    paths: ["macos/**", "examples/**", ".github/workflows/flows.yml"]
+    paths: ["macos/**", "examples/**", "actions/**", ".github/workflows/flows.yml"]
   workflow_run:
     workflows: ["Mac app"]
     types: [completed]
@@ -81,3 +82,46 @@ jobs:
           path: |
             ${{ runner.temp }}/flow-artifacts
             ${{ runner.temp }}/test-artifacts
+
+  action:
+    # The GitHub Action in actions/test, run the way other repositories use it, on the example
+    # tests: with Mobdev built from this commit, or with the released DMG after a release.
+    if: >-
+      github.event_name != 'workflow_run' || (github.event.workflow_run.conclusion == 'success'
+      && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main')
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use the newest Xcode
+        run: |
+          XCODE=$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
+      - name: Build Mobdev
+        # Without a binary the action downloads the release named by version.
+        if: github.event_name != 'workflow_run' && inputs.version == ''
+        run: |
+          swift build --package-path macos --product Mobdev
+          echo "MOBDEV=$PWD/macos/.build/debug/Mobdev" >> "$GITHUB_ENV"
+      - name: Build the example app
+        run: examples/flows/fixture/build.sh
+      - name: Run the example tests with the action
+        id: mobdev
+        uses: ./actions/test
+        with:
+          project: examples/tests
+          app: examples/flows/fixture/MobdevFixture.app
+          mobdev: ${{ env.MOBDEV }}
+          version: ${{ inputs.version || 'latest' }}
+          artifact-name: action-artifacts
+      - name: Check the outputs
+        if: always() && steps.mobdev.outcome != 'skipped'
+        env:
+          PASSED: ${{ steps.mobdev.outputs.passed }}
+          RESULTS: ${{ steps.mobdev.outputs.results }}
+        run: |
+          echo "passed=$PASSED results=$RESULTS"
+          test "$PASSED" = true
+          test -s "$RESULTS/summary.md"
+          test -s "$RESULTS/junit.xml"
