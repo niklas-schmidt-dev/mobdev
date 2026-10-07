@@ -4,15 +4,18 @@ Mobile development, all in one app. Free and open source.
 
 Mobdev is a small native Mac app that puts your iPhones, iOS simulators and Android devices in one
 list and gives you and your AI agent everything to work with them. Claude Code, Codex, Cursor or
-any MCP client get the same 27 tools on every device.
+any MCP client get the same 47 tools on every device, and scripts get them on the command line.
 
 | | |
 |---|---|
-| AI control | Screenshots, taps, swipes, typing, opening apps, tapping visible text (on-device OCR); the UI tree and tapping by accessibility identifier on simulators, Android and Developer Mode iPhones |
+| AI control | Screenshots, taps, swipes, typing, opening apps, tapping visible text (on-device OCR); the UI tree and tapping by accessibility identifier on simulators, Android and Developer Mode iPhones. `observe` lists the screen as numbered marks to tap; agents scroll until something shows and wait until the screen settles instead of guessing |
+| Device state | Location and routes, permissions, push notifications, dark mode and text size, language, a clean status bar, Face ID, an app's data, the clipboard and orientation, set by a tool instead of in Settings (simulators and Android, some on iPhones) |
 | Build and run | Install builds, launch apps with arguments and environment, open deep links, by agent or in the app's Apps area |
-| Debug | Logs and crash reports of the apps you launch; Diagnose checks and fixes an iPhone's connection |
-| Tests and flows | A project folder with your app's tests: agents write and run them, the app shows the results, CI runs them with `Mobdev test` and JUnit output. Record what you or an agent do and replay it as a flow |
-| Test and research | [Skills](skills/README.md) for the dev loop, smoke tests, onboarding audits and competitor research |
+| Debug | Logs and crash reports of the apps you launch, screen recordings on demand; Diagnose checks and fixes an iPhone's connection |
+| Tests and flows | A project folder with your app's tests: agents write and run them, the app shows the results, CI runs them with `Mobdev test` or the [GitHub Action](actions/test/README.md), with JUnit output and a Markdown summary for the job and the pull request. Record what you or an agent do and replay it as a flow |
+| Command line | `Mobdev <tool> key=value` runs any tool from a terminal or script, for agents without MCP |
+| Test and research | [Skills](skills/README.md) for the dev loop, smoke tests, bug reproduction, store screenshots, onboarding audits and competitor research |
+| Guard rails | Agents cannot open or launch the apps you block, such as banking or mail |
 | Live mirror | Click, swipe and type on any device from the Mac |
 | Remote | Agents on other machines reach your devices through a hosted or self-hosted relay |
 
@@ -35,7 +38,9 @@ Mobdev takes over once there is a build.
 | [`macos/`](macos/README.md) | The Mac app, MCP server, HTTP API and stdio bridge | SwiftUI, macOS 26+, Sparkle for updates |
 | [`relay/`](relay/README.md) | Self-hosted relay for remote access | Go, one binary or Docker image |
 | [`cloud/`](cloud/README.md) | mobdev.sh: website, dashboard and hosted relay | TanStack Start, Cloudflare Workers, Durable Objects, D1, WorkOS |
-| [`skills/`](skills/README.md) | Agent skills: dev loop, smoke tests, onboarding audits, competitor research | Markdown (`SKILL.md`) |
+| [`skills/`](skills/README.md) | Agent skills: dev loop, smoke tests, bug reproduction, store screenshots, onboarding audits, competitor research; with [`.claude-plugin/`](.claude-plugin/plugin.json) also a Claude Code plugin | Markdown (`SKILL.md`) |
+| [`actions/test/`](actions/test/README.md) | GitHub Action that runs Mobdev tests and flows on a simulator | Composite action, Bash |
+| [`packaging/homebrew/`](packaging/homebrew/mobdev.rb) | Homebrew cask, for a tap that does not exist yet | Ruby |
 
 ## Get started
 
@@ -54,8 +59,36 @@ choose **Simulators and Android Only** on the welcome page.
 Remote access is optional. Create an access token at [mobdev.sh](https://mobdev.sh/dashboard) and
 click “Open in Mobdev”, or run [your own relay](relay/README.md).
 
-Give your agent the workflows too: `npx skills add niklas-schmidt-dev/mobdev` installs the
-[skills](skills/README.md).
+Give your agent the workflows too. In Claude Code, the Mobdev plugin adds the MCP server and the
+[skills](skills/README.md) in one go:
+
+```
+/plugin marketplace add niklas-schmidt-dev/mobdev
+/plugin install mobdev@mobdev
+```
+
+Other agents get the skills with `npx skills add niklas-schmidt-dev/mobdev` and the MCP server as
+shown in [`macos/README.md`](macos/README.md).
+
+In GitHub Actions, `uses: niklas-schmidt-dev/mobdev/actions/test@main` runs your app's tests or a
+flow on an iOS simulator and puts the results in the job summary; see
+[`actions/test`](actions/test/README.md).
+
+## Homebrew (once the tap exists)
+
+[`packaging/homebrew/mobdev.rb`](packaging/homebrew/mobdev.rb) is a cask for a tap that does not
+exist yet. To publish it, the maintainer creates the public repository
+`niklas-schmidt-dev/homebrew-tap`, runs `packaging/homebrew/update-cask.sh <version>` after a
+release (it downloads that release's DMG and fills in version and sha256), and commits the result
+there as `Casks/mobdev.rb`. Then:
+
+```sh
+brew install --cask niklas-schmidt-dev/tap/mobdev
+```
+
+installs Mobdev.app into `/Applications` and a `mobdev` command. The app keeps updating itself
+through Sparkle, so `brew upgrade` leaves it alone unless run with `--greedy`; the cask still
+needs the script and a commit for each release to install the newest version.
 
 ## Development
 
@@ -63,6 +96,8 @@ Give your agent the workflows too: `npx skills add niklas-schmidt-dev/mobdev` in
 cd macos && swift test && scripts/build-app.sh      # Mac app: builds "Mobdev Dev"
 cd relay && go vet ./... && go test -race ./...    # self-hosted relay
 cd cloud && bun install && bun run typecheck && bun run test && bun run build
+claude plugin validate .                            # Claude Code plugin and marketplace
+shellcheck actions/test/action.sh packaging/homebrew/update-cask.sh   # GitHub Action, cask script
 ```
 
 The Swift tests build and start the Go relay to test remote access end to end. Everything runs
