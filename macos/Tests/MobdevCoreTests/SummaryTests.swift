@@ -46,6 +46,18 @@ import Testing
     }
 }
 
+@Suite struct TestCommandDevicesTests {
+    @Test func severalDevicesAndSimulators() throws {
+        let options = try TestCommand.parse([
+            "p", "--device", "A", "--device", "B", "--simulator", "iPhone 17", "--simulator", "iPhone SE (3rd generation),ios-26",
+        ])
+        #expect(options.device == "A")
+        #expect(options.deviceQueries == ["A", "B"])
+        #expect(options.simulators == ["iPhone 17", "iPhone SE (3rd generation),ios-26"])
+        #expect(throws: (any Error).self) { try TestCommand.parse(["p", "--simulator"]) }
+    }
+}
+
 /// The Markdown that CI job summaries and pull request comments show.
 @Suite struct SummaryTests {
     @Test func aFlowSummaryShowsEveryStep() {
