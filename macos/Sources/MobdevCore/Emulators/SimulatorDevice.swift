@@ -35,6 +35,7 @@ public final class SimulatorDevice: Device, @unchecked Sendable {
     }
 
     public var apps: AppBackend? { control }
+    public var settings: DeviceSettings? { control }
 
     // MARK: PhoneBackend
 

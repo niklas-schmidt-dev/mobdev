@@ -56,6 +56,10 @@ public final class PhoneTools: Sendable {
     let unreadableGrace: TimeInterval
     /// Collects this device's calls while a flow is being recorded.
     public let recorder = FlowRecorder()
+    /// The marks of the last `observe`, for `tap_mark`.
+    let observed = Locked<ObservedMarks?>(nil)
+    /// The screen recording `start_recording` started.
+    let recording = Locked<ActiveRecording?>(nil)
 
     public convenience init(phone: PhoneBackend, activity: ActivityLog, settleDelay: TimeInterval = 0.6) {
         self.init(phone: phone, activity: activity, settleDelay: settleDelay) { try TextRecognizer.read($0, query: $1) }
@@ -93,6 +97,12 @@ public final class PhoneTools: Sendable {
         On simulators, Android and iPhones with Mobdev Runner turned on, `ui_tree` lists the elements on \
         screen, and `tap_element` and `wait_for_element` find them by accessibility identifier or label: \
         prefer them to OCR there. \
+        `observe` lists what is on screen as numbered marks, cheaper than a screenshot; `tap_mark` taps one. \
+        `scroll_until_visible` scrolls to an element or text, `wait_for_idle` waits until the screen stops moving. \
+        Set device state directly instead of tapping through Settings: `set_location`, `set_permission`, \
+        `send_push`, `set_appearance`, `set_language`, `set_status_bar`, `biometrics`, `reset_app`, \
+        `clipboard` and `set_orientation` (simulators and Android; some on iPhones with Developer Mode). \
+        `start_recording` and `stop_recording` keep a video of the screen. \
         `run_flow` replays a saved list of tool calls and stops at the first failing step. \
         A project folder with tests/*.json holds an app's tests: `list_tests` shows them, `save_test` writes \
         one, `run_tests` runs them on a device with a video and a screenshot of each failure, and \
@@ -216,7 +226,8 @@ public final class PhoneTools: Sendable {
                         "timeout": ["type": "number", "description": "Seconds, default 10, at most 60"],
                         "gone": ["type": "boolean"],
                     ], required: ["text"]), readOnly: true),
-        ] + treeDefinitions + appDefinitions + flowDefinitions + testDefinitions
+        ] + observeDefinitions + treeDefinitions + appDefinitions + settingsDefinitions + recordingDefinitions
+            + flowDefinitions + testDefinitions
     }()
 
     public static func definition(named name: String) -> ToolDefinition? {
@@ -232,6 +243,7 @@ public final class PhoneTools: Sendable {
         // An agent waiting for "Ready." polls status; repeats show as one entry with a count.
         let collapsing = name == "status"
         do {
+            try AppBlocklist.check(name, args)
             var output: ToolOutput
             switch name {
             case "run_flow": output = try await runFlowTool(args, source: source)
@@ -246,7 +258,13 @@ public final class PhoneTools: Sendable {
             }
             activity.record(
                 source: source, tool: name, summary: summary(name, args, output), failed: false, collapsing: collapsing)
-            if !output.isError { recorder.record(name, arguments?.objectValue ?? [:]) }
+            if !output.isError {
+                if name == "tap_mark" {
+                    recordMarkTap(args)
+                } else {
+                    recorder.record(name, arguments?.objectValue ?? [:])
+                }
+            }
             return output
         } catch {
             let message = String(describing: error)
@@ -429,7 +447,10 @@ public final class PhoneTools: Sendable {
                 try await pause(0.5)
             }
         default:
+            if let output = try await runObserveTool(name, args) { return output }
             if let output = try await runTreeTool(name, args) { return output }
+            if let output = try await runSettingsTool(name, args) { return output }
+            if let output = try await runRecordingTool(name, args) { return output }
             return try await runAppTool(name, args)
         }
     }
@@ -474,7 +495,7 @@ public final class PhoneTools: Sendable {
             ])
     }
 
-    private func currentFrame() throws -> (CGImage, (width: Int, height: Int)) {
+    func currentFrame() throws -> (CGImage, (width: Int, height: Int)) {
         let status = phone.status()
         guard status.screen.isConnected, let frame = phone.frame() else {
             throw ToolFailure("The iPhone screen is not available. \(status.screen.summary).")

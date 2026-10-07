@@ -268,6 +268,27 @@ public struct FlowResult: Sendable {
         return videoProblem.map { "No video: \($0)" }
     }
 
+    /// The run as Markdown, for a CI job summary or a pull request comment.
+    public var markdown: String {
+        func cell(_ text: String) -> String {
+            text.replacingOccurrences(of: "|", with: "\\|").replacingOccurrences(of: "\n", with: " ")
+        }
+        var lines = [
+            "### \(passed ? "✅" : "❌") Mobdev flow: \(cell(flow.name))", "",
+            passed
+                ? String(format: "Passed: %d steps in %.1f s.", flow.steps.count, seconds)
+                : "Failed at step \(steps.count) of \(flow.steps.count).",
+            "", "| | Step | Time | Result |", "|---|---|---|---|",
+        ]
+        for (index, result) in steps.enumerated() {
+            let text = result.passed ? (result.text.split(separator: "\n").first.map(String.init) ?? "") : result.text
+            lines.append(
+                "| \(result.passed ? "✅" : "❌") | \(index + 1). `\(cell(result.step.summary))` | "
+                    + String(format: "%.1f s", result.seconds) + " | \(cell(text)) |")
+        }
+        return lines.joined(separator: "\n") + "\n"
+    }
+
     var json: JSONValue {
         [
             "name": .string(flow.name), "passed": .bool(passed), "seconds": .number((seconds * 10).rounded() / 10),
@@ -330,7 +351,7 @@ public final class FlowRecorder: Sendable {
     /// Calls that only look, and so replay nothing. Waits are kept: they are what a flow checks.
     static let skipped: Set<String> = [
         "status", "screenshot", "read_screen", "find_text", "ui_tree", "list_apps", "logs", "crash_reports",
-        "list_devices", "run_flow", "run_tests",
+        "list_devices", "run_flow", "run_tests", "observe", "start_recording", "stop_recording",
     ]
 
     /// A successful tool call. Consecutive typing merges into one step.

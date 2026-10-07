@@ -103,6 +103,8 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var runnerDevices: [String] = []
     /// Project folders opened in Tests, newest first.
     public var testProjects: [String] = []
+    /// Apps agents may not open or launch, by name or bundle ID, such as a banking app.
+    public var blockedApps: [String] = []
 
     public init() {}
 
@@ -128,6 +130,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         runnerTeam = (try? container.decodeIfPresent(String.self, forKey: .runnerTeam)) ?? ""
         runnerDevices = (try? container.decodeIfPresent([String].self, forKey: .runnerDevices)) ?? []
         testProjects = (try? container.decodeIfPresent([String].self, forKey: .testProjects)) ?? []
+        blockedApps = (try? container.decodeIfPresent([String].self, forKey: .blockedApps)) ?? []
     }
 
     public static func load() -> AppSettings {

@@ -11,6 +11,7 @@ public final class AndroidDevice: Device, @unchecked Sendable {
     /// The size of the last screenshot, which is also the coordinate space of `input`.
     private let lastSize = Locked<(width: Int, height: Int)?>(nil)
     private let appBackend: AndroidApps
+    private let deviceSettings: AndroidSettings
 
     struct Details: Equatable {
         var name: String
@@ -25,10 +26,14 @@ public final class AndroidDevice: Device, @unchecked Sendable {
     init(serial: String, details: Details, adb: ADB, reportsFolder: URL = MobdevPaths.crashReportsFolder) {
         id = serial
         self.adb = adb
-        self.details = Locked(details)
+        let lockedDetails = Locked(details)
+        self.details = lockedDetails
         if details.width > 0, details.height > 0 { lastSize.set((details.width, details.height)) }
         activity = ActivityLog(limit: 1000, file: MobdevPaths.activityFile(device: serial))
         appBackend = AndroidApps(serial: serial, adb: adb, reportsFolder: reportsFolder)
+        deviceSettings = AndroidSettings(serial: serial, adb: adb) {
+            serial.hasPrefix("emulator-") || lockedDetails.get().modelName == "Android Emulator"
+        }
     }
 
     /// Stops following apps, when the device goes away.
@@ -64,6 +69,7 @@ public final class AndroidDevice: Device, @unchecked Sendable {
     public var kind: DeviceKind { .android }
     public var name: String { details.get().name }
     public var apps: AppBackend? { appBackend }
+    public var settings: DeviceSettings? { deviceSettings }
 
     public var info: DeviceInfo? {
         let details = details.get()

@@ -47,6 +47,19 @@ if CommandLine.arguments.dropFirst().first == "test" {
     TestCommand.run(Array(CommandLine.arguments.dropFirst(2)))
 }
 
+// `Mobdev call <tool> …` runs one tool, through the app when it runs; `Mobdev tools` lists them.
+if CommandLine.arguments.dropFirst().first == "call" {
+    CallCommand.run(Array(CommandLine.arguments.dropFirst(2)))
+}
+if CommandLine.arguments.dropFirst().first == "tools" {
+    CallCommand.listTools(Array(CommandLine.arguments.dropFirst(2)))
+}
+// `Mobdev <tool> key=value …` is the same as `Mobdev call <tool> key=value …`. `status` and the
+// like never clash with the app's own launch arguments, which start with a dash.
+if let first = CommandLine.arguments.dropFirst().first, CallCommand.isTool(first) {
+    CallCommand.run(Array(CommandLine.arguments.dropFirst()))
+}
+
 if CommandLine.arguments.dropFirst().first == "--version" {
     print("Mobdev \(MCPHandler.serverVersion)")
     exit(0)

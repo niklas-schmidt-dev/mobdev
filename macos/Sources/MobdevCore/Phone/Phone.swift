@@ -73,6 +73,8 @@ public protocol PhoneBackend: Sendable {
     func typeText(_ text: String) async throws -> Bool
     /// The elements on screen from the accessibility tree. Nil where there is none (an iPhone).
     func uiTree() async throws -> [UIElement]?
+    /// Location, permissions, appearance and other state set from outside. Nil when unavailable.
+    var settings: DeviceSettings? { get }
 }
 
 /// A wheel as a swipe, for devices without one: each step moves the content by a little over 5% of
@@ -94,4 +96,5 @@ extension PhoneBackend {
     public func openApp(named name: String) async throws -> String? { nil }
     public func typeText(_ text: String) async throws -> Bool { false }
     public func uiTree() async throws -> [UIElement]? { nil }
+    public var settings: DeviceSettings? { nil }
 }

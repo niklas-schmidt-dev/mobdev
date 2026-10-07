@@ -108,6 +108,9 @@ public enum FlowCommand {
             return 2
         }
         if let line = result.videoLine { output(line) }
+        if options.artifacts != nil {
+            try? Data(result.markdown.utf8).write(to: home.url.appendingPathComponent(TestRunResult.summaryFileName))
+        }
         if result.passed {
             output(String(format: "Passed: %d steps in %.1f s.", flow.steps.count, result.seconds))
             return 0

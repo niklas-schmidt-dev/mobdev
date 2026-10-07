@@ -177,13 +177,13 @@ public final class DeviceControl: AppBackend, @unchecked Sendable {
     public let udid: String
     public let logs = AppLogs()
     public let isSimulator: Bool
-    private let runner: CommandRunning
+    let runner: CommandRunning
     private let reportsFolder: URL
     /// Where macOS writes simulator crash reports.
     private let localReports: URL
     private let executable: Locked<URL?>
     /// Simulators go through `simctl` where `devicectl` does not know them.
-    private let usesSimctl: Bool
+    let usesSimctl: Bool
     /// The console of each app launched with log capture, by bundle ID.
     private let consoles = Locked<[String: (command: RunningCommand, launch: ConsoleLaunch)]>([:])
 
@@ -441,11 +441,11 @@ public final class DeviceControl: AppBackend, @unchecked Sendable {
 
     // MARK: simctl
 
-    private static let xcrun = URL(fileURLWithPath: "/usr/bin/xcrun")
+    static let xcrun = URL(fileURLWithPath: "/usr/bin/xcrun")
 
     /// Runs `xcrun simctl` and returns what it printed; its first line explains a failure.
     @discardableResult
-    private func simctl(_ arguments: [String], timeout: TimeInterval = 30) async throws -> String {
+    func simctl(_ arguments: [String], timeout: TimeInterval = 30) async throws -> String {
         let result = try await runner.run(Self.xcrun, ["simctl"] + arguments, timeout: timeout)
         guard result.status == 0 else {
             let reason = result.output.split(separator: "\n").map(String.init)
@@ -680,7 +680,7 @@ public final class DeviceControl: AppBackend, @unchecked Sendable {
     }
 
     /// The `devicectl` Xcode selected with `xcode-select`, falling back to /Applications/Xcode.app.
-    private func devicectl() async throws -> URL {
+    func devicectl() async throws -> URL {
         if let known = executable.get() { return known }
         var candidates: [URL] = []
         if let selected = try? await runner.run(

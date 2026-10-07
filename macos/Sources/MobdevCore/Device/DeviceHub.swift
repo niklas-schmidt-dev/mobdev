@@ -212,6 +212,9 @@ public final class HardwareDevice: PhoneBackend, @unchecked Sendable {
             return created
         }
     }
+
+    /// Location, appearance, the status bar and the like through devicectl, with Developer Mode.
+    public var settings: DeviceSettings? { apps as? DeviceControl }
 }
 
 /// A device remembered in devices.json.

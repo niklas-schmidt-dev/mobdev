@@ -32,11 +32,13 @@ final class FakePhone: PhoneBackend, @unchecked Sendable {
     /// appears a moment later.
     let laterTree = Locked<(afterReads: Int, tree: [UIElement])?>(nil)
     private let treeReads = Locked(0)
+    let settings: DeviceSettings?
 
     /// Text lines drawn at (x, y) in pixels from the top-left of a 1179×2556 screen.
     init(
         lines: [(String, CGFloat, CGFloat)], bluetoothConnected: Bool = true, layout: KeyboardLayout = .us,
-        apps: AppBackend? = nil, pointerCheckResult: PointerBehavior? = nil, tree: [UIElement]? = nil
+        apps: AppBackend? = nil, pointerCheckResult: PointerBehavior? = nil, tree: [UIElement]? = nil,
+        settings: DeviceSettings? = nil
     ) {
         image = Self.render(lines: lines, width: 1179, height: 2556)
         self.bluetoothConnected = bluetoothConnected
@@ -44,6 +46,7 @@ final class FakePhone: PhoneBackend, @unchecked Sendable {
         self.apps = apps
         self.pointerCheckResult = pointerCheckResult
         self.tree = tree
+        self.settings = settings
     }
 
     func uiTree() async throws -> [UIElement]? {

@@ -227,7 +227,37 @@ public struct TestRunResult: Sendable, Codable, Equatable {
         return lines.joined(separator: "\n") + "\n"
     }
 
-    /// Writes results.json and junit.xml into the output folder.
+    public static let summaryFileName = "summary.md"
+
+    /// The run as Markdown, for a CI job summary or a pull request comment: a line with the counts
+    /// and a table with every test, the failed step of each failure.
+    public var markdown: String {
+        func cell(_ text: String) -> String {
+            text.replacingOccurrences(of: "|", with: "\\|").replacingOccurrences(of: "\n", with: " ")
+        }
+        let (passed, failed, skipped) = counts
+        let mark = self.passed ? "✅" : "❌"
+        var lines = ["### \(mark) Mobdev tests: \(cell(project)) on \(cell(device.name))", ""]
+        var counts = ["\(passed) passed"]
+        if failed > 0 || passed == 0 { counts.append("\(failed) failed") }
+        if skipped > 0 { counts.append("\(skipped) skipped") }
+        lines.append(counts.joined(separator: ", ") + String(format: " in %.1f s.", seconds) + (cancelled ? " Cancelled." : ""))
+        if let error { lines += ["", "**Could not run:** \(cell(error))"] }
+        guard !tests.isEmpty else { return lines.joined(separator: "\n") + "\n" }
+        lines += ["", "| | Test | Time | Details |", "|---|---|---|---|"]
+        for test in tests {
+            let icon = switch test.status {
+            case .passed: "✅"
+            case .failed: "❌"
+            case .skipped: "⏭️"
+            }
+            let time = test.status == .skipped ? "" : String(format: "%.1f s", test.seconds)
+            lines.append("| \(icon) | \(cell(test.name)) | \(time) | \(test.status == .passed ? "" : cell(test.message)) |")
+        }
+        return lines.joined(separator: "\n") + "\n"
+    }
+
+    /// Writes results.json, junit.xml and summary.md into the output folder.
     public func write() throws {
         let folder = URL(fileURLWithPath: output, isDirectory: true)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
@@ -237,6 +267,7 @@ public struct TestRunResult: Sendable, Codable, Equatable {
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
         try encoder.encode(self).write(to: folder.appendingPathComponent(Self.resultsFileName), options: .atomic)
         try Data(junit.utf8).write(to: folder.appendingPathComponent(Self.junitFileName), options: .atomic)
+        try Data(markdown.utf8).write(to: folder.appendingPathComponent(Self.summaryFileName), options: .atomic)
     }
 
     /// The run saved in a folder.
