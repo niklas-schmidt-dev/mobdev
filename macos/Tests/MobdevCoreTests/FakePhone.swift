@@ -117,13 +117,18 @@ final class FakePhone: PhoneBackend, @unchecked Sendable {
     }
 }
 
-/// An app backend with no apps that remembers the URLs it was asked to open.
+/// An app backend with no apps that remembers the URLs it was asked to open, and logs each under
+/// `app` as if the app had printed it.
 final class FakeApps: AppBackend, @unchecked Sendable {
     let logs = AppLogs()
     let platform: AppPlatform
+    let app: String
     let opened = Locked<[URL]>([])
 
-    init(platform: AppPlatform = .simulator) { self.platform = platform }
+    init(platform: AppPlatform = .simulator, app: String = "dev.mobdev.fixture") {
+        self.platform = platform
+        self.app = app
+    }
 
     func activate(_ bundleID: String) async throws {}
     func apps(all: Bool) async throws -> [InstalledApp] { [] }
@@ -134,7 +139,10 @@ final class FakeApps: AppBackend, @unchecked Sendable {
         -> LaunchOutcome
     { .launched }
     func stop(_ bundleID: String) async throws -> Bool { false }
-    func open(_ url: URL) async throws { opened.withLock { $0.append(url) } }
+    func open(_ url: URL) async throws {
+        opened.withLock { $0.append(url) }
+        logs.append(app: app, text: "fixture: opened \(url.absoluteString)")
+    }
     func crashReports() async throws -> [CrashReportFile] { [] }
     func crashReport(named name: String) async throws -> (report: CrashReport?, file: URL) {
         throw DeveloperError("FakeApps has no reports.")

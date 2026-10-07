@@ -116,8 +116,7 @@ public enum TestCommand {
         do {
             result = try await connection.tools.runTests(project, on: device.id, options: runOptions, source: "cli") { test in
                 output(test.line)
-                if test.status == .failed, let screenshot = test.screenshot { output("  Screenshot: \(screenshot)") }
-                if test.status == .failed, let video = test.video { output("  Video: \(video)") }
+                for line in test.detailLines { output(line) }
             }
         } catch {
             output(String(describing: error))

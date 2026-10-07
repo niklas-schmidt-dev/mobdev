@@ -481,42 +481,70 @@ public final class DeviceControl: AppBackend, @unchecked Sendable {
         var command = variables + ["/usr/bin/script", "-q", "/dev/null", Self.xcrun.path, "simctl", "launch", "--console-pty"]
         if restart { command.append("--terminate-running-process") }
         command += [udid, bundleID] + arguments
-        let launch = ConsoleLaunch(app: bundleID, logs: logs, startsWithOutput: true)
         // simctl does not say how the app ended; a fresh crash report of its executable does.
         let started = Date()
         let executable = (try? await app(bundleID, timeout: 10))?.location.flatMap { path in
             NSDictionary(contentsOfFile: path + "/Info.plist")?["CFBundleExecutable"] as? String
         }
-        let onExit: @Sendable (Int32) -> Void = { [weak self] status in
-            launch.exited(status)
-            guard let self, let executable, !launch.isDetached else { return }
-            // The report is written a few seconds after the crash.
-            for second in 1...15 {
-                DispatchQueue.global().asyncAfter(deadline: .now() + .seconds(second)) {
-                    guard !launch.isDetached, self.logs.status(for: bundleID)?.hasPrefix("crashed") != true,
-                        self.simulatorReports().contains(where: { $0.process == executable && ($0.date ?? .distantPast) >= started })
-                    else { return }
-                    self.logs.setStatus("crashed. Call crash_reports for the report.", for: bundleID)
+        for attempt in 1...Self.simctlLaunchAttempts {
+            let launch = ConsoleLaunch(app: bundleID, logs: logs, startsWithOutput: true)
+            let onExit: @Sendable (Int32) -> Void = { [weak self] status in
+                launch.exited(status)
+                guard let self, let executable, !launch.isDetached else { return }
+                // The report is written a few seconds after the crash.
+                for second in 1...15 {
+                    DispatchQueue.global().asyncAfter(deadline: .now() + .seconds(second)) {
+                        guard !launch.isDetached, self.logs.status(for: bundleID)?.hasPrefix("crashed") != true,
+                            self.simulatorReports().contains(where: { $0.process == executable && ($0.date ?? .distantPast) >= started })
+                        else { return }
+                        self.logs.setStatus("crashed. Call crash_reports for the report.", for: bundleID)
+                    }
                 }
             }
+            let console = try runner.start(URL(fileURLWithPath: "/usr/bin/env"), command, onLine: launch.receive, onExit: onExit)
+            DispatchQueue.global().asyncAfter(deadline: .now() + 2) { launch.markStarted() }
+            guard await launch.started(timeout: 45) else {
+                launch.detach()
+                console.stop()
+                throw DeveloperError(launch.lastLines.isEmpty ? "The app did not start within 45 seconds." : launch.lastLines)
+            }
+            // A simctl that cannot launch the app prints why and exits before its "<bundle>: <pid>"
+            // line. GitHub's slow simulators refuse a launch right after an install or while the
+            // old instance is still ending (2026-10-07), so such a launch is tried again.
+            let deadline = Date().addingTimeInterval(Self.simctlStartWait)
+            while !launch.sawStart, !launch.hasEnded, Date() < deadline {
+                try? await Task.sleep(nanoseconds: 250_000_000)
+            }
+            if launch.hasEnded, !launch.sawStart {
+                launch.detach()
+                console.stop()
+                let reason = logs.read(app: bundleID, after: nil, limit: 2, contains: nil).lines.map(\.text)
+                    .joined(separator: " ")
+                if attempt < Self.simctlLaunchAttempts {
+                    try? await Task.sleep(nanoseconds: UInt64(Self.simctlRetryPause * 1_000_000_000))
+                    continue
+                }
+                throw DeveloperError(
+                    "simctl could not launch \(bundleID) in \(attempt) tries\(reason.isEmpty ? "." : ": \(reason)")")
+            }
+            let replaced = consoles.withLock { consoles -> (command: RunningCommand, launch: ConsoleLaunch)? in
+                if launch.hasEnded { return nil }
+                let old = consoles[bundleID]
+                consoles[bundleID] = (console, launch)
+                return old
+            }
+            replaced?.launch.detach()
+            replaced?.command.stop()
+            return .launched
         }
-        let console = try runner.start(URL(fileURLWithPath: "/usr/bin/env"), command, onLine: launch.receive, onExit: onExit)
-        DispatchQueue.global().asyncAfter(deadline: .now() + 2) { launch.markStarted() }
-        guard await launch.started(timeout: 45) else {
-            launch.detach()
-            console.stop()
-            throw DeveloperError(launch.lastLines.isEmpty ? "The app did not start within 45 seconds." : launch.lastLines)
-        }
-        let replaced = consoles.withLock { consoles -> (command: RunningCommand, launch: ConsoleLaunch)? in
-            if launch.hasEnded { return nil }
-            let old = consoles[bundleID]
-            consoles[bundleID] = (console, launch)
-            return old
-        }
-        replaced?.launch.detach()
-        replaced?.command.stop()
-        return .launched
+        throw DeveloperError("simctl could not launch \(bundleID).")
     }
+
+    /// How often a launch simctl refuses is tried, how long its pid line is waited for after the
+    /// launch counts as started, and the pause between tries.
+    static let simctlLaunchAttempts = 3
+    static let simctlStartWait: TimeInterval = 5
+    static let simctlRetryPause: TimeInterval = 2
 
     // MARK: Crash reports
 
@@ -665,6 +693,8 @@ private final class ConsoleLaunch: Sendable {
         /// Set when Mobdev stops listening; the app's later lines and ending are no longer this console's.
         var detached = false
         var reportedEnding = false
+        /// simctl printed its "<bundle>: <pid>" line: the app really ran.
+        var sawStart = false
         /// What devicectl printed before the launch, to explain a failure.
         var failure: [String] = []
         var waiter: CheckedContinuation<Bool, Never>?
@@ -692,6 +722,7 @@ private final class ConsoleLaunch: Sendable {
 
     var hasEnded: Bool { state.get().ended }
     var isDetached: Bool { state.get().detached }
+    var sawStart: Bool { state.get().sawStart }
     var failure: String? { DeviceControl.message(fromConsole: state.get().failure.joined(separator: "\n")) }
     var lastLines: String { state.get().failure.suffix(3).joined(separator: " ") }
 
@@ -724,10 +755,15 @@ private final class ConsoleLaunch: Sendable {
     func receive(_ line: String) {
         let current = state.get()
         if current.detached { return }
+        if startsWithOutput, Self.isSimctlStart(line, app: app) {
+            state.withLock { $0.sawStart = true }
+            markStarted()
+            return
+        }
         if current.started != true {
             if startsWithOutput {
                 markStarted()
-                if !Self.isSimctlStart(line, app: app) { logs.append(app: app, text: line) }
+                logs.append(app: app, text: line)
                 return
             }
             if line.hasPrefix("Launched application") || line.hasPrefix("Waiting for the application to terminate") {

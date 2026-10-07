@@ -385,7 +385,7 @@ iOS, and the other way round.
   It prints a line per test and exits 0 when every test passed, 1 when one failed and 2 when the
   tests could not start. `--artifacts` gets `results.json`, `junit.xml`, a video and, after a
   failure, a screenshot of every test in its own folder, the activity log and copied crash
-  reports. `--test <name>` runs one test (repeatable), `--var NAME=value` sets a variable,
+  reports. A failed test also carries what the app printed during it and how the app ended. `--test <name>` runs one test (repeatable), `--var NAME=value` sets a variable,
   `--no-video` and `--wait` work as for `Mobdev flow`. iPhones need the running app: call
   `run_tests` over MCP or the HTTP API.
 

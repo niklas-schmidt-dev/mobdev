@@ -380,10 +380,14 @@ private struct TestDetail: View {
         .padding(16)
     }
 
-    /// The steps as they ran, or as the file lists them before any run.
+    /// The steps as they ran and what the app printed, or the steps as the file lists them before any run.
     private var lines: String {
-        if let outcome, !outcome.steps.isEmpty { return outcome.stepLines.joined(separator: "\n") }
-        return test.steps.enumerated().map { "\($0 + 1). \($1.summary)" }.joined(separator: "\n")
+        guard let outcome, !outcome.steps.isEmpty else {
+            return test.steps.enumerated().map { "\($0 + 1). \($1.summary)" }.joined(separator: "\n")
+        }
+        var lines = outcome.stepLines
+        if let log = outcome.log, !log.isEmpty { lines += ["", "The app printed:"] + log }
+        return lines.joined(separator: "\n")
     }
 }
 

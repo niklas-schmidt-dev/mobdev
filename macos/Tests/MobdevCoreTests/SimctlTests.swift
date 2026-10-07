@@ -9,6 +9,9 @@ import Testing
         let calls = Locked<[[String]]>([])
         var listapps = ""
         var console: [String] = []
+        /// When set, the console ends with this status right after its lines, as simctl does when
+        /// it could not launch the app.
+        var exitStatus: Int32?
 
         func run(_ executable: URL, _ arguments: [String], timeout: TimeInterval) async throws -> CommandResult {
             calls.withLock { $0.append(arguments) }
@@ -22,6 +25,7 @@ import Testing
         ) throws -> RunningCommand {
             calls.withLock { $0.append([executable.path] + arguments) }
             for line in console { onLine(line) }
+            if let exitStatus { onExit(exitStatus) }
             return Stopper()
         }
 
@@ -71,7 +75,8 @@ import Testing
     @Test func appsInstallLaunchAndRemoveThroughSimctl() async throws {
         let simctl = FakeSimctl()
         simctl.listapps = Self.listapps
-        simctl.console = ["fixture: launched"]
+        // simctl's own pid line, then the app's output.
+        simctl.console = ["dev.mobdev.fixture: 4242", "fixture: launched"]
         let control = DeviceControl(
             udid: "SIM-1", runner: simctl, reportsFolder: FileManager.default.temporaryDirectory, simulator: true,
             simctl: true)
@@ -103,5 +108,27 @@ import Testing
         #expect(launch.contains("SIMCTL_CHILD_A=1"))
         #expect(Array(launch.suffix(4)) == ["--terminate-running-process", "SIM-1", "dev.mobdev.fixture", "crash"])
         #expect(launch.contains("/usr/bin/script"))
+        #expect(simctl.calls.get().filter { $0.first == "/usr/bin/env" }.count == 1)
+    }
+
+    /// A simctl that cannot launch the app prints why and exits before its pid line. GitHub's
+    /// slow simulators do that right after an install, so the launch is tried three times and
+    /// then fails with simctl's reason instead of a "Launched" that shows the home screen.
+    @Test func aLaunchSimctlRefusesIsTriedAgainAndThenFails() async throws {
+        let simctl = FakeSimctl()
+        simctl.listapps = Self.listapps
+        simctl.console = ["An error was encountered processing the command (domain=FBSOpenApplicationServiceErrorDomain, code=1):"]
+        simctl.exitStatus = 1
+        let control = DeviceControl(
+            udid: "SIM-1", runner: simctl, reportsFolder: FileManager.default.temporaryDirectory, simulator: true,
+            simctl: true)
+        do {
+            _ = try await control.launch("dev.mobdev.fixture", arguments: [], environment: [:], restart: true)
+            Issue.record("the launch should fail")
+        } catch {
+            #expect(String(describing: error).hasPrefix("simctl could not launch dev.mobdev.fixture in 3 tries: An error was encountered"))
+        }
+        #expect(simctl.calls.get().filter { $0.first == "/usr/bin/env" }.count == DeviceControl.simctlLaunchAttempts)
+        #expect(control.logs.status(for: "dev.mobdev.fixture") != "running")
     }
 }

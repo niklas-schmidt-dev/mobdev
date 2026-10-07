@@ -17,6 +17,16 @@ import Testing
     func tools(_ phone: FakePhone) -> PhoneTools {
         PhoneTools(phone: phone, activity: ActivityLog(), settleDelay: 0)
     }
+}
+
+extension PhoneTools {
+    /// Every test of a project, without video, for the tests here.
+    func runTests(project: TestProject, output: URL) async -> TestRunResult {
+        await runTests(project, options: TestRunOptions(output: output, video: false), source: "test")
+    }
+}
+
+extension TestRunnerTests {
 
     @Test func parsesAProjectAndItsTests() throws {
         let root = try folder()
@@ -237,6 +247,36 @@ import Testing
         let saved = try String(contentsOf: root.appendingPathComponent("out/results.json"), encoding: .utf8)
         #expect(!saved.contains("hunter2"))
         #expect(!result.junit.contains("hunter2"))
+    }
+
+    /// A failure carries what the app printed during the test and how the app is doing, so the
+    /// reason is in the results rather than in a log an agent would have to fetch.
+    @Test func aFailureCarriesTheAppsOutputAndState() async throws {
+        let root = try folder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try write("{\"app\": {\"bundle_id\": \"dev.mobdev.fixture\"}}", to: root.appendingPathComponent("mobdev.json"))
+        try write(
+            "{\"steps\": [{\"open_url\": {\"url\": \"mobdevfixture://one\"}}, {\"tap\": {\"x\": 9999, \"y\": 1}}]}",
+            to: root.appendingPathComponent("tests/fails.json"))
+        try write("{\"steps\": [{\"open_url\": {\"url\": \"mobdevfixture://two\"}}]}", to: root.appendingPathComponent("tests/passes.json"))
+        let apps = FakeApps()
+        apps.logs.append(app: "dev.mobdev.fixture", text: "fixture: from before the run")
+        apps.logs.setStatus("exited with code 3", for: "dev.mobdev.fixture")
+        let phone = FakePhone(lines: [], apps: apps)
+        let result = await tools(phone).runTests(project: try TestProject.load(root), output: root.appendingPathComponent("out"))
+
+        let failed = try #require(result.tests.first { $0.slug == "fails" })
+        #expect(failed.status == .failed)
+        #expect(failed.message.hasSuffix("is outside the screenshot, which is 590×1280 px. The app exited with code 3."))
+        #expect(failed.log == ["fixture: opened mobdevfixture://one"])
+        #expect(failed.detailLines.contains("  The app printed:"))
+        #expect(failed.detailLines.contains("    fixture: opened mobdevfixture://one"))
+        #expect(result.text.contains("    fixture: opened mobdevfixture://one"))
+        #expect(result.junit.contains("The app printed:\nfixture: opened mobdevfixture://one</failure>"))
+        let passed = try #require(result.tests.first { $0.slug == "passes" })
+        #expect(passed.log == nil)
+        #expect(passed.detailLines.isEmpty)
+        #expect(try TestRunResult.load(root.appendingPathComponent("out")).tests == result.tests)
     }
 
     @Test func projectToolsListSaveRunAndReport() async throws {

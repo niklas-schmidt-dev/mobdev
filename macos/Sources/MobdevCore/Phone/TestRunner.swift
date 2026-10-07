@@ -69,6 +69,8 @@ public struct TestRunResult: Sendable, Codable, Equatable {
         /// The screen when the test failed, as a PNG on the Mac.
         public var screenshot: String?
         public var video: String?
+        /// What the project's app printed during a failed test, its newest lines.
+        public var log: [String]?
 
         /// "✓ Sign in (4.2 s)", "✗ Checkout (1.0 s): step 3 of 5, tap_element {…}: …", "– Pay: not for android".
         public var line: String {
@@ -87,7 +89,24 @@ public struct TestRunResult: Sendable, Codable, Equatable {
                 return "\(step.passed ? "✓" : "✗") \(index + 1). \(step.summary): \(step.passed ? first : step.text)"
             }
         }
+
+        /// The failure's files and the app's output, indented under the test's line.
+        public var detailLines: [String] {
+            guard status == .failed else { return [] }
+            var lines: [String] = []
+            if let screenshot { lines.append("  Screenshot: \(screenshot)") }
+            if let video { lines.append("  Video: \(video)") }
+            if let log, !log.isEmpty {
+                lines.append("  The app printed:")
+                lines += log.suffix(TestRunResult.shownLogLines).map { "    \($0)" }
+            }
+            return lines
+        }
     }
+
+    /// How many of a failed test's app lines the summaries show; results.json keeps more.
+    public static let shownLogLines = 12
+    static let keptLogLines = 60
 
     public static let resultsFileName = "results.json"
     public static let junitFileName = "junit.xml"
@@ -152,10 +171,7 @@ public struct TestRunResult: Sendable, Codable, Equatable {
         for step in setup where !step.passed { lines.append("✗ \(step.summary): \(step.text)") }
         for test in tests {
             lines.append(test.line)
-            if test.status == .failed {
-                if let screenshot = test.screenshot { lines.append("  Screenshot: \(screenshot)") }
-                if let video = test.video { lines.append("  Video: \(video)") }
-            }
+            lines += test.detailLines
         }
         lines.append("Results: \(output)/\(Self.resultsFileName)")
         return lines.joined(separator: "\n")
@@ -196,7 +212,9 @@ public struct TestRunResult: Sendable, Codable, Equatable {
             )
             switch test.status {
             case .failed:
-                lines.append("      <failure message=\"\(escape(test.message))\">\(escape(test.stepLines.joined(separator: "\n")))</failure>")
+                var body = test.stepLines
+                if let log = test.log, !log.isEmpty { body += ["", "The app printed:"] + log }
+                lines.append("      <failure message=\"\(escape(test.message))\">\(escape(body.joined(separator: "\n")))</failure>")
             case .skipped:
                 lines.append("      <skipped message=\"\(escape(test.message))\"/>")
             case .passed:
@@ -347,7 +365,7 @@ extension PhoneTools {
             if !test.runs(on: kind) {
                 let skipped = TestRunResult.Test(
                     name: test.name, slug: test.slug, file: test.file.path, status: .skipped, seconds: 0, steps: [],
-                    failedStep: nil, message: "not for \(TestCase.platformName(kind))", screenshot: nil, video: nil)
+                    failedStep: nil, message: "not for \(TestCase.platformName(kind))", screenshot: nil, video: nil, log: nil)
                 result.tests.append(skipped)
                 progress?(skipped)
                 continue
@@ -395,7 +413,7 @@ extension PhoneTools {
         let written = project.beforeEach + test.flow.steps
         var outcome = TestRunResult.Test(
             name: test.name, slug: test.slug, file: test.file.path, status: .passed, seconds: 0, steps: [], failedStep: nil,
-            message: "", screenshot: nil, video: nil)
+            message: "", screenshot: nil, video: nil, log: nil)
         // Every variable first, so a test never half-runs because of a typo in its last step.
         var prepared: [Flow.Step] = []
         for (index, step) in written.enumerated() {
@@ -411,7 +429,10 @@ extension PhoneTools {
         }
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let bundleID = project.app.bundleID
-        let statusBefore = bundleID.flatMap { phone.apps?.logs.status(for: $0) }
+        let logs = phone.apps?.logs
+        let statusBefore = bundleID.flatMap { logs?.status(for: $0) }
+        // Where the app's output stands now, so a failure shows only what it printed during the test.
+        let cursor = bundleID.flatMap { logs?.read(app: $0, after: nil, limit: 1, contains: nil).cursor }
         let flow = Flow(name: test.name, steps: prepared)
         let result = await Flow.recording(phone, to: video ? folder.appendingPathComponent("run.mp4") : nil) {
             await run(flow, source: source)
@@ -428,10 +449,18 @@ extension PhoneTools {
             let text = variables.redact(result.steps.last?.text ?? "")
             outcome.message = "step \(index) of \(written.count), \(written[max(index - 1, 0)].summary): \(text)"
         }
-        if let bundleID, let after = phone.apps?.logs.status(for: bundleID), after.hasPrefix("crashed"), after != statusBefore {
+        if let bundleID, let after = logs?.status(for: bundleID), after.hasPrefix("crashed"), after != statusBefore {
             outcome.status = .failed
             let crash = "\(bundleID) \(after)"
             outcome.message = outcome.message.isEmpty ? crash : "\(outcome.message) \(crash)"
+        }
+        if outcome.status == .failed, let bundleID, let logs {
+            // How the app is doing and what it printed: a launch that ended, an error it logged.
+            if let status = logs.status(for: bundleID), status != "running", !status.hasPrefix("crashed") {
+                outcome.message += " The app \(status)."
+            }
+            let lines = logs.read(app: bundleID, after: cursor, limit: 2000, contains: nil).lines.map(\.text)
+            if !lines.isEmpty { outcome.log = Array(lines.suffix(TestRunResult.keptLogLines)) }
         }
         var image: EncodedImage?
         if outcome.status == .failed, let frame = phone.frame() {
