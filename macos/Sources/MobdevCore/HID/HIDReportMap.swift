@@ -125,4 +125,6 @@ public enum ConsumerUsage: UInt16, Sendable {
     case volumeDown = 0x00EA
     case mute = 0x00E2
     case playPause = 0x00CD
+    /// The side button. Only simulators and Android get it: Mobdev could not unlock an iPhone again.
+    case power = 0x0030
 }

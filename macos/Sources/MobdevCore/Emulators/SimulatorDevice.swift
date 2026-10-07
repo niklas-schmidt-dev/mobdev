@@ -172,6 +172,10 @@ public final class SimulatorDevice: Device, @unchecked Sendable {
             try kit.button(id, .home, down: true)
             await pause(0.1)
             try kit.button(id, .home, down: false)
+        case .power:
+            try kit.button(id, .lock, down: true)
+            await pause(0.1)
+            try kit.button(id, .lock, down: false)
         default:
             throw DeveloperError("The simulator has no \(button) button. Use press_key or the tools for apps.")
         }

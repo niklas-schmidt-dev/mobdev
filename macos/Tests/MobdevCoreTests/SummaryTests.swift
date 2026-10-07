@@ -25,6 +25,16 @@ import Testing
         #expect(cleared.data?["steps"] == [])
     }
 
+    @Test func buttonsArePressedButAnIPhoneIsNeverLocked() async throws {
+        let phone = FakePhone(lines: [])
+        let tools = PhoneTools(phone: phone, activity: ActivityLog(), settleDelay: 0)
+        let volume = try await tools.call("press_button", arguments: ["button": "volume_up"], source: "test", screenshotByDefault: false)
+        #expect(volume.text == "Pressed volume up.")
+        let lock = try await tools.call("press_button", arguments: ["button": "lock"], source: "test", screenshotByDefault: false)
+        #expect(lock.isError)
+        #expect(phone.events.get() == [.button(.volumeUp)])
+    }
+
     @Test func shortcutsRunThroughALinkWhereAppsAreReachable() async throws {
         let apps = FakeApps()
         let phone = FakePhone(lines: [], apps: apps)

@@ -198,6 +198,7 @@ public final class AndroidDevice: Device, @unchecked Sendable {
         case .volumeDown: 25
         case .mute: 164
         case .playPause: 85
+        case .power: 26
         }
         try await input("keyevent \(key)")
     }

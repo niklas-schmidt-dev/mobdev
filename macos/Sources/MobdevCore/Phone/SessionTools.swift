@@ -15,6 +15,14 @@ extension PhoneTools {
                 ], screenshot: false),
             readOnly: true),
         ToolDefinition(
+            name: "press_button", title: "Press button",
+            description:
+                "Press a hardware button: volume_up, volume_down, mute and play_pause on iPhones (through the Bluetooth keyboard) and Android; lock (the side button) on simulators and Android. An iPhone is never locked: Mobdev could not enter its passcode.",
+            inputSchema: schema(
+                ["button": ["type": "string", "enum": ["volume_up", "volume_down", "mute", "play_pause", "lock"]]],
+                required: ["button"]),
+            readOnly: false),
+        ToolDefinition(
             name: "run_shortcut", title: "Run shortcut",
             description:
                 "Run a shortcut from Apple's Shortcuts app by its name, e.g. one that turns on Do Not Disturb or sets the brightness. Through a shortcuts:// link on simulators and iPhones in Developer Mode, otherwise through Spotlight. The shortcut must exist on the device. Not on Android.",
@@ -39,6 +47,20 @@ extension PhoneTools {
             return ToolOutput(
                 text: (lines + ["Pass these steps to save_test (steps) or run_flow."]).joined(separator: "\n"),
                 data: ["steps": .array(steps.map(\.json)), "flow": (try? JSONValue.parse(flow.encoded())) ?? .null])
+        case "press_button":
+            let name = try args.string("button")
+            let buttons: [String: ConsumerUsage] = [
+                "volume_up": .volumeUp, "volume_down": .volumeDown, "mute": .mute, "play_pause": .playPause, "lock": .power,
+            ]
+            guard let button = buttons[name] else {
+                throw ToolFailure("button must be volume_up, volume_down, mute, play_pause or lock.")
+            }
+            if button == .power, phone.status().input == .bluetooth {
+                throw ToolFailure("Mobdev does not lock an iPhone: it could not enter the passcode to unlock it again.")
+            }
+            try requireTouch()
+            try await phone.press(button)
+            return ToolOutput(text: "Pressed \(name.replacingOccurrences(of: "_", with: " ")).")
         case "run_shortcut":
             let shortcut = try args.string("name", maxLength: 100)
             if let apps = phone.apps {
