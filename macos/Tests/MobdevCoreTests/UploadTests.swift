@@ -333,8 +333,7 @@ func randomData(_ count: Int) -> Data {
         let attribute = Process()
         attribute.executableURL = URL(fileURLWithPath: "/usr/bin/xattr")
         attribute.arguments = ["-w", "dev.mobdev.test", "1", app.appendingPathComponent("Fixture").path]
-        try attribute.run()
-        attribute.waitUntilExit()
+        _ = try await attribute.runToExit(timeout: 60)
         for (tool, arguments) in [
             ("/usr/bin/ditto", ["-c", "-k", "--keepParent", app.path]),
             ("/usr/bin/ditto", ["-c", "-k", "--sequesterRsrc", "--keepParent", app.path]),
@@ -345,8 +344,7 @@ func randomData(_ count: Int) -> Data {
             process.executableURL = URL(fileURLWithPath: tool)
             process.arguments = tool.hasSuffix("zip") ? arguments + [zip.path, "Fixture.app"] : arguments + [zip.path]
             process.currentDirectoryURL = temporary.url
-            try process.run()
-            process.waitUntilExit()
+            _ = try await process.runToExit(timeout: 120)
             let unpacked = try await unpack(try Data(contentsOf: zip)).get()
             #expect(FileManager.default.fileExists(atPath: unpacked.appendingPathComponent("Info.plist").path), "\(tool)")
             #expect(try FileManager.default.destinationOfSymbolicLink(atPath: unpacked.appendingPathComponent("Link").path) == "Fixture")

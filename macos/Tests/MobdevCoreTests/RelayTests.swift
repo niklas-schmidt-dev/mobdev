@@ -44,7 +44,7 @@ import Testing
     }
 
     /// The shell must hand back exactly the value, running nothing in it.
-    @Test func everythingElseReachesTheCommandLiterally() throws {
+    @Test func everythingElseReachesTheCommandLiterally() async throws {
         let marker = FileManager.default.temporaryDirectory.appendingPathComponent("mobdev-shell-\(UUID().uuidString)")
         let values = [
             "https://relay.mobdev.sh/$(touch \(marker.path))/mcp", "`touch \(marker.path)`", "a'b\"c", "it's; touch \(marker.path)",
@@ -56,8 +56,7 @@ import Testing
             process.arguments = ["-c", "printf %s \(Shell.quoted(value))"]
             let pipe = Pipe()
             process.standardOutput = pipe
-            try process.run()
-            process.waitUntilExit()
+            _ = try await process.runToExit(timeout: 30)
             #expect(String(decoding: pipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self) == value)
         }
         #expect(!FileManager.default.fileExists(atPath: marker.path))
@@ -294,12 +293,10 @@ struct RelayProcess {
     let process: Process
     let base: URL
 
-    private static let binary = Locked<URL?>(nil)
-
     /// Several suites start relays in parallel, so the "free" port can be taken by the time the relay
     /// binds it; a relay that exits right away is retried on another port.
     static func start(environment: [String: String] = [:]) async throws -> RelayProcess {
-        let binary = try buildOnce()
+        let binary = try await built.value
         for _ in 0..<3 {
             let server = HTTPServer(port: 0) { _ in HTTPResponse(status: 200) }
             try await server.start()
@@ -327,13 +324,12 @@ struct RelayProcess {
 
     func stop() { process.terminate() }
 
-    /// One build for every suite: callers wait for the first build instead of starting their own.
-    private static let building = NSLock()
+    /// One build for every suite: callers await the first build instead of starting their own,
+    /// and hold no thread meanwhile. A lock around a blocking build once had every cooperative
+    /// thread of a three-core CI runner waiting on it, which stalled the whole suite (2026-10-07).
+    private static let built = Task { try await build() }
 
-    private static func buildOnce() throws -> URL {
-        building.lock()
-        defer { building.unlock() }
-        if let built = binary.get() { return built }
+    private static func build() async throws -> URL {
         let relayDirectory = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
             .deletingLastPathComponent().appendingPathComponent("relay")
@@ -342,10 +338,7 @@ struct RelayProcess {
         build.executableURL = URL(fileURLWithPath: RelayEndToEndTests.goPath!)
         build.arguments = ["build", "-o", output.path, "."]
         build.currentDirectoryURL = relayDirectory
-        try build.run()
-        build.waitUntilExit()
-        guard build.terminationStatus == 0 else { throw CocoaError(.executableLoad) }
-        binary.set(output)
+        guard try await build.runToExit(timeout: 600) == 0 else { throw CocoaError(.executableLoad) }
         return output
     }
 }
