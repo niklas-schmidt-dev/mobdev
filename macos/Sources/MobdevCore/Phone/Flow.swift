@@ -125,7 +125,7 @@ extension PhoneTools {
     ]
 
     /// Tools a flow may not call: another flow or the tests, and nothing that picks a different device.
-    static let flowExcluded: Set<String> = ["run_flow", "run_tests", "list_devices"]
+    static let flowExcluded: Set<String> = ["run_flow", "run_tests", "list_devices", "crawl_app"]
 
     func runFlowTool(_ args: Arguments, source: String) async throws -> ToolOutput {
         let flow: Flow
@@ -354,6 +354,7 @@ public final class FlowRecorder: Sendable {
     static let skipped: Set<String> = [
         "status", "screenshot", "read_screen", "find_text", "ui_tree", "list_apps", "logs", "crash_reports",
         "list_devices", "run_flow", "run_tests", "observe", "start_recording", "stop_recording", "recent_steps",
+        "crawl_app",
     ]
 
     /// A successful tool call. Consecutive typing merges into one step.

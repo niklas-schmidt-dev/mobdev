@@ -239,6 +239,24 @@ public final class AndroidDevice: Device, @unchecked Sendable {
         return elements
     }
 
+    /// The package of the focused window, from "mCurrentFocus=Window{… u0 com.android.settings/…}".
+    public func frontmostApp() async throws -> String? {
+        let output = try await adb.shell(id, "dumpsys window | grep -E 'mCurrentFocus|mFocusedApp'", timeout: 10)
+        return Self.focusedPackage(output)
+    }
+
+    static func focusedPackage(_ dumpsys: String) -> String? {
+        for line in dumpsys.split(separator: "\n") where line.contains("mCurrentFocus") || line.contains("mFocusedApp") {
+            for word in line.split(whereSeparator: { $0 == " " || $0 == "}" || $0 == "{" }) where word.contains("/") {
+                let package = word.split(separator: "/").first.map(String.init) ?? ""
+                if package.contains("."), package.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "." || $0 == "_" }) {
+                    return package
+                }
+            }
+        }
+        return nil
+    }
+
     /// adb does not know app names, so the name is matched against launchable packages: "Settings"
     /// opens com.android.settings, "Chrome" com.android.chrome.
     public func openApp(named name: String) async throws -> String? {

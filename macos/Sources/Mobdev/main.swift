@@ -31,6 +31,11 @@ if CommandLine.arguments.dropFirst().first == "__ui-tree", CommandLine.arguments
     SimulatorAccessibility.printTree(udid: CommandLine.arguments[2])
 }
 
+// `Mobdev __front-app <udid>` names a simulator's frontmost app in a fresh process, for the app itself.
+if CommandLine.arguments.dropFirst().first == "__front-app", CommandLine.arguments.count == 3 {
+    SimulatorAccessibility.printFrontmost(udid: CommandLine.arguments[2])
+}
+
 // `Mobdev __text <width> <height> [query]` recognizes text in pixels from stdin in a fresh process,
 // for the app itself.
 if CommandLine.arguments.dropFirst().first == "__text" {

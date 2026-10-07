@@ -107,6 +107,49 @@ public final class SimulatorAccessibility: @unchecked Sendable {
         return items.compactMap(element(from:))
     }
 
+    /// The frontmost app's name as accessibility gives it, e.g. "Settings" or "Home screen".
+    func frontmostName(of device: NSObject) throws -> String {
+        lock.lock()
+        defer { lock.unlock() }
+        let token = UUID().uuidString as NSString
+        bridge.register(device, token: token)
+        defer { bridge.unregister(token) }
+        let selector = NSSelectorFromString("frontmostApplicationWithDisplayId:bridgeDelegateToken:")
+        guard let method = class_getMethodImplementation(object_getClass(translator), selector),
+            let translation = unsafeBitCast(method, to: Frontmost.self)(translator, selector, 0, token) as? NSObject
+        else { throw DeveloperError("The simulator did not say which app is in front.") }
+        translation.setValue(token, forKey: "bridgeDelegateToken")
+        guard
+            let root = translator.perform(NSSelectorFromString("macPlatformElementFromTranslation:"), with: translation)?
+                .takeUnretainedValue() as? NSAccessibilityElement
+        else { throw DeveloperError("The simulator's app has no accessibility element.") }
+        return root.accessibilityLabel() ?? ""
+    }
+
+    /// `Mobdev __front-app <udid>`: prints {"name": …} for the frontmost app and exits.
+    public static func printFrontmost(udid: String) -> Never {
+        let output: JSONValue
+        var status: Int32 = 0
+        do {
+            guard let kit = SimulatorKit.shared else { throw DeveloperError("Simulators need Xcode.") }
+            output = ["name": .string(try kit.frontmostAppInProcess(udid))]
+        } catch {
+            output = ["error": .string(String(describing: error))]
+            status = 1
+        }
+        FileHandle.standardOutput.write(output.encoded())
+        exit(status)
+    }
+
+    static func frontmost(_ udid: String, helper: URL) throws -> String {
+        let (status, data) = try ProcessRunner().runBinary(helper, ["__front-app", udid], timeout: 20)
+        let value = try? JSONValue.parse(data)
+        guard status == 0, let name = value?["name"]?.stringValue else {
+            throw DeveloperError(value?["error"]?.stringValue ?? "Could not tell which app is in front (exit \(status)).")
+        }
+        return name
+    }
+
     /// `Mobdev __ui-tree <udid>`: prints the frontmost app's elements as JSON and exits.
     public static func printTree(udid: String) -> Never {
         let output: JSONValue

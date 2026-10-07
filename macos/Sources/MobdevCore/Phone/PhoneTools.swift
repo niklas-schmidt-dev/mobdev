@@ -230,7 +230,7 @@ public final class PhoneTools: Sendable {
                         "gone": ["type": "boolean"],
                     ], required: ["text"]), readOnly: true),
         ] + observeDefinitions + treeDefinitions + appDefinitions + settingsDefinitions + recordingDefinitions
-            + sessionDefinitions + flowDefinitions + testDefinitions
+            + sessionDefinitions + crawlDefinitions + flowDefinitions + testDefinitions
     }()
 
     public static func definition(named name: String) -> ToolDefinition? {
@@ -251,6 +251,7 @@ public final class PhoneTools: Sendable {
             switch name {
             case "run_flow": output = try await runFlowTool(args, source: source)
             case "run_tests": output = try await runTestsTool(args, source: source)
+            case "crawl_app", "navigate_to": output = try await runCrawlTool(name, args, source: source)!
             default: output = try await run(name, args)
             }
             let wantsScreenshot = args.bool("screenshot") ?? screenshotByDefault

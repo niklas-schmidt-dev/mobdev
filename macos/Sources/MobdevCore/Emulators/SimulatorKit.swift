@@ -180,6 +180,17 @@ final class SimulatorKit: @unchecked Sendable {
         return try SimulatorAccessibility.shared.get().elements(of: device, udid: udid)
     }
 
+    /// The frontmost app's name, in a helper process like the tree.
+    func frontmostApp(_ udid: String) throws -> String {
+        if let helper = SimulatorAccessibility.helper { return try SimulatorAccessibility.frontmost(udid, helper: helper) }
+        return try frontmostAppInProcess(udid)
+    }
+
+    func frontmostAppInProcess(_ udid: String) throws -> String {
+        guard let device = device(udid) else { throw DeveloperError("The simulator \(udid) is not booted.") }
+        return try SimulatorAccessibility.shared.get().frontmostName(of: device)
+    }
+
     // MARK: Screen
 
     /// The simulator's main display as an image, read from its framebuffer surface.

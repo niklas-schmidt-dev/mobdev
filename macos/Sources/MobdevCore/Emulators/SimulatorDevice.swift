@@ -184,6 +184,15 @@ public final class SimulatorDevice: Device, @unchecked Sendable {
         return "Opened \(app.name) (\(app.bundleID))."
     }
 
+    public func frontmostApp() async throws -> String? {
+        let kit = self.kit, id = self.id
+        return try await withCheckedThrowingContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                continuation.resume(with: Result { try kit.frontmostApp(id) })
+            }
+        }
+    }
+
     /// The frontmost app's accessibility elements, read off the cooperative threads since each
     /// element is a round trip to the simulator.
     public func uiTree() async throws -> [UIElement]? {
