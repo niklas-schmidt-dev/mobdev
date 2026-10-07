@@ -44,20 +44,26 @@ struct AppleIntelligenceJudge: ScreenJudge {
         #if canImport(FoundationModels)
         let model = SystemLanguageModel.default
         if case .unavailable(let reason) = model.availability { throw ToolFailure(Self.message(for: reason)) }
-        var vision = false
-        if #available(macOS 27, *) { vision = model.capabilities.contains(.vision) }
         let session = LanguageModelSession(model: model, instructions: Self.instructions)
         // A bound on the answer: once the model repeated itself until its context was full, which
         // took over three minutes (2026-10-07).
+        // Images, and the samplingMode label, came with the macOS 27 SDK (Swift 6.4, Xcode 27);
+        // built with Xcode 26 the judge reads the screen's text, as on a Mac without image input.
+        #if compiler(>=6.4)
         let options = GenerationOptions(samplingMode: .greedy, maximumResponseTokens: 300)
+        #else
+        let options = GenerationOptions(sampling: .greedy, maximumResponseTokens: 300)
+        #endif
         do {
-            if #available(macOS 27, *), vision {
+            #if compiler(>=6.4)
+            if #available(macOS 27, *), model.capabilities.contains(.vision) {
                 let response = try await session.respond(generating: Verdict.self, options: options) {
                     "Question about this screen: \(question)"
                     Attachment(screenshot)
                 }
                 return response.content.judgement(sawImage: true)
             }
+            #endif
             guard !screenText.isEmpty else {
                 throw ToolFailure("Apple Intelligence on this Mac takes no images, and the screen shows no text to judge from.")
             }
