@@ -22,6 +22,11 @@ extension PhoneTools {
                         "description": "Values for ${NAME} in the steps, over the project's variables; secrets go here",
                     ],
                     "video": ["type": "boolean", "description": "Record each test, default true"],
+                    "language": [
+                        "type": "string",
+                        "description":
+                            "Run the tests in this language, e.g. de-DE: the simulator's, or the Android app's (needs the project's bundle_id). Steps see it as ${LANGUAGE}; the old language comes back afterwards",
+                    ],
                 ], required: ["project"], screenshot: false),
             readOnly: false)
     ]
@@ -32,7 +37,8 @@ extension PhoneTools {
         if tests.isEmpty { tests = selected }
         let options = TestRunOptions(
             output: try TestRuns.newRunFolder(for: project), tests: tests,
-            variables: try args.stringDictionary("variables"), video: args.bool("video") ?? true)
+            variables: try args.stringDictionary("variables"), video: args.bool("video") ?? true,
+            language: args.has("language") ? try args.string("language") : nil)
         let result = await runTests(project, options: options, source: source)
         return ToolOutput(text: result.text, data: result.json, image: result.failureImage, isError: !result.passed)
     }

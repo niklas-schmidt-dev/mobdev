@@ -1,7 +1,7 @@
 import Foundation
 
-/// `Mobdev test <project> [--device <id or name>] [--artifacts <dir>] [--test <name>]…
-/// [--var NAME=value]… [--no-video] [--wait <seconds>]`: runs a project's tests on a booted iOS
+/// `Mobdev test <project> [--device <id or name>]… [--simulator <type>]… [--language <tag>]…
+/// [--artifacts <dir>] [--test <name>]… [--var NAME=value]… [--no-video] [--wait <seconds>]`: runs a project's tests on a booted iOS
 /// simulator or Android device without the app, for scripts and CI. iPhones need the running app;
 /// there, call `run_tests` through MCP or the HTTP API.
 ///
@@ -11,7 +11,7 @@ import Foundation
 /// current step and still writes the results.
 public enum TestCommand {
     static let usage = """
-        Usage: Mobdev test <project> [--device <id or name>]... [--simulator <device type>]... [--artifacts <dir>] [--test <name>]... [--var NAME=value]... [--no-video] [--wait <seconds>]
+        Usage: Mobdev test <project> [--device <id or name>]... [--simulator <device type>]... [--language <tag>]... [--artifacts <dir>] [--test <name>]... [--var NAME=value]... [--no-video] [--wait <seconds>]
 
         Runs the tests of a project (a folder with tests/*.json or Maestro tests/*.yaml and
         mobdev.json, or one test file)
@@ -21,6 +21,10 @@ public enum TestCommand {
           --simulator  create, boot and afterwards delete a simulator of this type for the run,
                        e.g. "iPhone 17" or "iPhone 17,com.apple.CoreSimulator.SimRuntime.iOS-26-5";
                        repeatable, and combinable with --device
+          --language   run the tests in this language, e.g. de-DE: the simulator's, or the Android
+                       app's (needs app.bundle_id in mobdev.json). Repeat it to run every language
+                       on each device in turn, in a folder per language. Steps see it as
+                       ${LANGUAGE}, and each device gets its old language back afterwards
           --artifacts  where to keep results.json, junit.xml, each test's video and failure
                        screenshot, the activity log and crash reports
           --test       run only this test (file name without .json or .yaml, or its name); repeatable
@@ -46,6 +50,8 @@ public enum TestCommand {
         var moreDevices: [String] = []
         /// Simulators to create for the run, as "<device type>" or "<device type>,<runtime>".
         var simulators: [String] = []
+        /// Languages to run the tests in, one after another on each device.
+        var languages: [String] = []
 
         /// Every device query, the first `--device` first.
         var deviceQueries: [String] { (device.map { [$0] } ?? []) + moreDevices }
@@ -58,12 +64,17 @@ public enum TestCommand {
         while let argument = rest.popFirst() {
             switch argument {
             case "--no-video": options.video = false
-            case "--device", "--artifacts", "--wait", "--test", "--var", "--simulator":
+            case "--device", "--artifacts", "--wait", "--test", "--var", "--simulator", "--language":
                 guard let value = rest.popFirst() else { throw ToolFailure("\(argument) needs a value.") }
                 switch argument {
                 case "--device":
                     if options.device == nil { options.device = value } else { options.moreDevices.append(value) }
                 case "--simulator": options.simulators.append(value)
+                case "--language":
+                    guard !value.isEmpty, value.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" }) else {
+                        throw ToolFailure("--language needs a language tag such as de-DE.")
+                    }
+                    if !options.languages.contains(value) { options.languages.append(value) }
                 case "--artifacts": options.artifacts = value
                 case "--test": options.tests.append(value)
                 case "--var":
@@ -119,7 +130,9 @@ public enum TestCommand {
             return 2
         }
 
-        if options.deviceQueries.count + options.simulators.count > 1 || !options.simulators.isEmpty {
+        if options.deviceQueries.count + options.simulators.count > 1 || !options.simulators.isEmpty
+            || options.languages.count > 1
+        {
             return await runOnSeveral(project, selected: selected, options: options, home: home.url, output: output)
         }
 
@@ -129,7 +142,9 @@ public enum TestCommand {
         let device = connection.device
 
         output("Running \(project.name) (\(selected.isEmpty ? project.tests.count : selected.count) tests) on \(device.name) (\(device.id))")
-        let runOptions = TestRunOptions(output: home.url, tests: selected, variables: options.variables, video: options.video)
+        let runOptions = TestRunOptions(
+            output: home.url, tests: selected, variables: options.variables, video: options.video,
+            language: options.languages.first)
         let result: TestRunResult
         do {
             result = try await connection.tools.runTests(project, on: device.id, options: runOptions, source: "cli") { test in
@@ -154,8 +169,9 @@ public enum TestCommand {
     }
 
     /// Runs the project on several devices at once, each into a folder of its own named after the
-    /// device, with every line prefixed by the device's name. Simulators made for the run are
-    /// deleted afterwards. The exit code is the worst of all runs, and summary.md covers them all.
+    /// device, with every line prefixed by the device's name. Each device runs the languages one
+    /// after another, each into a folder of its own inside the device's. Simulators made for the
+    /// run are deleted afterwards. The exit code is the worst of all runs, and summary.md covers them all.
     static func runOnSeveral(
         _ project: TestProject, selected: [String], options: Options, home: URL,
         output: @escaping @Sendable (String) -> Void
@@ -177,37 +193,57 @@ public enum TestCommand {
             return 2
         }
         defer { connection.emulators.stop() }
-        output("Running \(project.name) on \(connection.devices.map(\.name).joined(separator: ", ")) at once")
-        let results = await withTaskGroup(of: TestRunResult?.self) { group in
+        let languages: [String?] = options.languages.isEmpty ? [nil] : options.languages
+        output(
+            "Running \(project.name) on \(connection.devices.map(\.name).joined(separator: ", "))"
+                + (connection.devices.count > 1 ? " at once" : "")
+                + (options.languages.isEmpty ? "" : " in \(options.languages.joined(separator: ", "))"))
+        let results = await withTaskGroup(of: [TestRunResult?].self) { group in
             for device in connection.devices {
-                let folder = home.appendingPathComponent(
+                let deviceFolder = home.appendingPathComponent(
                     "\(TestProject.slug(device.name))-\(device.id.prefix(8))", isDirectory: true)
-                let runOptions = TestRunOptions(output: folder, tests: selected, variables: options.variables, video: options.video)
                 let name = device.name, id = device.id, tools = connection.tools
                 group.addTask {
-                    do {
-                        return try await tools.runTests(project, on: id, options: runOptions, source: "cli") { test in
-                            output("[\(name)] \(test.line)")
-                            for line in test.detailLines { output("[\(name)] \(line)") }
+                    var results: [TestRunResult?] = []
+                    for language in languages {
+                        let folder = language.map { deviceFolder.appendingPathComponent($0, isDirectory: true) } ?? deviceFolder
+                        let runOptions = TestRunOptions(
+                            output: folder, tests: selected, variables: options.variables, video: options.video,
+                            language: language)
+                        let label = "[\(name)\(language.map { ", \($0)" } ?? "")]"
+                        do {
+                            results.append(
+                                try await tools.runTests(project, on: id, options: runOptions, source: "cli") { test in
+                                    output("\(label) \(test.line)")
+                                    for line in test.detailLines { output("\(label) \(line)") }
+                                })
+                        } catch {
+                            output("\(label) \(error)")
+                            results.append(nil)
                         }
-                    } catch {
-                        output("[\(name)] \(error)")
-                        return nil
+                        if Task.isCancelled { break }
                     }
+                    return results
                 }
             }
-            var results: [TestRunResult] = []
-            for await result in group { if let result { results.append(result) } }
+            var results: [TestRunResult?] = []
+            for await batch in group { results += batch }
             return results
         }
-        var code: Int32 = results.count < connection.devices.count ? 2 : 0
-        for result in results.sorted(by: { $0.device.name < $1.device.name }) {
+        let finished = results.compactMap { $0 }.sorted {
+            ($0.device.name, $0.language ?? "") < ($1.device.name, $1.language ?? "")
+        }
+        var code: Int32 = finished.count < connection.devices.count * languages.count ? 2 : 0
+        for result in finished {
             output(result.summaryLine)
             code = max(code, exitCode(result))
         }
-        let markdown = results.sorted { $0.device.name < $1.device.name }.map(\.markdown).joined(separator: "\n")
+        let markdown = finished.map(\.markdown).joined(separator: "\n")
         try? Data(markdown.utf8).write(to: home.appendingPathComponent(TestRunResult.summaryFileName))
-        if options.artifacts != nil { output("Results: one folder per device in \(home.path), and summary.md") }
+        if options.artifacts != nil {
+            output(
+                "Results: one folder per device\(options.languages.isEmpty ? "" : " and language") in \(home.path), and summary.md")
+        }
         return code
     }
 }

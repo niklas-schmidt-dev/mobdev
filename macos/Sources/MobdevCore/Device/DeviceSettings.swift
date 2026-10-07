@@ -106,6 +106,20 @@ public enum Orientation: String, Sendable, CaseIterable {
     }
 }
 
+/// The languages before `setLanguage`: a simulator's preferred languages and region, or the ones
+/// an Android app uses. Empty languages mean none were set: the defaults, or an Android app that
+/// follows the device.
+public struct SavedLanguage: Sendable, Equatable {
+    public var languages: [String]
+    /// A simulator's region, like "en_US".
+    public var locale: String?
+
+    public init(languages: [String], locale: String? = nil) {
+        self.languages = languages
+        self.locale = locale
+    }
+}
+
 /// Device state that tests and agents set directly instead of tapping through Settings: location,
 /// permissions, push notifications, appearance, language, the status bar, biometrics, an app's data,
 /// the clipboard and the orientation. Simulators and iPhones implement it with `simctl` and
@@ -124,6 +138,9 @@ public protocol DeviceSettings: Sendable {
     func setAppearance(_ appearance: Appearance) async throws
     /// A BCP 47 language such as "de-DE", optionally for one app only.
     func setLanguage(_ language: String, bundleID: String?) async throws -> String
+    /// What `setLanguage` changes, to put back afterwards with `restoreLanguage`.
+    func savedLanguage(bundleID: String?) async throws -> SavedLanguage
+    func restoreLanguage(_ saved: SavedLanguage, bundleID: String?) async throws
     /// Nil clears every override.
     func setStatusBar(_ override: StatusBarOverride?) async throws
     func biometrics(_ action: BiometricAction) async throws
@@ -256,6 +273,39 @@ extension DeviceControl: DeviceSettings {
         try await simctl(["spawn", udid, "defaults", "write", "-g", "AppleLocale", locale])
         return "The simulator's language is now \(language). Apps use it from their next launch: relaunch with launch_app."
             + (bundleID == nil ? "" : " iOS sets the language for the whole simulator, not for one app.")
+    }
+
+    public func savedLanguage(bundleID: String?) async throws -> SavedLanguage {
+        try simulatorOnly("Changing the language", instead: "")
+        // `defaults read` fails when the key was never written, which is the simulator's default.
+        let languages = try? await simctl(["spawn", udid, "defaults", "read", "-g", "AppleLanguages"])
+        let locale = try? await simctl(["spawn", udid, "defaults", "read", "-g", "AppleLocale"])
+        return SavedLanguage(
+            languages: languages.map(Self.plistStrings) ?? [],
+            locale: locale.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.flatMap { $0.isEmpty ? nil : $0 })
+    }
+
+    public func restoreLanguage(_ saved: SavedLanguage, bundleID: String?) async throws {
+        try simulatorOnly("Changing the language", instead: "")
+        if saved.languages.isEmpty {
+            _ = try? await simctl(["spawn", udid, "defaults", "delete", "-g", "AppleLanguages"])
+        } else {
+            try await simctl(["spawn", udid, "defaults", "write", "-g", "AppleLanguages", "-array"] + saved.languages)
+        }
+        if let locale = saved.locale {
+            try await simctl(["spawn", udid, "defaults", "write", "-g", "AppleLocale", locale])
+        } else {
+            _ = try? await simctl(["spawn", udid, "defaults", "delete", "-g", "AppleLocale"])
+        }
+    }
+
+    /// `defaults read` prints an array the old way: `(\n    "en-US",\n    de\n)`.
+    static func plistStrings(_ output: String) -> [String] {
+        output.trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "()"))
+            .split(whereSeparator: { $0 == "," || $0 == "\n" })
+            .map { $0.trimmingCharacters(in: .whitespaces).trimmingCharacters(in: CharacterSet(charactersIn: "\"")) }
+            .filter { !$0.isEmpty }
     }
 
     public func setStatusBar(_ override: StatusBarOverride?) async throws {

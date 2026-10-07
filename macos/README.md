@@ -167,7 +167,7 @@ only device, or the connected iPhone when simulators or Android devices run next
 | `accessibility_audit` | `image`, `fail_on`, `ignore` | Missing labels, small tap targets, low text contrast, duplicate and unclear labels, from the UI tree |
 | `assert_with_ai` | `question`, `expect` | Asks Apple Intelligence on the Mac a yes/no question about the screen |
 | `run_flow` | `path`, `steps`, `variables`, `video` | Replays a flow (JSON or Maestro YAML) and stops at the first failing step; `video` saves a recording (.mp4) |
-| `run_tests` | `project`, `tests`, `variables`, `video` | Runs a project's tests on this device: every result, the first failure's screen, results.json and junit.xml |
+| `run_tests` | `project`, `tests`, `variables`, `video`, `language` | Runs a project's tests on this device: every result, the first failure's screen, results.json and junit.xml |
 | `list_tests` | `project` | A project's tests and its newest results |
 | `save_test` | `project`, `name`, `steps`, `description`, `platforms`, `file` | Writes a test into the project, creating it when needed |
 | `test_result` | `project`, `run` | The newest run's results, with each failure's step, screenshot and video |
@@ -650,6 +650,19 @@ iOS, and the other way round.
   app printed during it and how the app ended. `--test <name>` runs one test (repeatable), `--var NAME=value` sets a variable,
   `--no-video` and `--wait` work as for `Mobdev flow`. iPhones need the running app: call
   `run_tests` over MCP or the HTTP API.
+- **Several devices and languages.** Repeat `--device` to run on several booted devices at once,
+  and add `--simulator "iPhone 17"` (or `"iPhone 17,<runtime id>"`) to create and boot a simulator
+  of that type for the run and delete it afterwards. `--language de-DE` runs the tests in that
+  language: the simulator's, or on Android the app's (Android 13 and later, and it needs
+  `app.bundle_id`). Repeated, each device runs every language in turn. The run stops a running
+  iOS app so it starts in the new language, passes the language to the steps as `${LANGUAGE}`, and
+  puts the device's old language back afterwards. Each device, and each language, gets its own
+  folder, and `summary.md` at the top covers them all. `run_tests` takes `language` too.
+
+  ```sh
+  Mobdev test mobdev/ --simulator "iPhone 17" --simulator "iPhone SE (3rd generation)" \
+    --language en-US --language de-DE --artifacts test-artifacts
+  ```
 
 [`examples/tests`](../examples/tests) is a project for the example app, and
 [`.github/workflows/flows.yml`](../.github/workflows/flows.yml) runs it on GitHub's `macos-26`

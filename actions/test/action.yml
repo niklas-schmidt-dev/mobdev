@@ -30,6 +30,9 @@ inputs:
   variables:
     description: Values for ${NAME} in the steps, one NAME=value per line. Projects only; pass secrets through env instead.
     required: false
+  languages:
+    description: Run the tests once in each of these languages, one per line, e.g. de-DE; steps see it as ${LANGUAGE}. Projects only.
+    required: false
   version:
     description: Mobdev release to download, e.g. 0.2.27, or latest.
     required: false
@@ -72,6 +75,7 @@ runs:
         INPUT_FLOW: ${{ inputs.flow }}
         INPUT_TESTS: ${{ inputs.tests }}
         INPUT_VARIABLES: ${{ inputs.variables }}
+        INPUT_LANGUAGES: ${{ inputs.languages }}
         INPUT_VERSION: ${{ inputs.version }}
         INPUT_MOBDEV: ${{ inputs.mobdev }}
         INPUT_ARTIFACTS: ${{ inputs.artifacts }}
@@ -103,6 +107,7 @@ runs:
         INPUT_FLOW: ${{ inputs.flow }}
         INPUT_TESTS: ${{ inputs.tests }}
         INPUT_VARIABLES: ${{ inputs.variables }}
+        INPUT_LANGUAGES: ${{ inputs.languages }}
         MOBDEV_PATH: ${{ steps.prepare.outputs.mobdev }}
         ARTIFACTS: ${{ steps.prepare.outputs.artifacts }}
         UDID: ${{ steps.simulator.outputs.udid }}

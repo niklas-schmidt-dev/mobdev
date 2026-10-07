@@ -51,8 +51,8 @@ step_prepare() {
     [[ -e "$project" ]] || fail "project $project does not exist."
   else
     [[ -f "$flow" ]] || fail "flow $flow is not a file."
-    if [[ -n "${INPUT_TESTS:-}" || -n "${INPUT_VARIABLES:-}" ]]; then
-      fail "tests and variables work with project only."
+    if [[ -n "${INPUT_TESTS:-}" || -n "${INPUT_VARIABLES:-}" || -n "${INPUT_LANGUAGES:-}" ]]; then
+      fail "tests, variables and languages work with project only."
     fi
   fi
   local variable
@@ -165,6 +165,7 @@ step_run() {
     args=(test "$INPUT_PROJECT")
     while IFS= read -r item; do args+=(--test "$item"); done < <(lines "${INPUT_TESTS:-}")
     while IFS= read -r item; do args+=(--var "$item"); done < <(lines "${INPUT_VARIABLES:-}")
+    while IFS= read -r item; do args+=(--language "$item"); done < <(lines "${INPUT_LANGUAGES:-}")
   else
     args=(flow "$INPUT_FLOW")
   fi

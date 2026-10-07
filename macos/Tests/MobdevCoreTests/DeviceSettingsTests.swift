@@ -30,6 +30,13 @@ final class FakeSettings: DeviceSettings, @unchecked Sendable {
         note("language \(language) \(bundleID ?? "-")")
         return "Language set."
     }
+    func savedLanguage(bundleID: String?) async throws -> SavedLanguage {
+        note("save language \(bundleID ?? "-")")
+        return SavedLanguage(languages: ["en-US"], locale: "en_US")
+    }
+    func restoreLanguage(_ saved: SavedLanguage, bundleID: String?) async throws {
+        note("restore language \(saved.languages.joined(separator: ",")) \(bundleID ?? "-")")
+    }
     func setStatusBar(_ override: StatusBarOverride?) async throws {
         note(override.map { "status bar \($0.time ?? "-") \($0.batteryLevel.map(String.init) ?? "-")" } ?? "status bar clear")
     }

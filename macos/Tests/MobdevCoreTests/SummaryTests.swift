@@ -59,6 +59,20 @@ import Testing
         #expect(Simulators.createdUDID(printed) == "35AB1053-1A0C-41B3-A1E4-1C0F3C3B8F1C")
         #expect(Simulators.createdUDID("Invalid device type: iPhone 99") == nil)
     }
+
+    @Test func languagesAreRepeatableTags() throws {
+        let options = try TestCommand.parse(["p", "--language", "de-DE", "--language", "en", "--language", "de-DE"])
+        #expect(options.languages == ["de-DE", "en"])
+        #expect(throws: (any Error).self) { try TestCommand.parse(["p", "--language", "de DE"]) }
+        #expect(throws: (any Error).self) { try TestCommand.parse(["p", "--language"]) }
+    }
+
+    @Test func simulatorAndAndroidLanguagesReadBack() {
+        #expect(DeviceControl.plistStrings("(\n    \"en-US\",\n    de\n)\n") == ["en-US", "de"])
+        #expect(DeviceControl.plistStrings("") == [])
+        #expect(AndroidSettings.appLocales("Locales for com.example for user 0 are [de-DE,fr-FR]") == ["de-DE", "fr-FR"])
+        #expect(AndroidSettings.appLocales("Locales for com.example for user 0 are []") == [])
+    }
 }
 
 /// The Markdown that CI job summaries and pull request comments show.

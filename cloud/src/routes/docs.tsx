@@ -72,7 +72,7 @@ const tools = [
   ["assert_with_ai", "question, expect", msg("Ask Apple Intelligence on the Mac a yes/no question about the screen")],
   ["crawl_app", "bundle_id, max_actions, seconds, avoid", msg("Explore an app by itself and keep every crash with its steps")],
   ["navigate_to", "bundle_id, screen", msg("Go to a screen that crawl_app mapped")],
-  ["run_tests", "project, tests, variables, video", msg("Run a project's tests: every result, the first failure's screen, results.json and junit.xml")],
+  ["run_tests", "project, tests, variables, video, language", msg("Run a project's tests: every result, the first failure's screen, results.json and junit.xml")],
   ["list_tests", "project", msg("A project's tests and its newest results")],
   ["save_test", "project, name, steps, description, platforms, file", msg("Write a test into a project, creating it when needed")],
   ["test_result", "project, run", msg("The newest run's results with each failure's step, screenshot and video")],
@@ -503,8 +503,9 @@ function Docs() {
                 <p>
                   Repeat <code className={code}>--device</code> to run on several devices at once,
                   or add <code className={code}>--simulator "iPhone 17"</code> to make a simulator of that type for the
-                  run and delete it afterwards. Each device gets its own folder, and <code className={code}>summary.md</code> is
-                  ready for a CI job summary. When an agent has found a path through the
+                  run and delete it afterwards. <code className={code}>--language de-DE</code> runs the tests in that
+                  language, repeated in each language in turn, and puts the old one back afterwards. Each device and
+                  language gets its own folder, and <code className={code}>summary.md</code> is ready for a CI job summary. When an agent has found a path through the
                   app, <code className={code}>recent_steps</code> hands it the actions that worked, to save with <code className={code}>save_test</code>.
                 </p>
               </T>

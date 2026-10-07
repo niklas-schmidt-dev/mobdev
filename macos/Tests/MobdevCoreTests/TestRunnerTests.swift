@@ -249,6 +249,42 @@ extension TestRunnerTests {
         #expect(!result.junit.contains("hunter2"))
     }
 
+    /// A run in a language sets it before the first test, passes it as ${LANGUAGE} and puts the
+    /// device's old language back.
+    @Test func aLanguageIsSetForTheRunAndPutBack() async throws {
+        let root = try folder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try write("{\"app\": {\"bundle_id\": \"com.example.app\"}}", to: root.appendingPathComponent("mobdev.json"))
+        try write(
+            "{\"steps\": [{\"type_text\": {\"text\": \"${LANGUAGE}\"}}]}", to: root.appendingPathComponent("tests/greets.json"))
+        let project = try TestProject.load(root)
+        let settings = FakeSettings()
+        let phone = FakePhone(lines: [], settings: settings)
+        let result = await tools(phone).runTests(
+            project, options: TestRunOptions(output: root.appendingPathComponent("out"), video: false, language: "de-DE"),
+            source: "test")
+
+        #expect(result.passed)
+        #expect(result.language == "de-DE")
+        #expect(result.setup.map(\.summary) == ["set_language {\"bundle_id\":\"com.example.app\",\"language\":\"de-DE\"}"])
+        #expect(
+            settings.calls.get() == [
+                "save language com.example.app", "language de-DE com.example.app", "restore language en-US com.example.app",
+            ])
+        // "de-DE", not the 11 characters of "${LANGUAGE}".
+        #expect(result.tests.first?.steps.first?.text == "Typed 5 characters.")
+        #expect(result.summaryLine.hasPrefix("Tests \"\(project.name)\" on Device in de-DE: 1 passed"))
+        #expect(result.markdown.contains("on Device in de-DE"))
+        #expect(try TestRunResult.load(root.appendingPathComponent("out")).language == "de-DE")
+
+        // A device without settings fails the run before any test.
+        let plain = await tools(FakePhone(lines: [])).runTests(
+            project, options: TestRunOptions(output: root.appendingPathComponent("out2"), video: false, language: "fr-FR"),
+            source: "test")
+        #expect(plain.tests.isEmpty)
+        #expect(plain.error?.hasPrefix("Could not set the language to fr-FR") == true)
+    }
+
     /// A failure carries what the app printed during the test and how the app is doing, so the
     /// reason is in the results rather than in a log an agent would have to fetch.
     @Test func aFailureCarriesTheAppsOutputAndState() async throws {

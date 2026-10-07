@@ -99,6 +99,7 @@ jobs:
 | `app` | | A simulator `.app` to install first, for flows or projects without `builds.simulator` |
 | `tests` | all | Tests to run, one per line: file name without `.json`, or the test's name. Projects only |
 | `variables` | | `NAME=value` lines for `${NAME}` in the steps. Projects only |
+| `languages` | | Run the tests once per language, one per line, e.g. `de-DE`; steps see it as `${LANGUAGE}`. With more than one, each gets its own folder in the artifacts. Projects only |
 | `version` | `latest` | Mobdev release to download, e.g. `0.2.35` |
 | `mobdev` | | Path to a Mobdev binary instead of a release, e.g. `macos/.build/debug/Mobdev` |
 | `artifacts` | `$RUNNER_TEMP/<artifact-name>` | Where Mobdev writes its results |

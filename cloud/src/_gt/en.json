@@ -1090,7 +1090,7 @@
       " and a video and a screenshot per test."
     ]
   },
-  "33e2bb5fe5628d43": {
+  "8bc6f0bafbb557b2": {
     "t": "p",
     "i": 1,
     "c": [
@@ -1106,22 +1106,28 @@
         "i": 3,
         "c": "--simulator \"iPhone 17\""
       },
-      " to make a simulator of that type for the run and delete it afterwards. Each device gets its own folder, and ",
+      " to make a simulator of that type for the run and delete it afterwards. ",
       {
         "t": "code",
         "i": 4,
+        "c": "--language de-DE"
+      },
+      " runs the tests in that language, repeated in each language in turn, and puts the old one back afterwards. Each device and language gets its own folder, and ",
+      {
+        "t": "code",
+        "i": 5,
         "c": "summary.md"
       },
       " is ready for a CI job summary. When an agent has found a path through the app, ",
       {
         "t": "code",
-        "i": 5,
+        "i": 6,
         "c": "recent_steps"
       },
       " hands it the actions that worked, to save with ",
       {
         "t": "code",
-        "i": 6,
+        "i": 7,
         "c": "save_test"
       },
       "."

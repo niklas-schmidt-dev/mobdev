@@ -1092,7 +1092,7 @@
       " sowie ein Video und einen Screenshot je Test."
     ]
   },
-  "33e2bb5fe5628d43": {
+  "8bc6f0bafbb557b2": {
     "t": "p",
     "i": 1,
     "c": [
@@ -1108,22 +1108,28 @@
         "i": 3,
         "c": "--simulator \"iPhone 17\""
       },
-      ", damit für den Lauf ein Simulator dieses Typs angelegt und danach wieder gelöscht wird. Jedes Gerät bekommt einen eigenen Ordner, und ",
+      ", damit für den Lauf ein Simulator dieses Typs angelegt und danach wieder gelöscht wird. ",
       {
         "t": "code",
         "i": 4,
+        "c": "--language de-DE"
+      },
+      " führt die Tests in dieser Sprache aus, wiederholt in jeder Sprache nacheinander, und stellt danach die alte wieder ein. Jedes Gerät und jede Sprache bekommt einen eigenen Ordner, und ",
+      {
+        "t": "code",
+        "i": 5,
         "c": "summary.md"
       },
       " passt direkt in eine CI-Job-Zusammenfassung. Hat ein Agent einen Weg durch die App gefunden, gibt ihm ",
       {
         "t": "code",
-        "i": 5,
+        "i": 6,
         "c": "recent_steps"
       },
       " die Aktionen, die geklappt haben, zum Speichern mit ",
       {
         "t": "code",
-        "i": 6,
+        "i": 7,
         "c": "save_test"
       },
       "."

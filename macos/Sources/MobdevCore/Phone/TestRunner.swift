@@ -11,12 +11,18 @@ public struct TestRunOptions: Sendable {
     public var video: Bool
     /// Where results.json, junit.xml and each test's files go. Created.
     public var output: URL
+    /// A language such as "de-DE" to run the tests in: the simulator's, or the Android app's. The
+    /// run sets it before the first test, passes it as `${LANGUAGE}` and puts the old one back.
+    public var language: String?
 
-    public init(output: URL, tests: [String] = [], variables: [String: String] = [:], video: Bool = true) {
+    public init(
+        output: URL, tests: [String] = [], variables: [String: String] = [:], video: Bool = true, language: String? = nil
+    ) {
         self.output = output
         self.tests = tests
         self.variables = variables
         self.video = video
+        self.language = language
     }
 }
 
@@ -140,6 +146,8 @@ public struct TestRunResult: Sendable, Codable, Equatable {
     /// The project folder.
     public var folder: String
     public var device: Device
+    /// The language the tests ran in, when the run set one.
+    public var language: String?
     public var started: Date
     public var seconds: Double
     /// The build's installation, when the project names one for the device.
@@ -154,7 +162,7 @@ public struct TestRunResult: Sendable, Codable, Equatable {
     public var failureImage: EncodedImage? = nil
 
     enum CodingKeys: String, CodingKey {
-        case project, folder, device, started, seconds, setup, error, cancelled, tests, output
+        case project, folder, device, language, started, seconds, setup, error, cancelled, tests, output
     }
 
     public init(project: TestProject, device: Device, output: URL) {
@@ -185,7 +193,7 @@ public struct TestRunResult: Sendable, Codable, Equatable {
         var parts = ["\(passed) passed"]
         if failed > 0 || passed == 0 { parts.append("\(failed) failed") }
         if skipped > 0 { parts.append("\(skipped) skipped") }
-        var line = "Tests \"\(project)\" on \(device.name): \(parts.joined(separator: ", ")) in \(String(format: "%.1f", seconds)) s."
+        var line = "Tests \"\(project)\" on \(device.name)\(language.map { " in \($0)" } ?? ""): \(parts.joined(separator: ", ")) in \(String(format: "%.1f", seconds)) s."
         if cancelled { line += " Cancelled." }
         if let error { line += " \(error)" }
         return line
@@ -262,7 +270,8 @@ public struct TestRunResult: Sendable, Codable, Equatable {
         }
         let (passed, failed, skipped) = counts
         let mark = self.passed ? "✅" : "❌"
-        var lines = ["### \(mark) Mobdev tests: \(cell(project)) on \(cell(device.name))", ""]
+        let place = cell(device.name) + (language.map { " in \(cell($0))" } ?? "")
+        var lines = ["### \(mark) Mobdev tests: \(cell(project)) on \(place)", ""]
         var counts = ["\(passed) passed"]
         if failed > 0 || passed == 0 { counts.append("\(failed) failed") }
         if skipped > 0 { counts.append("\(skipped) skipped") }
@@ -378,6 +387,7 @@ extension PhoneTools {
         var result = TestRunResult(
             project: project, device: .init(id: device?.id ?? "", name: device?.name ?? "Device", kind: kind.rawValue),
             output: options.output)
+        result.language = options.language
 
         do {
             try FileManager.default.createDirectory(at: options.output, withIntermediateDirectories: true)
@@ -395,8 +405,10 @@ extension PhoneTools {
             if !selected.contains(where: { $0.slug == test.slug }) { selected.append(test) }
         }
         if options.tests.isEmpty { selected = project.tests }
+        var overrides = options.variables
+        if let language = options.language, overrides["LANGUAGE"] == nil { overrides["LANGUAGE"] = language }
         let variables = Variables(
-            project: project, overrides: options.variables, environment: ProcessInfo.processInfo.environment)
+            project: project, overrides: overrides, environment: ProcessInfo.processInfo.environment)
 
         if let build = project.build(for: kind) {
             let install = Flow.Step("install_app", ["path": .string(build.path)])
@@ -409,6 +421,19 @@ extension PhoneTools {
             ]
             if output.isError {
                 result.error = "Could not install \(build.lastPathComponent): \(output.text)"
+                return finished(result)
+            }
+        }
+
+        var restoreLanguage: (@Sendable () async -> Void)?
+        if let language = options.language {
+            switch await setLanguage(language, project: project, kind: kind, variables: variables, source: source) {
+            case .success(let (step, restore)):
+                result.setup.append(step)
+                restoreLanguage = restore
+            case .failure(let failure):
+                result.setup.append(failure.step)
+                result.error = "Could not set the language to \(language): \(failure.step.text)"
                 return finished(result)
             }
         }
@@ -437,7 +462,40 @@ extension PhoneTools {
                 break
             }
         }
+        await restoreLanguage?()
         return finished(result)
+    }
+
+    private struct LanguageFailure: Error { let step: TestRunResult.Step }
+
+    /// Sets the run's language as a setup step and returns how to put the old one back. iOS apps
+    /// read it at launch, so a running copy is stopped for the tests to launch it again.
+    private func setLanguage(
+        _ language: String, project: TestProject, kind: DeviceKind, variables: Variables, source: String
+    ) async -> Result<(TestRunResult.Step, @Sendable () async -> Void), LanguageFailure> {
+        var arguments: [String: JSONValue] = ["language": .string(language)]
+        if let bundleID = project.app.bundleID { arguments["bundle_id"] = .string(bundleID) }
+        let set = Flow.Step("set_language", arguments)
+        let started = Date()
+        func step(_ text: String, passed: Bool) -> TestRunResult.Step {
+            .init(summary: set.summary, text: text, passed: passed, seconds: Date().timeIntervalSince(started))
+        }
+        guard let settings = phone.settings else {
+            return .failure(LanguageFailure(step: step("This device cannot change its language.", passed: false)))
+        }
+        let saved: SavedLanguage
+        do {
+            saved = try await settings.savedLanguage(bundleID: project.app.bundleID)
+        } catch {
+            return .failure(LanguageFailure(step: step(String(describing: error), passed: false)))
+        }
+        let output = await self.step(set, variables: variables, source: source)
+        guard !output.isError else { return .failure(LanguageFailure(step: step(output.text, passed: false))) }
+        if kind != .android, let bundleID = project.app.bundleID {
+            _ = await self.step(Flow.Step("stop_app", ["bundle_id": .string(bundleID)]), variables: variables, source: source)
+        }
+        let bundleID = project.app.bundleID
+        return .success((step(output.text, passed: true), { try? await settings.restoreLanguage(saved, bundleID: bundleID) }))
     }
 
     private func finished(_ result: TestRunResult) -> TestRunResult {

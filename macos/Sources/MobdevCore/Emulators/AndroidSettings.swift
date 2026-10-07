@@ -206,6 +206,28 @@ final class AndroidSettings: DeviceSettings, @unchecked Sendable {
         return "\(package) now uses \(language)."
     }
 
+    func savedLanguage(bundleID: String?) async throws -> SavedLanguage {
+        guard let bundleID else { throw DeveloperError("Android keeps languages per app here; pass its bundle_id.") }
+        let package = try ADB.checkPackage(bundleID)
+        return SavedLanguage(languages: Self.appLocales(try await shell("cmd locale get-app-locales \(package) 2>&1")))
+    }
+
+    /// Without `--locales`, the app follows the device's language again.
+    func restoreLanguage(_ saved: SavedLanguage, bundleID: String?) async throws {
+        guard let bundleID else { throw DeveloperError("Android keeps languages per app here; pass its bundle_id.") }
+        let package = try ADB.checkPackage(bundleID)
+        let tags = saved.languages.filter { tag in tag.allSatisfy { $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" } }
+        _ = try await shell(
+            "cmd locale set-app-locales \(package)" + (tags.isEmpty ? "" : " --locales \(tags.joined(separator: ","))"))
+    }
+
+    /// "Locales for com.example for user 0 are [de-DE,fr-FR]"; "[]" when the app follows the device.
+    static func appLocales(_ output: String) -> [String] {
+        guard let open = output.lastIndex(of: "["), let close = output.lastIndex(of: "]"), open < close else { return [] }
+        return output[output.index(after: open)..<close].split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+    }
+
     // MARK: Status bar
 
     /// System UI's demo mode, which shows fixed values until it is left.
