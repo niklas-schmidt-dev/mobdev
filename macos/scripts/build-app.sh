@@ -52,6 +52,27 @@ if [[ -n "${MOBDEV_UPDATE_FEED:-}" ]]; then plist "Add :SUFeedURL string $MOBDEV
 # tree on iPhones. Xcode's per-user state stays out.
 rsync -a --exclude xcuserdata --exclude project.xcworkspace --exclude .DS_Store --exclude .gitignore Runner/ "$APP/Contents/Resources/Runner/"
 
+# scrcpy's server (Apache-2.0, about 90 KB), which Mobdev runs on Android devices for a video stream
+# and input. Downloaded once into .build and checked; keep both values in step with
+# Sources/MobdevCore/Emulators/ScrcpyServer.swift (a test compares them).
+SCRCPY_VERSION="3.3.4"
+SCRCPY_SHA256="8588238c9a5a00aa542906b6ec7e6d5541d9ffb9b5d0f6e1bc0e365e2303079e"
+SCRCPY_SERVER=".build/scrcpy-server-v$SCRCPY_VERSION"
+scrcpy_intact() { [[ -f "$1" ]] && [[ "$(shasum -a 256 "$1" | cut -d ' ' -f 1)" == "$SCRCPY_SHA256" ]]; }
+if ! scrcpy_intact "$SCRCPY_SERVER"; then
+  mkdir -p .build
+  curl -fsSL --retry 3 -o "$SCRCPY_SERVER.download" \
+    "https://github.com/Genymobile/scrcpy/releases/download/v$SCRCPY_VERSION/scrcpy-server-v$SCRCPY_VERSION"
+  if ! scrcpy_intact "$SCRCPY_SERVER.download"; then
+    echo "scrcpy-server-v$SCRCPY_VERSION does not match its SHA-256" >&2
+    rm -f "$SCRCPY_SERVER.download"
+    exit 1
+  fi
+  mv "$SCRCPY_SERVER.download" "$SCRCPY_SERVER"
+fi
+cp "$SCRCPY_SERVER" "$APP/Contents/Resources/"
+cp Resources/scrcpy-LICENSE "$APP/Contents/Resources/"
+
 # Sparkle, without what a non-sandboxed app does not need.
 SPARKLE="$APP/Contents/Frameworks/Sparkle.framework"
 ditto "$BIN_DIR/Sparkle.framework" "$SPARKLE"

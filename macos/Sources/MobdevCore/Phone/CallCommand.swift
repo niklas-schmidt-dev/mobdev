@@ -175,7 +175,7 @@ public enum CallCommand {
         guard let connection = await CommandSupport.connect(device: options.device, wait: 10, output: output) else {
             return nil
         }
-        defer { connection.emulators.stop() }
+        defer { connection.emulators.stop(waiting: true) }
         var arguments = options.arguments
         arguments["device"] = .string(connection.device.id)
         // Named baselines go to baselines/ in the current folder, since this process's own

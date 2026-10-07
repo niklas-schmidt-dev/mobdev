@@ -118,7 +118,7 @@ public struct ADB: Sendable {
         return String(decoding: try read(socket, count: length), as: UTF8.self)
     }
 
-    private static func write(_ socket: Int32, _ data: Data) throws {
+    static func write(_ socket: Int32, _ data: Data) throws {
         try data.withUnsafeBytes { buffer in
             var offset = 0
             while offset < buffer.count {
@@ -129,7 +129,7 @@ public struct ADB: Sendable {
         }
     }
 
-    private static func read(_ socket: Int32, count: Int) throws -> Data {
+    static func read(_ socket: Int32, count: Int) throws -> Data {
         var data = Data(count: count)
         var offset = 0
         try data.withUnsafeMutableBytes { buffer in

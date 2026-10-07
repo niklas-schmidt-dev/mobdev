@@ -1,19 +1,27 @@
 import CoreGraphics
 import Foundation
 
-/// An Android emulator or phone through adb: `screencap` for the screen, `input` for touches and
-/// keys, the package manager and logcat for apps. Phones need USB debugging turned on.
+/// An Android emulator or phone through adb. The screen and input go through scrcpy's server
+/// (`ScrcpySession`) while it runs: a video stream, touches with real timing, any text and the
+/// clipboard. Otherwise, and when it fails, `screencap` takes the pictures and `input` sends
+/// touches and keys. Apps go through the package manager and logcat. Phones need USB debugging.
 public final class AndroidDevice: Device, @unchecked Sendable {
     public let id: String
     public let activity: ActivityLog
     let adb: ADB
     private let details: Locked<Details>
-    /// The size of the last screenshot, which is also the coordinate space of `input`.
-    private let lastSize = Locked<(width: Int, height: Int)?>(nil)
     /// Pixels per dp from `wm density`, once read.
     private let density = Locked<Double?>(nil)
+    /// The screen in device pixels as it is turned now: the coordinate space of `input` and of
+    /// uiautomator's bounds.
+    private let screenSize = Locked<(width: Int, height: Int)?>(nil)
+    /// The size of the last picture, smaller than the screen when it came from scrcpy: what
+    /// agents' coordinates refer to.
+    private let frameSize = Locked<(width: Int, height: Int)?>(nil)
     private let appBackend: AndroidApps
     private let deviceSettings: AndroidSettings
+    /// Nil when MOBDEV_ANDROID_SCRCPY=0.
+    let scrcpy: ScrcpySession?
 
     struct Details: Equatable {
         var name: String
@@ -25,21 +33,36 @@ public final class AndroidDevice: Device, @unchecked Sendable {
         var height = 0
     }
 
-    init(serial: String, details: Details, adb: ADB, reportsFolder: URL = MobdevPaths.crashReportsFolder) {
+    /// `scrcpyServer` finds scrcpy's server; nil keeps the device on adb alone.
+    init(
+        serial: String, details: Details, adb: ADB, reportsFolder: URL = MobdevPaths.crashReportsFolder,
+        scrcpyServer: (@Sendable () async -> Result<URL, DeveloperError>)? = AndroidDevice.defaultScrcpyServer
+    ) {
         id = serial
         self.adb = adb
         let lockedDetails = Locked(details)
         self.details = lockedDetails
-        if details.width > 0, details.height > 0 { lastSize.set((details.width, details.height)) }
+        if details.width > 0, details.height > 0 { screenSize.set((details.width, details.height)) }
         activity = ActivityLog(limit: 1000, file: MobdevPaths.activityFile(device: serial))
         appBackend = AndroidApps(serial: serial, adb: adb, reportsFolder: reportsFolder)
-        deviceSettings = AndroidSettings(serial: serial, adb: adb) {
+        let scrcpy = scrcpyServer.map { ScrcpySession(serial: serial, adb: adb, server: $0) }
+        self.scrcpy = scrcpy
+        deviceSettings = AndroidSettings(serial: serial, adb: adb, scrcpy: scrcpy) {
             serial.hasPrefix("emulator-") || lockedDetails.get().modelName == "Android Emulator"
         }
     }
 
-    /// Stops following apps, when the device goes away.
-    func close() { appBackend.close() }
+    /// The pinned server, unless MOBDEV_ANDROID_SCRCPY=0.
+    static var defaultScrcpyServer: (@Sendable () async -> Result<URL, DeveloperError>)? {
+        guard ScrcpySession.isEnabled() else { return nil }
+        return { await ScrcpyServer.file() }
+    }
+
+    /// Stops following apps and ends scrcpy's server, when the device goes away.
+    func close() {
+        appBackend.close()
+        scrcpy?.close()
+    }
 
     /// Reads name, model and Android version once, when the device appears.
     static func details(serial: String, listed: [String: String], adb: ADB) async -> Details {
@@ -82,18 +105,21 @@ public final class AndroidDevice: Device, @unchecked Sendable {
 
     // MARK: Screen
 
+    /// Never asks the device: status is read on the main thread. The size comes from `wm size` when
+    /// the device appeared, then from each picture.
     public func status() -> PhoneStatus {
         let screen: ScreenState =
-            size().map { .connected(name: name, width: $0.width, height: $0.height) }
+            (frameSize.get() ?? size()).map { .connected(name: name, width: $0.width, height: $0.height) }
             ?? .failed("The screen is not available yet")
         return PhoneStatus(
             screen: screen, bluetooth: .unsupported("not needed for Android"), keyboardLayout: .us,
-            input: .direct("adb"))
+            input: .direct(isStreaming ? "scrcpy" : "adb"))
     }
 
-    /// Never asks the device: status is read on the main thread. The size comes from `wm size` when
-    /// the device appeared, then from each screenshot.
-    private func size() -> (width: Int, height: Int)? { lastSize.get() }
+    /// Whether pictures come from scrcpy's video stream, many a second, rather than `screencap`.
+    public var isStreaming: Bool { scrcpy?.isStreaming ?? false }
+
+    private func size() -> (width: Int, height: Int)? { screenSize.get() }
 
     /// "Physical size: 1280x2856", with an "Override size" line winning when present.
     static func parseSize(_ text: String) -> (width: Int, height: Int)? {
@@ -104,14 +130,23 @@ public final class AndroidDevice: Device, @unchecked Sendable {
         return parts.count == 2 && parts[0] > 0 && parts[1] > 0 ? (parts[0], parts[1]) : nil
     }
 
-    /// `wm density` in dots per inch over Android's 160 dpi for one dp, read once.
+    /// `wm density` in dots per inch over Android's 160 dpi for one dp, read once, for the picture's
+    /// pixels.
     public func screenScale() async -> Double? {
-        if let known = density.get() { return known }
-        guard let text = try? await adb.shell(id, "wm density", timeout: 10), let dpi = Self.parseDensity(text) else {
-            return nil
+        var perDP = density.get()
+        if perDP == nil {
+            guard let text = try? await adb.shell(id, "wm density", timeout: 10), let dpi = Self.parseDensity(text) else {
+                return nil
+            }
+            perDP = dpi / 160
+            density.set(perDP)
         }
-        density.set(dpi / 160)
-        return dpi / 160
+        // scrcpy's pictures can be smaller than the screen; the scale is per picture pixel.
+        guard let perDP else { return nil }
+        if let screen = screenSize.get(), let frame = frameSize.get(), screen.width > 0 {
+            return perDP * Double(frame.width) / Double(screen.width)
+        }
+        return perDP
     }
 
     /// "Physical density: 420", with an "Override density" line winning when present.
@@ -124,12 +159,29 @@ public final class AndroidDevice: Device, @unchecked Sendable {
         return value
     }
 
+    /// scrcpy's newest picture while it streams, else a `screencap`, which takes a quarter of a
+    /// second to over a second.
     public func frame() -> CGImage? {
+        if let image = scrcpy?.frame() {
+            frameSize.set((image.width, image.height))
+            // A smaller picture of the same screen; its sides swap when the device turns.
+            screenSize.withLock { size in
+                if let current = size, (current.width > current.height) != (image.width > image.height) {
+                    size = (current.height, current.width)
+                }
+            }
+            return image
+        }
+        return screencap()
+    }
+
+    func screencap() -> CGImage? {
         // The raw format is several times faster than PNG, which the phone would have to compress.
         guard let result = try? adb.runner.runBinary(adb.executable, ["-s", id, "exec-out", "screencap"], timeout: 10),
             result.status == 0, let image = Self.image(fromRaw: result.data)
         else { return nil }
-        lastSize.set((image.width, image.height))
+        screenSize.set((image.width, image.height))
+        frameSize.set((image.width, image.height))
         return image
     }
 
@@ -169,7 +221,27 @@ public final class AndroidDevice: Device, @unchecked Sendable {
         _ = try await adb.shell(id, "input \(command)", timeout: 20)
     }
 
+    /// Runs `action` over scrcpy, started first if it is not running yet. False when adb has to do
+    /// it instead: scrcpy is off, failed to start, or its connection ended halfway.
+    private func overScrcpy(_ what: String, _ action: (ScrcpyConnection) async throws -> Void) async -> Bool {
+        guard let connection = await scrcpy?.connection() else { return false }
+        do {
+            try await action(connection)
+            return true
+        } catch {
+            Log.error("scrcpy \(id): \(what) failed (\(error)); using adb")
+            return false
+        }
+    }
+
+    /// Why scrcpy did not do the work, for messages.
+    private var scrcpyProblem: String {
+        guard let scrcpy else { return "turned off with MOBDEV_ANDROID_SCRCPY=0" }
+        return scrcpy.unavailableReason ?? "its connection failed; Mobdev's log says why"
+    }
+
     public func tap(at point: NormalizedPoint, hold: TimeInterval) async throws {
+        if await overScrcpy("tap", { try await $0.tap(at: point, hold: hold) }) { return }
         let (x, y) = try pixels(point)
         if hold < 0.2 {
             try await input("tap \(x) \(y)")
@@ -180,6 +252,7 @@ public final class AndroidDevice: Device, @unchecked Sendable {
     }
 
     public func swipe(from start: NormalizedPoint, to end: NormalizedPoint, duration: TimeInterval) async throws {
+        if await overScrcpy("swipe", { try await $0.drag([(start, end)], duration: max(duration, 0.05)) }) { return }
         let (x1, y1) = try pixels(start)
         let (x2, y2) = try pixels(end)
         try await input("swipe \(x1) \(y1) \(x2) \(y2) \(max(Int(duration * 1000), 50))")
@@ -196,6 +269,26 @@ public final class AndroidDevice: Device, @unchecked Sendable {
         try await swipe(from: start, to: end, duration: 0.35)
     }
 
+    /// Two fingers side by side moving apart (`scale` above 1, zooming in) or together around
+    /// `center`, the wider span 60% of the screen's width. Needs scrcpy: `input` has one finger.
+    public func pinch(at center: NormalizedPoint, scale: Double, duration: TimeInterval = 0.5) async throws {
+        guard scale > 0, scale != 1 else { throw DeveloperError("scale must be above 0 and not 1.") }
+        let wide = 0.6
+        let spans = scale > 1 ? (from: max(wide / scale, 0.04), to: wide) : (from: wide, to: max(wide * scale, 0.04))
+        func fingers(_ span: Double) -> (NormalizedPoint, NormalizedPoint) {
+            (
+                NormalizedPoint(x: min(max(center.x - span / 2, 0.01), 0.99), y: center.y),
+                NormalizedPoint(x: min(max(center.x + span / 2, 0.01), 0.99), y: center.y)
+            )
+        }
+        let (start, end) = (fingers(spans.from), fingers(spans.to))
+        guard let connection = await scrcpy?.connection() else {
+            throw DeveloperError(
+                "A pinch needs two fingers, which Mobdev sends through scrcpy, and scrcpy is not running: \(scrcpyProblem).")
+        }
+        try await connection.drag([(start.0, end.0), (start.1, end.1)], duration: duration)
+    }
+
     public func type(_ strokes: [KeyStroke]) async throws {
         for stroke in strokes { try await press(stroke) }
     }
@@ -205,6 +298,7 @@ public final class AndroidDevice: Device, @unchecked Sendable {
             throw DeveloperError("That key has no Android equivalent.")
         }
         let modifiers = Self.modifierKeycodes(stroke.modifiers)
+        if await overScrcpy("key", { try $0.press(key, modifiers: modifiers) }) { return }
         if modifiers.isEmpty {
             try await input("keyevent \(key)")
         } else {
@@ -222,15 +316,17 @@ public final class AndroidDevice: Device, @unchecked Sendable {
         case .playPause: 85
         case .power: 26
         }
+        if await overScrcpy("key", { try $0.press(key) }) { return }
         try await input("keyevent \(key)")
     }
 
-    /// `input text` types ASCII only. Spaces become %s, the rest is quoted for the shell, and each
-    /// line break presses Enter.
+    /// Any text over scrcpy (see `ScrcpyConnection.type`). Without it, `input text` types ASCII
+    /// only: spaces become %s, the rest is quoted for the shell, and each line break presses Enter.
     public func typeText(_ text: String) async throws -> Bool {
+        if await overScrcpy("typing", { try await $0.type(text) }) { return true }
         guard text.unicodeScalars.allSatisfy({ ($0.value >= 0x20 && $0.value < 0x7F) || $0 == "\n" }) else {
             throw DeveloperError(
-                "Android's input command types ASCII text only. Type the other characters with the on-screen keyboard.")
+                "Without scrcpy (\(scrcpyProblem)), Android's input command types ASCII text only. Type the other characters with the on-screen keyboard.")
         }
         let lines = text.components(separatedBy: "\n")
         for (index, line) in lines.enumerated() {

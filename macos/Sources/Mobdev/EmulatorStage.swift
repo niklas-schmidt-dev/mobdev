@@ -178,9 +178,10 @@ struct EmulatorStage: View {
         return .handled
     }
 
-    /// About ten pictures a second from a simulator's framebuffer. An Android screenshot is 10 MB
-    /// or more over adb, so those come about three times a second. Behind other windows, one a
-    /// second at most.
+    /// About ten pictures a second from a simulator's framebuffer, twenty from an Android device
+    /// while scrcpy streams it (its newest picture costs nothing to ask for). Without scrcpy an
+    /// Android screenshot is 10 MB or more over adb, so those come about three times a second at
+    /// most. Behind other windows, one a second at most.
     private func refresh() async {
         while !Task.isCancelled {
             guard let device = model.device(id) else {
@@ -191,7 +192,8 @@ struct EmulatorStage: View {
             if let frame = await Task.detached(priority: .userInitiated, operation: { device.frame() }).value {
                 image = frame
             }
-            var interval = device.kind == .android ? 0.3 : 0.1
+            let streaming = (device as? AndroidDevice)?.isStreaming == true
+            var interval = device.kind == .android ? (streaming ? 0.05 : 0.3) : 0.1
             if !appearsActive { interval = max(interval, 1) }
             try? await Task.sleep(for: .seconds(max(interval - Date.now.timeIntervalSince(started), 0.03)))
         }

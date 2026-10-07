@@ -106,7 +106,7 @@ public enum FlowCommand {
 
         guard let connection = await CommandSupport.connect(device: options.device, wait: options.wait, output: output)
         else { return 2 }
-        defer { connection.emulators.stop() }
+        defer { connection.emulators.stop(waiting: true) }
         let device = connection.device
 
         output("Running \"\(flow.name)\" (\(flow.steps.count) steps) on \(device.name) (\(device.id))")

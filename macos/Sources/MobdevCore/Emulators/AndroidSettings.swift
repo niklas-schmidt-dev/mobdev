@@ -1,17 +1,20 @@
 import Foundation
 
 /// Device settings on Android through adb: the emulator console for location and fingerprints, the
-/// package manager for permissions and data, `settings` and `cmd` for the rest.
+/// package manager for permissions and data, `settings` and `cmd` for the rest, and scrcpy's
+/// server for the clipboard.
 final class AndroidSettings: DeviceSettings, @unchecked Sendable {
     let serial: String
     let adb: ADB
+    private let scrcpy: ScrcpySession?
     private let isEmulator: @Sendable () -> Bool
     /// The route being followed, so a new location or route ends it.
     private let route = Locked<Task<Void, Never>?>(nil)
 
-    init(serial: String, adb: ADB, isEmulator: @escaping @Sendable () -> Bool) {
+    init(serial: String, adb: ADB, scrcpy: ScrcpySession? = nil, isEmulator: @escaping @Sendable () -> Bool) {
         self.serial = serial
         self.adb = adb
+        self.scrcpy = scrcpy
         self.isEmulator = isEmulator
     }
 
@@ -253,12 +256,22 @@ final class AndroidSettings: DeviceSettings, @unchecked Sendable {
         return "Deleted the data of \(package), its saved keys included. Start it with launch_app."
     }
 
+    /// adb has no way to the clipboard; scrcpy's server, which runs as the shell user, has.
+    private func clipboardConnection() async throws -> ScrcpyConnection {
+        guard let connection = await scrcpy?.connection() else {
+            let reason = scrcpy?.unavailableReason ?? "turned off with MOBDEV_ANDROID_SCRCPY=0"
+            throw DeveloperError(
+                "Mobdev reaches Android's clipboard through scrcpy, which is not running (\(reason)). Read the field with ui_tree, or type the text with type_text.")
+        }
+        return connection
+    }
+
     func clipboard() async throws -> String {
-        throw DeveloperError("Android lets apps read the clipboard only while they are in front; adb cannot. Read the field with ui_tree instead.")
+        try await clipboardConnection().clipboard()
     }
 
     func setClipboard(_ text: String) async throws {
-        throw DeveloperError("adb cannot set Android's clipboard. Type the text into the field with type_text instead.")
+        try await clipboardConnection().setClipboard(text, paste: false)
     }
 
     func setOrientation(_ orientation: Orientation) async throws {

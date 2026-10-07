@@ -24,8 +24,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Ends the UI tests Mobdev Runner keeps running on iPhones; xcodebuild would outlive the app.
+    /// Kills scrcpy's servers on Android devices too.
     func applicationWillTerminate(_ notification: Notification) {
         UIRunners.shared.stopAll()
+        ScrcpySession.closeAll()
     }
 
     /// Agents keep working from the menu bar after the window is closed.

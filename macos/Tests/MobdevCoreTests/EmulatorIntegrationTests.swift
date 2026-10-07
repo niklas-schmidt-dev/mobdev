@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 import Testing
 @testable import MobdevCore
@@ -224,6 +225,137 @@ import Testing
         #expect(refused.isError)
         #expect(refused.text.contains("system app"))
         try await session.call("home")
+    }
+
+    /// scrcpy's server: many pictures a second while the screen moves, any text typed into a field,
+    /// the clipboard both ways, a server that dies replaced, and nothing left on the device after.
+    @Test(.enabled(if: android != nil, "Set MOBDEV_TEST_ANDROID"))
+    func androidThroughScrcpy() async throws {
+        let adb = try #require(ADB.find())
+        let serial = Self.android!
+        let session = try await Session(device: serial, adb: adb)
+        defer { session.stop() }
+        let device = try #require(session.emulators.devices.first { $0.id == serial } as? AndroidDevice)
+        let scrcpy = try #require(device.scrcpy, "MOBDEV_ANDROID_SCRCPY=0 turned scrcpy off")
+
+        // Without scrcpy every picture is a screencap.
+        var clock = Date()
+        for _ in 0..<3 { #expect(device.screencap() != nil) }
+        let screencapRate = 3 / Date().timeIntervalSince(clock)
+
+        clock = Date()
+        let connection = try #require(await scrcpy.connection(), "\(scrcpy.unavailableReason ?? "")")
+        for _ in 0..<100 where !device.isStreaming { try await Task.sleep(for: .milliseconds(50)) }
+        #expect(device.isStreaming)
+        let startup = Date().timeIntervalSince(clock)
+        let status = try await session.call("status")
+        #expect(status.text.contains("Input: Direct (scrcpy)"))
+
+        // Settings' list moving under a finger for two seconds, while something asks for pictures
+        // as often as it likes, as the app's window does. Its search is a package of its own and
+        // keeps what was typed before, so both start fresh.
+        _ = try await adb.shell(serial, "am force-stop com.google.android.settings.intelligence")
+        try await session.call("stop_app", ["bundle_id": "com.android.settings"])
+        try await session.call("open_app", ["name": "Settings"])
+        let main = try await session.call("wait_for_element", ["id": "search_action_bar", "timeout": 20])
+        #expect(!main.isError)
+        try await Task.sleep(for: .seconds(1))
+        let decodedBefore = connection.decoder.frameCount
+        clock = Date()
+        let start = clock
+        let poller = Task.detached { () -> Int in
+            var last: CGImage?
+            var distinct = 0
+            while Date().timeIntervalSince(start) < 2 {
+                if let image = device.frame(), image !== last {
+                    distinct += 1
+                    last = image
+                }
+                try? await Task.sleep(for: .milliseconds(5))
+            }
+            return distinct
+        }
+        try await device.swipe(from: NormalizedPoint(x: 0.5, y: 0.8), to: NormalizedPoint(x: 0.5, y: 0.35), duration: 1)
+        try await device.swipe(from: NormalizedPoint(x: 0.5, y: 0.35), to: NormalizedPoint(x: 0.5, y: 0.8), duration: 1)
+        let distinct = await poller.value
+        let elapsed = Date().timeIntervalSince(clock)
+        let decoded = connection.decoder.frameCount - decodedBefore
+        let rate = Double(distinct) / elapsed
+        #expect(rate > 10, "\(distinct) pictures in \(elapsed) s")
+
+        // Text a key map cannot type goes through the clipboard and Paste; ASCII after it as keys.
+        try await session.call("tap_element", ["id": "search_action_bar"])
+        let field = try await session.call("wait_for_element", ["id": "open_search_view_edit_text", "timeout": 10])
+        #expect(!field.isError)
+        clock = Date()
+        let typed = try await session.call("type_text", ["text": "Grüße 👋"])
+        let typing = Date().timeIntervalSince(clock)
+        #expect(!typed.isError)
+        try await session.call("type_text", ["text": " ok"])
+        var tree = ""
+        for _ in 0..<10 where !tree.contains("Grüße 👋 ok") {
+            tree = try await session.call("ui_tree", ["contains": "Gr"]).text
+            try await Task.sleep(for: .milliseconds(300))
+        }
+        #expect(tree.contains("EditText \"Grüße 👋 ok\""), "\(tree)")
+
+        let copied = try await session.call("clipboard", ["text": "Mobdev ✓ Ünïcode 42"])
+        #expect(!copied.isError)
+        let pasted = try await session.call("clipboard")
+        #expect(pasted.text == "Mobdev ✓ Ünïcode 42")
+        // Two fingers; Settings ignores them, so this only shows they go through.
+        try await device.pinch(at: NormalizedPoint(x: 0.5, y: 0.6), scale: 0.7, duration: 0.3)
+        try await session.call("press_key", ["key": "escape"])
+        try await session.call("press_key", ["key": "escape"])
+
+        // Turned, the encoder starts over with new parameter sets: pictures and touches follow.
+        func landscape() -> Bool { device.frame().map { $0.width > $0.height } ?? false }
+        try await session.call("set_orientation", ["orientation": "landscape_left"])
+        for _ in 0..<40 where !landscape() { try await Task.sleep(for: .milliseconds(250)) }
+        let turned = try #require(device.frame())
+        #expect(turned.width > turned.height)
+        #expect(connection.decoder.size.map { $0.width == turned.width && $0.height == turned.height } == true)
+        #expect(connection.isAlive)
+        try await session.call("set_orientation", ["orientation": "portrait"])
+        for _ in 0..<40 where landscape() { try await Task.sleep(for: .milliseconds(250)) }
+        #expect(!landscape())
+        try await session.call("home")
+        // Settings would otherwise reopen on its search page.
+        _ = try await adb.shell(serial, "am force-stop com.google.android.settings.intelligence; am force-stop com.android.settings")
+
+        // A server that dies is replaced on the next use, after a second's rest.
+        _ = try await adb.shell(serial, ScrcpyConnection.killCommand(connection.scid))
+        for _ in 0..<50 where connection.isAlive { try await Task.sleep(for: .milliseconds(100)) }
+        #expect(!connection.isAlive)
+        try await Task.sleep(for: .seconds(1.5))
+        let replacement = try #require(await scrcpy.connection())
+        #expect(replacement.scid != connection.scid)
+        #expect(replacement.isAlive)
+
+        print(
+            String(
+                format: "── scrcpy: started in %.2f s; %d pictures decoded and %d new ones from frame() in %.2f s (%.1f a second); screencap: %.2f a second; typing \"Grüße 👋\" took %.2f s",
+                startup, decoded, distinct, elapsed, rate, screencapRate, typing))
+
+        // Stopping the hub, as the app does when the device goes away, kills the server.
+        session.stop()
+        for _ in 0..<50 where replacement.isAlive { try await Task.sleep(for: .milliseconds(100)) }
+        #expect(!replacement.isAlive)
+        for scid in [connection.scid, replacement.scid] {
+            let pattern = "scid=[\(scid.prefix(1))]\(scid.dropFirst())"
+            var running = ""
+            // The kill is an adb call of its own after the sockets closed.
+            for _ in 0..<25 {
+                running = try await adb.shell(serial, "ps -A -o PID,ARGS | grep '\(pattern)' || true")
+                if running.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { break }
+                try await Task.sleep(for: .milliseconds(200))
+            }
+            let which = scid == connection.scid ? "the first server" : "the replacement"
+            let all = running.isEmpty ? "" : try await adb.shell(serial, "ps -A -o PID,PPID,S,ARGS | grep -e '[s]crcpy' -e '[s]leep 15'")
+            #expect(running.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, "\(which) \(scid) still runs:\n\(all)")
+        }
+        #expect(!(try await adb.shell(serial, "ls /data/local/tmp")).contains("mobdev-scrcpy"))
+        #expect(!(try await adb.run(serial, ["forward", "--list"])).output.contains("scrcpy_"))
     }
 
     /// Typing, keys and links in Settings, then an .apk from MOBDEV_TEST_ANDROID_APK: installed,

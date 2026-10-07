@@ -123,7 +123,7 @@ extension PhoneTools {
             ToolDefinition(
                 name: "clipboard", title: "Clipboard",
                 description:
-                    "Read the device's clipboard, or set it with text, e.g. to paste a long value or check what an app copied. Simulators, and iPhones with Developer Mode and Xcode 27; not Android.",
+                    "Read the device's clipboard, or set it with text, e.g. to paste a long value or check what an app copied. Simulators, Android, and iPhones with Developer Mode and Xcode 27.",
                 inputSchema: schema(["text": ["type": "string", "description": "Set the clipboard to this"]], screenshot: false),
                 readOnly: false),
             ToolDefinition(

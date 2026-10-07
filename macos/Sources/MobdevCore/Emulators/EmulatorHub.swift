@@ -47,9 +47,10 @@ public final class EmulatorHub: @unchecked Sendable {
         }
     }
 
-    /// Stops looking and forgets the devices.
-    public func stop() {
-        queue.async {
+    /// Stops looking and forgets the devices. A command that exits afterwards waits, so what the
+    /// devices run (scrcpy's server on Android) is ended before it quits.
+    public func stop(waiting: Bool = false) {
+        let work = {
             self.timer?.cancel()
             self.timer = nil
             let devices = self.list.get()
@@ -58,9 +59,11 @@ public final class EmulatorHub: @unchecked Sendable {
             devices.forEach(Self.close)
             self.onChange()
         }
+        if waiting { queue.sync(execute: work) } else { queue.async(execute: work) }
     }
 
-    /// Ends what a device that went away still runs: logcat processes, simulator HID clients.
+    /// Ends what a device that went away still runs: logcat processes, scrcpy's server, simulator
+    /// HID clients.
     private static func close(_ device: any Device) {
         (device as? AndroidDevice)?.close()
         if device.kind == .simulator { SimulatorKit.shared?.forget(device.id) }

@@ -308,9 +308,19 @@ Bluetooth, no Developer Mode. Turn them off in Settings › General if you only 
   from `~/Library/Logs/DiagnosticReports`. `install_app` takes an `.app` built for the simulator:
   `xcodebuild -scheme MyApp -destination 'generic/platform=iOS Simulator' build`.
 - **Android** (needs the Android SDK's adb, e.g. from Android Studio): emulators and phones with
-  USB debugging appear while the adb server runs; Mobdev never starts it. Screenshots are raw
-  `screencap` frames, input goes through `input`, `type_text` types ASCII text as a whole,
-  `press_key` with `escape` is Back. `open_app` matches launchable package names ("Settings" opens
+  USB debugging appear while the adb server runs; Mobdev never starts it. The screen and input go
+  through [scrcpy](https://github.com/Genymobile/scrcpy)'s server, which Mobdev pushes to
+  `/data/local/tmp` and starts over adb on first use (a picture or a tap, about half a second):
+  an H.264 stream at 1280 pixels on the long edge, decoded with VideoToolbox, so the window shows
+  20 pictures a second and screenshots cost nothing; touches with real timing (a long press holds,
+  a swipe moves) and two fingers for a pinch; `type_text` types printable ASCII as key events and
+  any other text (umlauts, emoji, CJK) through the clipboard and Paste, so the clipboard holds it
+  afterwards; `clipboard` reads and sets the device's clipboard. The server runs as the shell
+  user, ends with Mobdev or when the device goes away, deletes its own copy, and starts again
+  after it died or the device rebooted. When it cannot run, Mobdev falls back to adb and says why
+  in its log: raw `screencap` frames (one to three a second), `input` for touches and keys, ASCII
+  text only and no clipboard. `MOBDEV_ANDROID_SCRCPY=0` keeps Mobdev on adb alone. `press_key`
+  with `escape` is Back. `open_app` matches launchable package names ("Settings" opens
   `com.android.settings`). `launch_app` follows the app's logcat, `crash_reports` reads the crash
   buffer, `install_app` takes an `.apk`; `arguments` and `environment` are ignored.
 
@@ -426,8 +436,9 @@ keys are not tool names:
 - Every run can keep a video. **Run Flow…** records one, and its result offers **Show Video**; the
   app keeps the newest 20 in `~/Library/Application Support/dev.mobdev.mac/flow-videos`.
   `run_flow` writes one when `video` names an .mp4 file on the Mac. The video has about
-  10 frames a second on simulators and iPhones; on Android, as many as `screencap` allows, one to
-  three. It ends on the screen the flow left, held for a moment, so a failure is easy to see.
+  10 frames a second on simulators, iPhones and Android (on Android without scrcpy, as many as
+  `screencap` allows, one to three). It ends on the screen the flow left, held for a moment, so a
+  failure is easy to see.
 - `Mobdev flow` runs without the app, for scripts and CI, on booted simulators and Android devices:
 
   ```sh
@@ -744,8 +755,13 @@ the Mac.
 - Before Xcode 27, `devicectl` does not know simulators, so their apps go through `simctl`. Then
   iOS asks before `open_url` opens an app's own URL scheme ("Open in …?"); `open_url` taps its
   Open button itself where there is a UI tree, so a flow or test needs no step for it.
-- Android types ASCII text only (`input text`), and adb does not know app names, so `open_app`
-  matches package names.
+- Android types text other than printable ASCII by pasting it, which replaces the clipboard and
+  needs a field that takes Paste (Android 7 and later). Without scrcpy it types ASCII only. adb
+  does not know app names, so `open_app` matches package names.
+- scrcpy's server is pinned to 3.3.4, whose protocol Mobdev speaks; tested on an Android 16
+  emulator. Phones whose maker blocks injected input over USB debugging (Xiaomi's "USB debugging
+  (Security settings)") need that switch for scrcpy as for `input`. Touches the server cannot
+  place, e.g. during a rotation, are dropped without an error.
 - `ui_tree` reads the simulator through macOS's private accessibility translation; tested with
   Xcode 27 on macOS 27 and with Xcode 26.6 on GitHub's macOS 26 runners, where the example flow
   runs on every change. There the simulator can fall seconds behind typed text, and its app cannot
@@ -790,7 +806,15 @@ MOBDEV_TEST_ANDROID=emulator-5554 MOBDEV_TEST_ANDROID_APK=/path/to/any.apk swift
 ```
 
 The Android tests crash the Settings app with `am crash` and install, remove and reinstall the
-.apk; run the emulator with `-read-only` to throw those changes away.
+.apk; run the emulator with `-read-only` to throw those changes away. `androidThroughScrcpy`
+measures the stream while a swipe moves Settings (it expects more than 10 new pictures a second),
+types "Grüße 👋" into Settings' search and reads it back from the UI tree, sets and reads the
+clipboard, kills the server and waits for the next one, and checks that nothing is left on the
+device. scrcpy's server is not in git: `scripts/build-app.sh` downloads the pinned release into
+the app's Resources (checked against its SHA-256, with scrcpy's license next to it), and builds
+run from `swift build` download it into `.build/scrcpy-server-v<version>` on first use. Its
+protocol is tested byte for byte against scrcpy's own tests, the decoder with pictures this Mac
+encodes, and the session against a fake server and fake adb.
 
 Mobdev Runner is tested against usbmuxd and runner answers from fakes. The opt-in `RunnerIntegration`
 test builds it for a simulator (no signing; the runner listens on the Mac's 127.0.0.1), drives Settings
@@ -824,4 +848,6 @@ The idea comes from [TapKit](https://tapkit.ai). The Bluetooth LE HID approach (
 UUID, encrypted report attributes, Report Reference descriptors, Service Changed for stale caches,
 absolute pointer for AssistiveTouch) is documented by [iphone-use](https://github.com/xhoantran/iphone-use)
 (MIT) and [sryo/clak](https://github.com/sryo/clak). Independent implementation; not affiliated
-with TapKit or MobAI.
+with TapKit or MobAI. Android's screen and input go through the server of
+[scrcpy](https://github.com/Genymobile/scrcpy) by Genymobile and Romain Vimont (Apache-2.0), which
+the app ships unmodified with its license.
