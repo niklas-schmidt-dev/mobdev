@@ -55,6 +55,9 @@ import Testing
         #expect(options.deviceQueries == ["A", "B"])
         #expect(options.simulators == ["iPhone 17", "iPhone SE (3rd generation),ios-26"])
         #expect(throws: (any Error).self) { try TestCommand.parse(["p", "--simulator"]) }
+        let printed = "No runtime specified, using 'iOS 27.0 (27.0 - 24A434) - com.apple.CoreSimulator.SimRuntime.iOS-27-0'\n35AB1053-1A0C-41B3-A1E4-1C0F3C3B8F1C\n"
+        #expect(Simulators.createdUDID(printed) == "35AB1053-1A0C-41B3-A1E4-1C0F3C3B8F1C")
+        #expect(Simulators.createdUDID("Invalid device type: iPhone 99") == nil)
     }
 }
 

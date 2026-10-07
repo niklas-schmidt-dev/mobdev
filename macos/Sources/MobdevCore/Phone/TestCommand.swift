@@ -165,10 +165,10 @@ public enum TestCommand {
         for spec in options.simulators {
             do {
                 let udid = try await Simulators.create(spec)
-                output("Created and booted a \(spec) simulator (\(udid)).")
+                output("Created and booted the simulator \"\(spec)\" (\(udid)).")
                 created.append(udid)
             } catch {
-                output("Could not make a \(spec) simulator: \(error)")
+                output("Could not make the simulator \"\(spec)\": \(error)")
                 return 2
             }
         }
@@ -220,8 +220,12 @@ enum Simulators {
         let runner = ProcessRunner()
         let xcrun = URL(fileURLWithPath: "/usr/bin/xcrun")
         let made = try await runner.run(xcrun, ["simctl", "create", "Mobdev \(parts[0])"] + parts, timeout: 60)
-        let udid = made.output.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard made.status == 0, UUID(uuidString: udid) != nil else {
+        // simctl also prints which runtime it picked, so the UDID is the line that is one.
+        guard let udid = createdUDID(made.output) else {
+            throw ToolFailure(made.output.trimmingCharacters(in: .whitespacesAndNewlines))
+        }
+        guard made.status == 0 else {
+            delete(udid)
             throw ToolFailure(made.output.trimmingCharacters(in: .whitespacesAndNewlines))
         }
         let booted = try await runner.run(xcrun, ["simctl", "bootstatus", udid, "-b"], timeout: 600)
@@ -230,6 +234,12 @@ enum Simulators {
             throw ToolFailure("It did not boot: \(booted.output.trimmingCharacters(in: .whitespacesAndNewlines))")
         }
         return udid
+    }
+
+    /// The UDID in what `simctl create` printed, e.g. after "No runtime specified, using …".
+    static func createdUDID(_ output: String) -> String? {
+        output.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }
+            .last { UUID(uuidString: $0) != nil }
     }
 
     /// Shuts the simulator down and deletes it, waiting until it is gone.
