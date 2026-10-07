@@ -13,7 +13,8 @@ public enum TestCommand {
     static let usage = """
         Usage: Mobdev test <project> [--device <id or name>]... [--simulator <device type>]... [--artifacts <dir>] [--test <name>]... [--var NAME=value]... [--no-video] [--wait <seconds>]
 
-        Runs the tests of a project (a folder with tests/*.json and mobdev.json, or one test file)
+        Runs the tests of a project (a folder with tests/*.json or Maestro tests/*.yaml and
+        mobdev.json, or one test file)
         on a booted iOS simulator or Android emulator or phone, without the app.
           --device     the device from list_devices; needed when several are booted. Repeat it
                        to run on several devices at once, each in its own artifacts folder
@@ -22,7 +23,7 @@ public enum TestCommand {
                        repeatable, and combinable with --device
           --artifacts  where to keep results.json, junit.xml, each test's video and failure
                        screenshot, the activity log and crash reports
-          --test       run only this test (file name without .json, or its name); repeatable
+          --test       run only this test (file name without .json or .yaml, or its name); repeatable
           --var        a value for ${NAME} in the steps, e.g. --var EMAIL=me@example.com; repeatable.
                        Secrets can also come from the environment.
           --no-video   do not record the tests

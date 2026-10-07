@@ -4,7 +4,7 @@ import Foundation
 @testable import MobdevCore
 
 /// A phone that renders a static screen with text and records every input.
-final class FakePhone: PhoneBackend, @unchecked Sendable {
+class FakePhone: PhoneBackend, @unchecked Sendable {
     enum Event: Equatable {
         case tap(NormalizedPoint, TimeInterval)
         case swipe(NormalizedPoint, NormalizedPoint)
@@ -24,8 +24,11 @@ final class FakePhone: PhoneBackend, @unchecked Sendable {
     /// What `checkPointer` finds; the last result also shows in `status()`.
     let pointerCheckResult: PointerBehavior?
     let pointer = Locked<PointerBehavior?>(nil)
-    /// What `uiTree` returns; nil like an iPhone.
-    let tree: [UIElement]?
+    /// What `uiTree` returns; nil like an iPhone. Tests change it to move between screens.
+    let currentTree: Locked<[UIElement]?>
+    var tree: [UIElement]? { currentTree.get() }
+    /// Called after every tap, e.g. to change the tree as the app would.
+    let onTap = Locked<(@Sendable (NormalizedPoint) -> Void)?>(nil)
     /// How many reads fail first, like a busy simulator's.
     let unreadableReads = Locked(0)
     /// A tree that replaces `tree` from the read after `afterReads` on, like a prompt that
@@ -45,7 +48,7 @@ final class FakePhone: PhoneBackend, @unchecked Sendable {
         self.layout = layout
         self.apps = apps
         self.pointerCheckResult = pointerCheckResult
-        self.tree = tree
+        self.currentTree = Locked(tree)
         self.settings = settings
     }
 
@@ -80,6 +83,7 @@ final class FakePhone: PhoneBackend, @unchecked Sendable {
 
     func tap(at point: NormalizedPoint, hold: TimeInterval) async throws {
         events.withLock { $0.append(.tap(point, hold)) }
+        onTap.get()?(point)
     }
 
     func swipe(from start: NormalizedPoint, to end: NormalizedPoint, duration: TimeInterval) async throws {

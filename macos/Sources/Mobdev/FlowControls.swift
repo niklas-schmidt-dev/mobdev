@@ -37,8 +37,8 @@ struct FlowButtons: View {
 
     private func chooseAndRun() {
         let panel = NSOpenPanel()
-        panel.allowedContentTypes = [.json]
-        panel.message = "Choose a flow to replay on this device."
+        panel.allowedContentTypes = [.json, .yaml]
+        panel.message = "Choose a flow to replay on this device: a Mobdev flow (.json) or a Maestro flow (.yaml)."
         guard panel.runModal() == .OK, let url = panel.url else { return }
         Task { await run(url) }
     }

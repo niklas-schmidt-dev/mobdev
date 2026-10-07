@@ -41,9 +41,14 @@ if CommandLine.arguments.dropFirst().first == "__text" {
     TextRecognizer.runHelper(Array(CommandLine.arguments.dropFirst(2)))
 }
 
-// `Mobdev flow <file.json>` runs a flow on a simulator or Android device without the app, for CI.
+// `Mobdev flow <file>` runs a flow (JSON or Maestro YAML) on a simulator or Android device without the app, for CI.
 if CommandLine.arguments.dropFirst().first == "flow" {
     FlowCommand.run(Array(CommandLine.arguments.dropFirst(2)))
+}
+
+// `Mobdev convert <file>` prints a Mobdev flow as Maestro YAML, or a Maestro flow as a Mobdev flow.
+if CommandLine.arguments.dropFirst().first == "convert" {
+    ConvertCommand.run(Array(CommandLine.arguments.dropFirst(2)))
 }
 
 // `Mobdev test <project>` runs a project's tests on a simulator or Android device without the app.

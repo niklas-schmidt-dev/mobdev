@@ -165,12 +165,13 @@ public final class DeviceTools: ToolCalling {
         return tools(for: device).recorder
     }
 
-    /// Runs a flow on one device as `run_flow` does, reporting each step as it finishes.
+    /// Runs a flow on one device as `run_flow` does, with values for its `${NAME}`s, reporting each
+    /// step as it finishes.
     public func run(
-        _ flow: Flow, on device: String?, source: String,
-        progress: (@Sendable (Int, Flow.Step, ToolOutput, TimeInterval) -> Void)? = nil
+        _ flow: Flow, on device: String?, variables: [String: String] = [:], source: String,
+        progress: (@Sendable (FlowResult.StepResult) -> Void)? = nil
     ) async throws -> FlowResult {
-        try await tools(for: resolve(device)).run(flow, source: source, progress: progress)
+        try await tools(for: resolve(device)).run(flow, variables: variables, source: source, progress: progress)
     }
 
     /// Runs a project's tests on one device as `run_tests` does, reporting each test as it finishes.

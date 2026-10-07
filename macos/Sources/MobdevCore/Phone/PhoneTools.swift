@@ -112,8 +112,10 @@ public final class PhoneTools: Sendable {
         Checks fail a flow or test step when the screen does not pass: `assert_screenshot` compares it with \
         a baseline picture, `accessibility_audit` finds missing labels, small targets and low contrast, and \
         `assert_with_ai` asks Apple Intelligence on the Mac a yes/no question about it. \
-        `run_flow` replays a saved list of tool calls and stops at the first failing step. \
-        A project folder with tests/*.json holds an app's tests: `list_tests` shows them, `save_test` writes \
+        `run_flow` replays a saved list of tool calls and stops at the first failing step; control steps \
+        (if, repeat, retry, run, set, extract) check the screen instead of guessing waits, and Maestro \
+        .yaml flows run too. \
+        A project folder with tests/*.json (or Maestro .yaml) holds an app's tests: `list_tests` shows them, `save_test` writes \
         one, `run_tests` runs them on a device with a video and a screenshot of each failure, and \
         `test_result` returns the newest results.
         """
@@ -138,9 +140,12 @@ public final class PhoneTools: Sendable {
 
     public static let definitions: [ToolDefinition] = {
         let point: [String: JSONValue] = [
-            "x": ["type": "number", "description": "X in screenshot pixels"],
-            "y": ["type": "number", "description": "Y in screenshot pixels"],
+            "x": ["type": ["number", "string"], "description": "X in screenshot pixels, or a share of the width like \"50%\""],
+            "y": ["type": ["number", "string"], "description": "Y in screenshot pixels, or a share of the height like \"50%\""],
         ]
+        let coordinate: JSONValue = ["type": ["number", "string"]]
+        let double: JSONValue = ["type": "boolean", "description": "Tap twice quickly, a double tap"]
+        let hold: JSONValue = ["type": "number", "description": "Hold this many seconds, a long press (0.2 to 10)"]
         func schema(_ properties: [String: JSONValue], required: [String] = [], screenshot: Bool = true) -> JSONValue {
             PhoneTools.schema(properties, required: required, screenshot: screenshot)
         }
@@ -155,8 +160,8 @@ public final class PhoneTools: Sendable {
                 inputSchema: schema([:], screenshot: false), readOnly: true),
             ToolDefinition(
                 name: "tap", title: "Tap",
-                description: "Tap at a point of the screenshot.",
-                inputSchema: schema(point, required: ["x", "y"]), readOnly: false),
+                description: "Tap at a point of the screenshot. double taps twice quickly.",
+                inputSchema: schema(point.merging(["double": double]) { $1 }, required: ["x", "y"]), readOnly: false),
             ToolDefinition(
                 name: "long_press", title: "Long press",
                 description: "Touch and hold at a point, e.g. for context menus or to rearrange icons.",
@@ -169,8 +174,7 @@ public final class PhoneTools: Sendable {
                     "Drag from one point to another. To scroll a list down, swipe up: from a larger y to a smaller y. The first swipe checks the pointer without clicking; if it snaps to items (AssistiveTouch Snap to Item on), the swipe fails instead of tapping.",
                 inputSchema: schema(
                     [
-                        "from_x": ["type": "number"], "from_y": ["type": "number"],
-                        "to_x": ["type": "number"], "to_y": ["type": "number"],
+                        "from_x": coordinate, "from_y": coordinate, "to_x": coordinate, "to_y": coordinate,
                         "duration": ["type": "number", "description": "Seconds, default 0.3"],
                     ], required: ["from_x", "from_y", "to_x", "to_y"]), readOnly: false),
             ToolDefinition(
@@ -192,7 +196,7 @@ public final class PhoneTools: Sendable {
             ToolDefinition(
                 name: "press_key", title: "Press key",
                 description:
-                    "Press a key with optional modifiers, e.g. {\"key\":\"space\",\"modifiers\":[\"cmd\"]} for Spotlight. Keys: enter, escape, backspace, tab, space, up, down, left, right, home, end, pageup, pagedown, f1-f12, or one character.",
+                    "Press a key with optional modifiers, e.g. {\"key\":\"space\",\"modifiers\":[\"cmd\"]} for Spotlight. Keys: enter, escape, backspace, tab, space, up, down, left, right, home, end, pageup, pagedown, f1-f12, or one character; volume_up and volume_down press the buttons on iPhones and Android. count presses it several times, e.g. backspace 20 times to clear a field.",
                 inputSchema: schema(
                     [
                         "key": ["type": "string"],
@@ -200,6 +204,7 @@ public final class PhoneTools: Sendable {
                             "type": "array",
                             "items": ["type": "string", "enum": ["cmd", "shift", "option", "ctrl"]],
                         ],
+                        "count": ["type": "integer", "minimum": 1, "maximum": 100, "description": "Times to press it, default 1"],
                     ], required: ["key"]), readOnly: false),
             ToolDefinition(
                 name: "home", title: "Go home",
@@ -222,9 +227,12 @@ public final class PhoneTools: Sendable {
             ToolDefinition(
                 name: "tap_text", title: "Tap text",
                 description:
-                    "Tap visible text such as a button label. Exact matches win over partial ones. If the text appears more than once, pass index (0 = topmost).",
+                    "Tap visible text such as a button label. Exact matches win over partial ones. If the text appears more than once, pass index (0 = topmost). double taps twice, hold presses long.",
                 inputSchema: schema(
-                    ["text": ["type": "string"], "index": ["type": "integer", "minimum": 0]], required: ["text"]),
+                    [
+                        "text": ["type": "string"], "index": ["type": "integer", "minimum": 0], "double": double,
+                        "hold": hold,
+                    ], required: ["text"]),
                 readOnly: false),
             ToolDefinition(
                 name: "wait_for_text", title: "Wait for text",
@@ -300,8 +308,8 @@ public final class PhoneTools: Sendable {
         case "tap":
             let point = try self.point(args, "x", "y")
             try requireTouch()
-            try await phone.tap(at: point, hold: 0.08)
-            return ToolOutput(text: "Tapped \(try describe(point)).")
+            let how = try await tap(point, args)
+            return ToolOutput(text: "\(how) \(try describe(point)).")
         case "long_press":
             let point = try self.point(args, "x", "y")
             let seconds = try args.number("seconds", default: 1, range: 0.2...10)
@@ -350,10 +358,17 @@ public final class PhoneTools: Sendable {
         case "press_key":
             let key = try args.string("key")
             let modifiers = args.strings("modifiers")
+            let count = Int(try args.number("count", default: 1, range: 1...100))
+            let times = count == 1 ? "" : " \(count) times"
+            if let button = Self.buttons[key.lowercased()] {
+                try requireTouch()
+                for _ in 0..<count { try await phone.press(button) }
+                return ToolOutput(text: "Pressed \(key.lowercased())\(times).")
+            }
             let stroke = try phone.status().keyboardLayout.stroke(forKey: key, modifiers: modifiers)
             try requireTouch()
-            try await phone.press(stroke)
-            return ToolOutput(text: "Pressed \((modifiers + [key]).joined(separator: "+")).")
+            for _ in 0..<count { try await phone.press(stroke) }
+            return ToolOutput(text: "Pressed \((modifiers + [key]).joined(separator: "+"))\(times).")
         case "home":
             try requireTouch()
             try await phone.press(.home)
@@ -423,9 +438,9 @@ public final class PhoneTools: Sendable {
                 throw ToolFailure("index \(chosen) is out of range; \(candidates.count) matches.")
             }
             let match = candidates[chosen]
-            try await phone.tap(at: match.center, hold: 0.08)
+            let how = try await tap(match.center, args)
             return ToolOutput(
-                text: "Tapped \"\(match.text)\" at \(coordinates(match.center, size))."
+                text: "\(how) \"\(match.text)\" at \(coordinates(match.center, size))."
                     + (found.fromTree ? " " + Self.fromTreeNote : ""))
         case "wait_for_text":
             let query = try args.string("text")
@@ -526,15 +541,45 @@ public final class PhoneTools: Sendable {
         return ScreenGeometry.screenshotSize(forFrameWidth: frame.width, height: frame.height)
     }
 
+    /// Buttons press_key presses by name, which are not keys of the keyboard.
+    static let buttons: [String: ConsumerUsage] = ["volume_up": .volumeUp, "volume_down": .volumeDown]
+
+    /// Taps once, twice quickly with double, or holds for hold seconds, and says which: "Tapped",
+    /// "Double-tapped" or "Pressed".
+    func tap(_ point: NormalizedPoint, _ args: Arguments) async throws -> String {
+        if args.has("hold") {
+            try await phone.tap(at: point, hold: try args.number("hold", default: 1, range: 0.2...10))
+            return "Pressed"
+        }
+        guard args.bool("double") == true else {
+            try await phone.tap(at: point, hold: 0.08)
+            return "Tapped"
+        }
+        try await phone.tap(at: point, hold: 0.05)
+        try await phone.tap(at: point, hold: 0.05)
+        return "Double-tapped"
+    }
+
     private func point(_ args: Arguments, _ xKey: String, _ yKey: String) throws -> NormalizedPoint {
         let size = try screenshotSize()
-        let x = try args.number(xKey)
-        let y = try args.number(yKey)
+        let x = try coordinate(args, xKey, size.width)
+        let y = try coordinate(args, yKey, size.height)
         guard (0...Double(size.width)).contains(x), (0...Double(size.height)).contains(y) else {
             throw ToolFailure(
                 "(\(format(x)), \(format(y))) is outside the screenshot, which is \(size.width)×\(size.height) px.")
         }
         return NormalizedPoint(x: x / Double(size.width), y: y / Double(size.height))
+    }
+
+    /// Screenshot pixels, or "50%" of the width or height.
+    private func coordinate(_ args: Arguments, _ key: String, _ length: Int) throws -> Double {
+        if let text = args.value[key]?.stringValue, text.hasSuffix("%") {
+            guard let share = Double(text.dropLast().trimmingCharacters(in: .whitespaces)), (0...100).contains(share) else {
+                throw ToolFailure("\(key) must be pixels or a percentage from 0% to 100%, like \"50%\".")
+            }
+            return share / 100 * Double(length)
+        }
+        return try args.number(key)
     }
 
     func requireTouch() throws {

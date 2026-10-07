@@ -6,7 +6,7 @@ extension PhoneTools {
         ToolDefinition(
             name: "run_tests", title: "Run tests",
             description:
-                "Run a project's tests on this device: a folder with tests/*.json and optionally mobdev.json naming the app, its builds and the steps every test starts with (see list_tests). Installs the project's build for the device, plays each test, keeps a video and, for failures, a screenshot, and writes results.json and junit.xml. Returns every test's result, the first failure's screen, and where the files are. Pass tests to run some by file name.",
+                "Run a project's tests on this device: a folder with tests/*.json (or Maestro .yaml) and optionally mobdev.json naming the app, its builds and the steps every test starts with (see list_tests). Installs the project's build for the device, plays each test, keeps a video and, for failures, a screenshot, and writes results.json and junit.xml. Returns every test's result, the first failure's screen, and where the files are. Pass tests to run some by file name.",
             inputSchema: schema(
                 [
                     "project": [
@@ -15,7 +15,7 @@ extension PhoneTools {
                     ],
                     "tests": [
                         "type": "array", "items": ["type": "string"],
-                        "description": "Tests to run, by file name without .json; default all",
+                        "description": "Tests to run, by file name without .json or .yaml; default all",
                     ],
                     "variables": [
                         "type": "object", "additionalProperties": ["type": "string"],
@@ -50,13 +50,13 @@ public enum ProjectTools {
             ToolDefinition(
                 name: "list_tests", title: "List tests",
                 description:
-                    "The tests of a project: a folder with tests/*.json, each a flow with a name, description, platforms and steps, and optionally mobdev.json with the app's bundle id, builds per platform, before_each steps, variables and secrets. Also the newest run's results. Use run_tests to run them and save_test to add one.",
+                    "The tests of a project: a folder with tests/*.json (or Maestro .yaml), each a flow with a name, description, platforms and steps, and optionally mobdev.json with the app's bundle id, builds per platform, before_each steps, variables and secrets. Also the newest run's results. Use run_tests to run them and save_test to add one.",
                 inputSchema: PhoneTools.schema(["project": project], required: ["project"], screenshot: false),
                 readOnly: true),
             ToolDefinition(
                 name: "save_test", title: "Save test",
                 description:
-                    "Write a test into a project's tests folder as <file name>.json, replacing one with the same file name. Steps are tool calls as in a flow, e.g. [{\"tap_element\": {\"id\": \"login\"}}, {\"wait_for_element\": {\"text\": \"Welcome\"}}]; prefer tap_element and wait_for_element over coordinates, end with a wait that proves the result, and write ${NAME} for a variable from mobdev.json. Creates the project folder and a minimal mobdev.json when missing.",
+                    "Write a test into a project's tests folder as <file name>.json, replacing one with the same file name. Steps are tool calls as in a flow, e.g. [{\"tap_element\": {\"id\": \"login\"}}, {\"wait_for_element\": {\"text\": \"Welcome\"}}]; prefer tap_element and wait_for_element over coordinates, end with a wait that proves the result, and write ${NAME} for a variable from mobdev.json. Control steps work as in run_flow: if, repeat, retry, run (a subflow next to the test or in the project folder), set and extract. Creates the project folder and a minimal mobdev.json when missing.",
                 inputSchema: PhoneTools.schema(
                     [
                         "project": project,
@@ -140,14 +140,30 @@ public enum ProjectTools {
             var value: [String: JSONValue] = ["name": .string(name), "steps": steps]
             if args.has("description") { value["description"] = .string(try args.string("description", maxLength: 1000)) }
             if args.has("platforms") { value["platforms"] = .array(try args.stringArray("platforms").map(JSONValue.string)) }
-            let test = try TestCase.parse(.object(value), file: file)
-            for step in test.steps where PhoneTools.definition(named: step.tool) == nil || PhoneTools.flowExcluded.contains(step.tool) {
-                throw ToolFailure("Step \(step.summary) is not a tool a test can call.")
+            var test = try TestCase.parse(.object(value), file: file)
+            func check(_ steps: [Flow.Step]) throws {
+                for step in steps {
+                    if step.control == nil,
+                        PhoneTools.definition(named: step.tool) == nil || PhoneTools.flowExcluded.contains(step.tool)
+                    {
+                        throw ToolFailure("Step \(step.summary) is not a tool a test can call.")
+                    }
+                    if !step.isSubflow { try check(step.children) }
+                }
             }
+            try check(test.steps)
+            // A subflow that is not there fails now, not when the project loads next.
+            try test.loadSubflows(project: folder)
             let files = FileManager.default
             var isFolder: ObjCBool = false
             if files.fileExists(atPath: folder.path, isDirectory: &isFolder), !isFolder.boolValue {
                 throw ToolFailure("\(folder.path) is a file, not a project folder.")
+            }
+            for other in ["yaml", "yml"] {
+                let maestro = file.deletingPathExtension().appendingPathExtension(other)
+                if files.fileExists(atPath: maestro.path) {
+                    throw ToolFailure("\(maestro.path) already is the test \(slug), a Maestro flow. Pass another file name.")
+                }
             }
             do {
                 try files.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)

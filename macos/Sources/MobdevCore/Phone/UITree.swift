@@ -111,13 +111,15 @@ extension PhoneTools {
         ToolDefinition(
             name: "tap_element", title: "Tap element",
             description:
-                "Tap an element from ui_tree by its identifier (accessibilityIdentifier or Android resource-id, whole or last part) or by its label. Exact label matches win over partial ones; pass index when several match. Waits up to timeout seconds for the element to appear.",
+                "Tap an element from ui_tree by its identifier (accessibilityIdentifier or Android resource-id, whole or last part) or by its label. Exact label matches win over partial ones; pass index when several match. Waits up to timeout seconds for the element to appear. double taps twice, hold presses long.",
             inputSchema: schema(
                 [
                     "id": ["type": "string", "description": "Identifier, e.g. save_button or com.example:id/save"],
                     "text": ["type": "string", "description": "Label, e.g. Save"],
                     "index": ["type": "integer", "minimum": 0],
                     "timeout": ["type": "number", "description": "Seconds to wait for the element, default 5"],
+                    "double": ["type": "boolean", "description": "Tap twice quickly, a double tap"],
+                    "hold": ["type": "number", "description": "Hold this many seconds, a long press (0.2 to 10)"],
                 ]),
             readOnly: false),
         ToolDefinition(
@@ -179,9 +181,9 @@ extension PhoneTools {
             guard chosen < matches.count else { throw ToolFailure("index \(chosen) is out of range; \(matches.count) matches.") }
             let element = matches[chosen]
             try requireTouch()
-            try await phone.tap(at: element.center, hold: 0.08)
+            let how = try await tap(element.center, args)
             return ToolOutput(
-                text: "Tapped \(element.role)\(element.label.isEmpty ? "" : " \"\(element.label)\"") at \(coordinates(element.center, size)).")
+                text: "\(how) \(element.role)\(element.label.isEmpty ? "" : " \"\(element.label)\"") at \(coordinates(element.center, size)).")
         case "wait_for_element":
             let query = try ElementQuery(args)
             let timeout = try args.number("timeout", default: 10, range: 0...60)
@@ -207,7 +209,7 @@ extension PhoneTools {
     /// the timeout so a stalled machine cannot use the grace up before the first read (GitHub's
     /// runners paused the test process for 15 s, 2026-10-07), and its error is thrown if it never
     /// could be read. A device without a tree fails at once.
-    private func poll(for timeout: TimeInterval, until accepted: ([UIElement]) -> Bool) async throws -> [UIElement]? {
+    func poll(for timeout: TimeInterval, until accepted: ([UIElement]) -> Bool) async throws -> [UIElement]? {
         let deadline = Date().addingTimeInterval(timeout)
         var lastChance: Date?
         var unreadable: (any Error)?

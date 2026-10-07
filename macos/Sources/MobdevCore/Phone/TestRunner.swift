@@ -45,12 +45,35 @@ public struct TestRunResult: Sendable, Codable, Equatable {
         public var text: String
         public var passed: Bool
         public var seconds: Double
+        /// "3", or "3.2" for the second step inside step 3, counting `before_each`. Nil in results
+        /// written before steps nested.
+        public var number: String?
+        /// "round 2" or "attempt 2" when a repeat or retry ran the step again.
+        public var round: String?
+        /// It failed, and the test went on: the step was optional, or a retry ran it again.
+        public var tolerated: Bool?
 
-        public init(summary: String, text: String, passed: Bool, seconds: Double) {
+        public init(
+            summary: String, text: String, passed: Bool, seconds: Double, number: String? = nil, round: String? = nil,
+            tolerated: Bool? = nil
+        ) {
             self.summary = summary
             self.text = text
             self.passed = passed
             self.seconds = seconds
+            self.number = number
+            self.round = round
+            self.tolerated = tolerated
+        }
+
+        /// "✓ 3.2. tap {…} (round 2): Tapped …", indented by how deep the step is.
+        func line(_ fallback: Int) -> String {
+            let number = self.number ?? String(fallback)
+            let mark = passed ? "✓" : tolerated == true ? "–" : "✗"
+            let first = text.split(separator: "\n", omittingEmptySubsequences: false).first.map(String.init) ?? ""
+            let depth = number.filter { $0 == "." }.count
+            return String(repeating: "  ", count: depth)
+                + "\(mark) \(number). \(summary)\(round.map { " (\($0))" } ?? ""): \(passed ? first : text)"
         }
     }
 
@@ -62,7 +85,8 @@ public struct TestRunResult: Sendable, Codable, Equatable {
         public var seconds: Double
         /// The steps that ran, `before_each` first; the last one failed when the test did.
         public var steps: [Step]
-        /// 1-based, counting `before_each`, when a step failed.
+        /// 1-based, counting `before_each`, when a step failed: the test's own step, also when the
+        /// failure was inside it (the message says where).
         public var failedStep: Int?
         /// Why the test failed or was skipped.
         public var message: String
@@ -85,12 +109,9 @@ public struct TestRunResult: Sendable, Codable, Equatable {
             }
         }
 
-        /// "✓ 1. launch_app {…}: Launched …", one per step that ran.
+        /// "✓ 1. launch_app {…}: Launched …", one per step that ran, nested ones numbered like 3.2.
         public var stepLines: [String] {
-            steps.enumerated().map { index, step in
-                let first = step.text.split(separator: "\n", omittingEmptySubsequences: false).first.map(String.init) ?? ""
-                return "\(step.passed ? "✓" : "✗") \(index + 1). \(step.summary): \(step.passed ? first : step.text)"
-            }
+            steps.enumerated().map { index, step in step.line(index + 1) }
         }
 
         /// The failure's files and the app's output, indented under the test's line.
@@ -450,17 +471,11 @@ extension PhoneTools {
             name: test.name, slug: test.slug, file: test.file.path, status: .passed, seconds: 0, steps: [], failedStep: nil,
             message: "", screenshot: nil, video: nil, log: nil)
         // Every variable first, so a test never half-runs because of a typo in its last step.
-        var prepared: [Flow.Step] = []
-        for (index, step) in written.enumerated() {
-            do {
-                let filled = try variables.substitute(.object(step.arguments))
-                prepared.append(Flow.Step(step.tool, filled.objectValue ?? [:]))
-            } catch {
-                outcome.status = .failed
-                outcome.failedStep = index + 1
-                outcome.message = "step \(index + 1) of \(written.count), \(step.summary): \(error)"
-                return (outcome, nil)
-            }
+        if let (index, error) = Flow.unsetVariable(in: written, variables: variables) {
+            outcome.status = .failed
+            outcome.failedStep = index + 1
+            outcome.message = "step \(index + 1) of \(written.count), \(written[index].summary): \(error)"
+            return (outcome, nil)
         }
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let bundleID = project.app.bundleID
@@ -468,27 +483,31 @@ extension PhoneTools {
         let statusBefore = bundleID.flatMap { logs?.status(for: $0) }
         // Where the app's output stands now, so a failure shows only what it printed during the test.
         let cursor = bundleID.flatMap { logs?.read(app: $0, after: nil, limit: 1, contains: nil).cursor }
-        let flow = Flow(name: test.name, steps: prepared)
+        // The steps as written, filled in as they run: results show ${PASSWORD}, never its value.
+        let flow = Flow(name: test.name, steps: written)
         // Checks find the project's baselines and leave their files in the test's folder.
         let checks = CheckContext(root: project.folder, artifacts: folder)
         let result = await CheckContext.$current.withValue(checks) {
             await Flow.recording(phone, to: video ? folder.appendingPathComponent("run.mp4") : nil) {
-                await run(flow, source: source)
+                await run(flow, variables: variables, source: source)
             }
         }
         let files = checks.files.get()
         if !files.isEmpty { outcome.files = files }
         outcome.seconds = result.seconds
-        outcome.steps = result.steps.enumerated().map { index, step in
-            .init(summary: written[index].summary, text: variables.redact(step.text), passed: step.passed, seconds: step.seconds)
+        outcome.steps = result.steps.map { step in
+            .init(
+                summary: step.step.summary, text: step.text, passed: step.passed, seconds: step.seconds,
+                number: step.number, round: step.round, tolerated: step.tolerated ? true : nil)
         }
         outcome.video = result.video?.url.path
-        if !result.passed {
+        if !result.passed, let failure = result.failure {
             outcome.status = .failed
-            let index = result.steps.count
-            outcome.failedStep = index
-            let text = variables.redact(result.steps.last?.text ?? "")
-            outcome.message = "step \(index) of \(written.count), \(written[max(index - 1, 0)].summary): \(text)"
+            let number = failure.result.number
+            outcome.failedStep = Int(number.split(separator: ".").first.map(String.init) ?? "") ?? failure.index + 1
+            let round = failure.result.round.map { " (\($0))" } ?? ""
+            outcome.message =
+                "step \(number) of \(written.count), \(failure.result.step.summary)\(round): \(failure.result.text)"
         }
         if let bundleID, let after = logs?.status(for: bundleID), after.hasPrefix("crashed"), after != statusBefore {
             outcome.status = .failed

@@ -144,29 +144,29 @@ only device, or the connected iPhone when simulators or Android devices run next
 | `list_devices` | | iPhones, booted simulators and Android devices: id, name, model, system version, ready |
 | `status` | | Screen and input readiness, screenshot size |
 | `screenshot` | | JPEG of the screen |
-| `tap` | `x`, `y` | |
+| `tap` | `x`, `y`, `double` | `x` and `y` may also be shares of the screen such as `"50%"`, as in every tool with coordinates |
 | `long_press` | `x`, `y`, `seconds` | |
 | `swipe` | `from_x`, `from_y`, `to_x`, `to_y`, `duration` | |
 | `scroll` | `direction` (`up`/`down`/`left`/`right`), `amount`, `x`, `y` | Mouse wheel; `right` reveals content further right |
 | `type_text` | `text`, `submit` | Into the focused field, at most 1000 characters per call |
-| `press_key` | `key`, `modifiers` | e.g. `space` + `cmd` for Spotlight |
+| `press_key` | `key`, `modifiers`, `count` | e.g. `space` + `cmd` for Spotlight; `volume_up` and `volume_down` press the buttons (iPhones, Android) |
 | `home` | | |
 | `open_app` | `name` | Through Spotlight on an iPhone; by name or bundle ID on simulators and Android |
 | `read_screen` | | All visible text with positions (on-device OCR) |
 | `find_text` | `text` | |
-| `tap_text` | `text`, `index` | Taps a visible label |
+| `tap_text` | `text`, `index`, `double`, `hold` | Taps a visible label; `double` taps twice, `hold` presses for that many seconds |
 | `wait_for_text` | `text`, `timeout`, `gone` | |
 | `observe` | `image`, `contains` | The screen as numbered marks: UI tree elements, else recognized text; `image` draws them on a screenshot |
 | `tap_mark` | `mark` | Taps a mark from the last `observe` |
 | `scroll_until_visible` | `text`, `id`, `direction`, `max_scrolls` | Scrolls until it shows, stops at the end of the list |
 | `wait_for_idle` | `timeout`, `stable` | Until the screen stops changing, status bar ignored |
 | `ui_tree` | `contains`, `all` | Elements from the accessibility tree: role, label, identifier, value, position. Simulators, Android, and iPhones with the UI tree on |
-| `tap_element` | `id`, `text`, `index`, `timeout` | Taps an element by identifier or label, waiting up to 5 s for it |
+| `tap_element` | `id`, `text`, `index`, `timeout`, `double`, `hold` | Taps an element by identifier or label, waiting up to 5 s for it |
 | `wait_for_element` | `id`, `text`, `timeout`, `gone` | Like `wait_for_text`, from the tree |
 | `assert_screenshot` | `name` or `path`, `threshold`, `mask`, `compare_status_bar`, `update` | Compares the screen with a baseline picture and fails with a diff; records the baseline when there is none (see [Checks](#checks)) |
 | `accessibility_audit` | `image`, `fail_on`, `ignore` | Missing labels, small tap targets, low text contrast, duplicate and unclear labels, from the UI tree |
 | `assert_with_ai` | `question`, `expect` | Asks Apple Intelligence on the Mac a yes/no question about the screen |
-| `run_flow` | `path`, `steps`, `video` | Replays a flow and stops at the first failing step; `video` saves a recording (.mp4) |
+| `run_flow` | `path`, `steps`, `variables`, `video` | Replays a flow (JSON or Maestro YAML) and stops at the first failing step; `video` saves a recording (.mp4) |
 | `run_tests` | `project`, `tests`, `variables`, `video` | Runs a project's tests on this device: every result, the first failure's screen, results.json and junit.xml |
 | `list_tests` | `project` | A project's tests and its newest results |
 | `save_test` | `project`, `name`, `steps`, `description`, `platforms`, `file` | Writes a test into the project, creating it when needed |
@@ -352,7 +352,7 @@ with your team and keeps it running on the iPhone, the way WebDriverAgent does. 
 ### Flows and CI
 
 A flow is a list of tool calls saved as JSON, one step per line; a bare name is a tool without
-arguments:
+arguments. Maestro's YAML flows run too ([below](#maestro-flows)).
 
 ```json
 {
@@ -368,13 +368,61 @@ arguments:
 }
 ```
 
+#### Control steps
+
+Control steps decide what runs by looking at the screen, so a flow needs no guessed waits. Their
+keys are not tool names:
+
+```json
+{
+  "name": "Check out",
+  "steps": [
+    {"launch_app": {"bundle_id": "com.example.MyApp"}},
+    {"if": {"visible": {"text": "Allow"}, "then": [{"tap_element": {"text": "Allow"}}]}},
+    {"repeat": {"until_visible": {"id": "checkout"}, "max": 10, "steps": [{"scroll": {"direction": "down"}}]}},
+    {"extract": {"id": "total", "into": "TOTAL"}},
+    {"retry": {"times": 2, "steps": [
+      {"tap_element": {"id": "checkout"}},
+      {"wait_for_element": {"text": "Pay ${TOTAL}", "timeout": 5}}
+    ]}},
+    {"run": "pay.json"},
+    {"tap_element": {"text": "Rate this app", "timeout": 2}, "optional": true}
+  ]
+}
+```
+
+| Step | |
+|---|---|
+| `{"if": {"visible": {"text": "…"}, "then": […], "else": […]}}` | Runs `then` when the element or text is on screen now, else `else` (optional). `not_visible` is the opposite; `{"platform": "ios"}` or `"android"` decides by the device. Visible means on screen at this moment, from the UI tree where there is one, else by text recognition (text only). Nothing is waited for. |
+| `{"repeat": {"times": 3, "steps": […]}}` | Runs the steps 3 times, at most 100. |
+| `{"repeat": {"while_visible": {…}, "max": 20, "steps": […]}}` | Runs them while the element is on screen, checked before each round; `until_visible` until it is. `max` (default 20, at most 100) ends the loop without failing it, as Maestro's does: follow it with a wait when the end matters. |
+| `{"retry": {"times": 2, "steps": […]}}` | Runs the steps again from the first when one fails, up to 2 more times (default 1, at most 10). Failed attempts show in the results, marked –, and do not fail the flow. |
+| `{"run": "sign-in.json"}` | Runs another flow file, JSON or Maestro YAML, relative to the file that names it; in a test project also relative to the project folder. Subflows nest up to 5 deep, and a flow that runs itself is an error. Inline `steps` of `run_flow` need an absolute path. |
+| `{"set": {"EMAIL": "me@example.com"}}` | Sets variables for later steps. |
+| `{"extract": {"id": "total", "into": "TOTAL"}}` | Reads an element of the UI tree into a variable: its value, or its label when it has none; `"from": "label"` or `"value"` chooses. Waits for the element like `tap_element` (`timeout`, default 5 s); `index` picks one of several. |
+
+- `${NAME}` in a step's strings, conditions included, is a variable: from `set` and `extract`,
+  `--var NAME=value` for `Mobdev flow`, `variables` for `run_flow`, and in tests also from
+  `mobdev.json`. A name nothing sets fails the flow before its first step, at the step that uses it.
+- `"optional": true` next to any step's key lets it fail: the result marks it –, and the flow goes on.
+- Results number nested steps: 3.2 is the second step inside step 3 (an `else` counts on from its
+  `then`), and a step that a repeat or retry ran again says which round or attempt. A failed flow
+  names the innermost failing step, "failed at step 3.2 of 7"; `run_flow`'s data has `failed_step`
+  (3) and `failed_at` ("3.2"). `Mobdev flow` prints each step as it finishes, the steps inside a
+  control step indented and before it.
+- A flow has at most 500 steps, counting those inside control steps and subflows, and one run takes
+  at most 2000, counting every round and retry. Cancelling stops at once, also inside a loop.
+- Recording saves plain tool calls; add control steps by hand or let an agent write them.
+
+#### Recording, replaying and CI
+
 - **Record** in a device's activity collects every call an agent or you make on it, and clicks,
   drags and keys in the app's window. On simulators and Android, a click on an element with a
   unique identifier or label is saved as `tap_element`, so the flow survives layout changes;
   anything else as `tap` at the same point. **Save…** writes the file.
-- **Run Flow…**, the `run_flow` tool (`path` to a file on the Mac, or `steps` inline) and
-  `Mobdev flow` replay it, stop at the first step that fails and say which. `tap_element` waits up
-  to 5 s for its element, so a flow rarely needs explicit waits.
+- **Run Flow…**, the `run_flow` tool (`path` to a .json or Maestro .yaml file on the Mac, or
+  `steps` inline) and `Mobdev flow` replay it, stop at the first step that fails and say which.
+  `tap_element` waits up to 5 s for its element, so a flow rarely needs explicit waits.
 - Every run can keep a video. **Run Flow…** records one, and its result offers **Show Video**; the
   app keeps the newest 20 in `~/Library/Application Support/dev.mobdev.mac/flow-videos`.
   `run_flow` writes one when `video` names an .mp4 file on the Mac. The video has about
@@ -388,7 +436,8 @@ arguments:
 
   It prints a line per step and exits 0 when every step passed, 1 when one failed and 2 when the
   flow could not start. `--artifacts` keeps a video of the run (`run.mp4`), the activity log,
-  copied crash reports and, after a failure, `failure.png`; `--no-video` skips the video. It waits
+  copied crash reports, `summary.md` and, after a failure, `failure.png`; `--no-video` skips the
+  video, and `--var NAME=value` sets a variable (repeatable). It waits
   up to two minutes for the device to show up, since a simulator booting on a slow CI runner takes
   a while; `--wait <seconds>` changes that. Ctrl-C
   stops the flow and still finishes the video. iPhones need the running app: call `run_flow` over
@@ -423,11 +472,67 @@ runs too.
 In CI, prefer `tap_element` and `wait_for_element` to the OCR tools: Vision text recognition does
 not return on GitHub's virtualized Macs, and Mobdev gives up on it after 90 seconds.
 
+#### Maestro flows
+
+`Mobdev flow`, `run_flow` (`path`), **Run Flow…** and test projects (`tests/*.yaml`) also take
+[Maestro](https://maestro.mobile.dev) flows. Mobdev converts the YAML into the steps above when it
+loads the file; a command it cannot do fails the load with its name and line, so a flow never
+half-works. What changes on the way (a screenshot left out, a pattern read as text) is printed as a
+note. `Mobdev convert` prints a flow in the other format:
+
+```sh
+Mobdev convert login.yaml > login.json     # Maestro to Mobdev
+Mobdev convert login.json > login.yaml     # Mobdev to Maestro
+```
+
+| Maestro | Mobdev |
+|---|---|
+| config `appId`, `name`, `env`, `onFlowStart` | the app of commands that name none, the flow's name, a `set` step, steps at the start |
+| `launchApp` (`appId`, `clearState`, `clearKeychain`, `stopApp`, `arguments`, `permissions`) | `reset_app` (`keychain`), `set_permission`, `launch_app` (`restart`; `arguments` as `-key value`) |
+| `stopApp`, `killApp`, `clearState` | `stop_app`, `stop_app`, `reset_app` |
+| `tapOn`, `doubleTapOn`, `longPressOn` with text, `id`, `index` or `point` | `tap_element` (`double`, `hold: 1`); at a point `tap` or `long_press`; `tapOn`'s `repeat` a repeat step |
+| `inputText`, `eraseText`, `pasteText` | `type_text`; `press_key` backspace with `count` (default 50, at most 100); `type_text` `${COPIED_TEXT}` |
+| `pressKey` | `press_key` (Enter, Backspace, Tab, Volume Up and Down, Remote Dpad keys); Home is `home`, Back is `back` below |
+| `back` | `{"if": {"platform": "android", "then": [{"press_key": {"key": "escape"}}], "else": [{"tap_element": {"id": "BackButton"}}]}}`: Android's Back key; iOS has no system Back, and escape does not go back there, so on iOS it taps the navigation bar's back button, whose identifier is BackButton |
+| `assertVisible`, `assertNotVisible` | `wait_for_element` with `timeout` 7 (and `gone`) |
+| `extendedWaitUntil` (`visible`, `notVisible`, `timeout`) | `wait_for_element` with the timeout in seconds, at most 60 |
+| `scrollUntilVisible` (`element`, `direction`, `timeout`) | `scroll_until_visible`, one scroll per 2 s of timeout |
+| `scroll`, `swipe` (`direction`, or `start` and `end`, `duration`) | `scroll` down, `swipe` between shares of the screen |
+| `openLink`, `waitForAnimationToEnd`, `setLocation`, `travel`, `setOrientation`, `setPermissions` | `open_url`, `wait_for_idle`, `set_location` (`travel` as a route, km/h to m/s), `set_orientation`, `set_permission` |
+| `runFlow` (a file, or `commands`; `when` with `visible`, `notVisible`, `platform`; `env`) | `run`, or the commands in place; `when` becomes `if`, `env` a `set` |
+| `repeat` (`times`, `while`), `retry` (`maxRetries`, `commands` or `file`) | `repeat` (`times`, or `while_visible`/`until_visible` with `times` as `max`), `retry` |
+| `copyTextFrom`, `${maestro.copiedText}` | `extract` into `COPIED_TEXT`, `${COPIED_TEXT}` |
+| `optional`, `label` | `"optional": true`; labels are left out |
+| `hideKeyboard`, `takeScreenshot` | left out with a note: Mobdev types with a hardware keyboard on iOS, and keeps a video of the run |
+
+Limits:
+
+- Mobdev runs no JavaScript: `evalScript`, `runScript`, `assertTrue`, `when: true` and `${…}`
+  expressions other than a variable name fail, as do the AI commands, `inputRandom…`, airplane
+  mode, `addMedia`, `startRecording`, `clearKeychain` on its own and `onFlowComplete`, which would
+  run after a failure.
+- Selectors are text, `id`, `index` and `point`. Relative ones (`below`, `childOf`, …) and states
+  (`enabled`, `checked`, …) fail. Maestro matches text as a regular expression over the whole label;
+  Mobdev looks for the text itself, exact matches first, so anchors, a leading or trailing `.*` and
+  escapes go, and a pattern that remains is noted.
+- Points in percent carry over exactly. Points in pixels are read as pixels of Mobdev's screenshot
+  (long edge 1280), which are not Maestro's, and are noted.
+- The YAML may use block and flow mappings and lists, quoted and plain text, comments, `---` and
+  `|` or `>` blocks. Anchors, aliases, tags and plain text over several lines fail with the line.
+
+Converting a Mobdev flow to Maestro writes every step that has a Maestro command; the others
+(`observe`, a `set` that is not at the start of the flow or of an `if`, `if` on visibility with
+`else`, `extract` into another name than COPIED_TEXT, keys with modifiers, …) fail together with
+their numbers. A 7-second wait goes back to `assertVisible`, `reset_app` before `launch_app` to
+`launchApp` with `clearState`, and a `run` of a .json flow names the .yaml you convert it to.
+
 ### Tests
 
 A project is a folder in your repository with the tests of one app: `mobdev.json` names the app,
 and each file in `tests/` is one test, a flow with a name, a description and the platforms it
-runs on.
+runs on, or a Maestro flow (`.yaml`, named by its config's `name`). A `run` step finds its
+subflow next to the test or relative to the project folder, so shared flows can live in, say,
+`flows/`.
 
 ```json
 {
@@ -646,6 +751,8 @@ the Mac.
   runs on every change. There the simulator can fall seconds behind typed text, and its app cannot
   be read meanwhile; `tap_element` and `wait_for_element` wait up to 15 s past their timeout for it.
 - Recording does not capture the scroll wheel; drag to scroll while recording.
+- A double tap (`double`) on Android takes two `input tap` calls through adb, which can be slower
+  than an app's double-tap timeout.
 - Mobdev Runner finds the app in front through XCTest's private API, as WebDriverAgent does; tested
   with Xcode 27 on simulators. Its frames assume portrait. It is built with your Xcode, so a new
   Xcode can break it until Mobdev catches up.

@@ -2,7 +2,7 @@ import AppKit
 import MobdevCore
 import SwiftUI
 
-/// A project's tests: a folder with tests/*.json and a mobdev.json naming the app. Run them on a
+/// A project's tests: a folder with tests/*.json (or Maestro .yaml) and a mobdev.json naming the app. Run them on a
 /// device and see each result with its steps, the failure's screenshot and the video. Agents write
 /// and run the same tests through list_tests, save_test, run_tests and test_result, and
 /// `Mobdev test` runs them in CI.
@@ -36,7 +36,7 @@ struct TestsView: View {
                     Label("No Test Project", systemImage: "checklist")
                 } description: {
                     Text(
-                        "A project is a folder with tests/*.json, each a list of tool calls, and a mobdev.json naming the app. Open one, or let an agent create one with save_test."
+                        "A project is a folder with tests/*.json, each a list of tool calls, or Maestro flows in tests/*.yaml, and a mobdev.json naming the app. Open one, or let an agent create one with save_test."
                     )
                 } actions: {
                     Button("Open Folder…") { openFolder() }.buttonStyle(.borderedProminent)
@@ -113,7 +113,7 @@ struct TestsView: View {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
-        panel.message = "Choose a project folder: one with tests/*.json, and mobdev.json naming the app."
+        panel.message = "Choose a project folder: one with tests/*.json or tests/*.yaml, and mobdev.json naming the app."
         guard panel.runModal() == .OK, let url = panel.url else { return }
         model.addTestProject(url)
         storedPath = url.standardizedFileURL.path

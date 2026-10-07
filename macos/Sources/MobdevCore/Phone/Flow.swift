@@ -14,32 +14,226 @@ import Foundation
 ///     }
 ///
 /// Each step is one tool with its arguments, exactly as an agent calls it; a bare name has none.
-/// A plain array of steps is a flow too.
+/// A plain array of steps is a flow too. Control steps, with keys no tool has, decide what runs:
+///
+///     {"if": {"visible": {"text": "Allow"}, "then": [...], "else": [...]}}
+///     {"repeat": {"times": 3, "steps": [...]}}
+///     {"repeat": {"while_visible": {"id": "next"}, "max": 10, "steps": [...]}}
+///     {"retry": {"times": 2, "steps": [...]}}
+///     {"run": "sign-in.json"}
+///     {"set": {"EMAIL": "me@example.com"}}
+///     {"extract": {"id": "total", "into": "TOTAL"}}
+///
+/// `${NAME}` in a step's strings is a variable from set or extract, and in tests also from the
+/// project. Any step may carry `"optional": true` next to its key: its failure is reported, and the
+/// flow goes on. Maestro's YAML flows load too (see `Maestro`).
 public struct Flow: Sendable, Equatable {
     public struct Step: Sendable, Equatable {
+        /// The tool, or for a control step its key: if, repeat, retry, run, set or extract.
         public var tool: String
         public var arguments: [String: JSONValue]
+        /// What a control step does; nil for a tool call.
+        public var control: Control?
+        /// A failure of this step is reported, and the flow goes on.
+        public var optional: Bool
 
-        public init(_ tool: String, _ arguments: [String: JSONValue] = [:]) {
+        public init(_ tool: String, _ arguments: [String: JSONValue] = [:], optional: Bool = false) {
             self.tool = tool
             self.arguments = arguments
+            self.control = nil
+            self.optional = optional
         }
 
-        var json: JSONValue { arguments.isEmpty ? .string(tool) : [tool: .object(arguments)] }
+        public init(_ control: Control, optional: Bool = false) {
+            self.tool = control.key
+            self.arguments = [:]
+            self.control = control
+            self.optional = optional
+        }
+
+        /// The step as written in a flow file.
+        public var json: JSONValue {
+            var object: [String: JSONValue]
+            if let control {
+                object = [control.key: control.json]
+            } else {
+                if arguments.isEmpty, !optional { return .string(tool) }
+                object = [tool: .object(arguments)]
+            }
+            if optional { object["optional"] = true }
+            return .object(object)
+        }
+
         /// "tap_element {"id":"email"}": the step on one line, as results and the window show it.
-        public var summary: String { arguments.isEmpty ? tool : "\(tool) \(JSONValue.object(arguments).compactString)" }
+        public var summary: String {
+            let text = control?.summary ?? (arguments.isEmpty ? tool : "\(tool) \(JSONValue.object(arguments).compactString)")
+            return optional ? text + " (optional)" : text
+        }
+
+        /// The steps inside a control step, and those of a loaded subflow.
+        public var children: [Step] {
+            switch control {
+            case .branch(_, let then, let otherwise)?: then + otherwise
+            case .loop(_, let steps)?, .retry(_, let steps)?: steps
+            case .subflow(_, let flow)?: flow?.steps ?? []
+            default: []
+            }
+        }
+    }
+
+    /// An element by its identifier, or by its label (or, on a device without a UI tree, its text).
+    public struct Target: Sendable, Equatable {
+        public var id: String?
+        public var text: String?
+
+        public init(id: String? = nil, text: String? = nil) {
+            self.id = id
+            self.text = text
+        }
+
+        var json: JSONValue { id.map { ["id": .string($0)] } ?? ["text": .string(text ?? "")] }
+    }
+
+    /// What `if` decides by.
+    public enum Condition: Sendable, Equatable {
+        /// The element or text is on screen now.
+        case visible(Target)
+        case notVisible(Target)
+        /// The device is "ios" (iPhones and simulators) or "android".
+        case platform(String)
+    }
+
+    /// How often `repeat` runs its steps.
+    public enum Loop: Sendable, Equatable {
+        case times(Int)
+        /// While the element is on screen, at most `max` rounds.
+        case whileVisible(Target, max: Int)
+        /// Until the element is on screen, at most `max` rounds.
+        case untilVisible(Target, max: Int)
+    }
+
+    /// Reads an element of the UI tree into a variable.
+    public struct Extraction: Sendable, Equatable {
+        public var target: Target
+        public var into: String
+        /// "value" or "label"; nil reads the value, or the label of an element without one.
+        public var from: String?
+        public var index: Int?
+        /// Seconds to wait for the element, default 5.
+        public var timeout: Double?
+
+        public init(target: Target, into: String, from: String? = nil, index: Int? = nil, timeout: Double? = nil) {
+            self.target = target
+            self.into = into
+            self.from = from
+            self.index = index
+            self.timeout = timeout
+        }
+    }
+
+    /// What a control step does.
+    public indirect enum Control: Sendable, Equatable {
+        case branch(Condition, then: [Step], else: [Step])
+        case loop(Loop, steps: [Step])
+        /// Runs the steps again from the first, up to `times` more times, while one fails.
+        case retry(times: Int, steps: [Step])
+        /// Another flow file, as written; `flow` once it is loaded.
+        case subflow(path: String, flow: Flow?)
+        case set([String: String])
+        case extract(Extraction)
+
+        /// The key the step has in a flow file.
+        public var key: String {
+            switch self {
+            case .branch: "if"
+            case .loop: "repeat"
+            case .retry: "retry"
+            case .subflow: "run"
+            case .set: "set"
+            case .extract: "extract"
+            }
+        }
+
+        var json: JSONValue {
+            switch self {
+            case .branch(let condition, let then, let otherwise):
+                var object = Flow.conditionJSON(condition)
+                object["then"] = .array(then.map(\.json))
+                if !otherwise.isEmpty { object["else"] = .array(otherwise.map(\.json)) }
+                return .object(object)
+            case .loop(let loop, let steps):
+                var object = Flow.loopJSON(loop)
+                object["steps"] = .array(steps.map(\.json))
+                return .object(object)
+            case .retry(let times, let steps):
+                return ["times": .number(Double(times)), "steps": .array(steps.map(\.json))]
+            case .subflow(let path, _):
+                return .string(path)
+            case .set(let values):
+                return .object(values.mapValues(JSONValue.string))
+            case .extract(let extraction):
+                var object = extraction.target.json.objectValue ?? [:]
+                object["into"] = .string(extraction.into)
+                if let from = extraction.from { object["from"] = .string(from) }
+                if let index = extraction.index { object["index"] = .number(Double(index)) }
+                if let timeout = extraction.timeout { object["timeout"] = .number(timeout) }
+                return .object(object)
+            }
+        }
+
+        var summary: String {
+            switch self {
+            case .branch(let condition, _, _):
+                switch condition {
+                case .visible(let target): "if visible \(target.json.compactString)"
+                case .notVisible(let target): "if not visible \(target.json.compactString)"
+                case .platform(let platform): "if platform \(platform)"
+                }
+            case .loop(let loop, _):
+                switch loop {
+                case .times(let times): "repeat \(times) times"
+                case .whileVisible(let target, let max): "repeat while visible \(target.json.compactString), at most \(max) times"
+                case .untilVisible(let target, let max): "repeat until visible \(target.json.compactString), at most \(max) times"
+                }
+            case .retry(let times, _): "retry up to \(times) times"
+            case .subflow(let path, _): "run \(path)"
+            case .set(let values): "set \(JSONValue.object(values.mapValues(JSONValue.string)).compactString)"
+            case .extract(let extraction): "extract \(extraction.target.json.compactString) into \(extraction.into)"
+            }
+        }
     }
 
     public var name: String
     public var steps: [Step]
+    /// What a conversion from Maestro left out or changed, for whoever runs the flow.
+    public var notes: [String]
 
-    public init(name: String, steps: [Step]) {
+    public init(name: String, steps: [Step], notes: [String] = []) {
         self.name = name
         self.steps = steps
+        self.notes = notes
     }
 
-    /// At most this many steps, so a mistaken file cannot keep a device busy for hours.
+    /// At most this many steps, counting those inside control steps and subflows, so a mistaken
+    /// file cannot keep a device busy for hours.
     public static let maxSteps = 500
+    /// At most this many steps run, counting every round of a repeat and every retry.
+    public static let maxRunSteps = 2000
+    /// Rounds of `repeat` and retries, so a loop always ends.
+    static let maxRounds = 100
+    static let defaultMaxRounds = 20
+    static let maxRetries = 10
+    /// How deep subflows may run subflows.
+    static let maxSubflowDepth = 5
+    /// The keys of control steps. No tool may have one of these names.
+    public static let controlKeys: Set<String> = ["if", "repeat", "retry", "run", "set", "extract"]
+
+    /// Every step, nested ones and those of loaded subflows included.
+    var stepCount: Int { Self.count(steps) }
+
+    static func count(_ steps: [Step]) -> Int { steps.reduce(0) { $0 + 1 + count($1.children) } }
+
+    // MARK: Reading
 
     public static func parse(_ value: JSONValue, name fallback: String = "Flow") throws -> Flow {
         let list: [JSONValue]
@@ -52,139 +246,441 @@ public struct Flow: Sendable, Equatable {
             if let given = object["name"]?.stringValue, !given.isEmpty { name = given }
         default: throw ToolFailure("A flow is an object with steps, or an array of steps.")
         }
-        guard list.count <= maxSteps else { throw ToolFailure("A flow has at most \(maxSteps) steps.") }
-        let steps = try list.enumerated().map { index, item -> Step in
-            switch item {
-            case .string(let tool): return Step(tool)
-            case .object(let object) where object.count == 1:
-                let (tool, arguments) = object.first!
-                switch arguments {
-                case .object(let arguments): return Step(tool, arguments)
-                case .null: return Step(tool)
-                default: throw ToolFailure("Step \(index + 1): the arguments of \(tool) must be an object.")
-                }
-            default:
-                throw ToolFailure(
-                    "Step \(index + 1) must be a tool name or an object with one tool, like {\"tap_element\": {\"id\": \"save\"}}.")
-            }
-        }
-        return Flow(name: name, steps: steps)
+        let flow = Flow(name: name, steps: try parseSteps(list, number: { "\($0 + 1)" }))
+        try flow.checkSize()
+        return flow
     }
 
-    public static func load(_ url: URL) throws -> Flow {
+    func checkSize() throws {
+        guard stepCount <= Self.maxSteps else {
+            throw ToolFailure(
+                "A flow has at most \(Self.maxSteps) steps, counting those inside if, repeat and retry and in subflows; this one has \(stepCount)."
+            )
+        }
+    }
+
+    static func parseSteps(_ list: [JSONValue], number: (Int) -> String) throws -> [Step] {
+        try list.enumerated().map { index, item in try parseStep(item, number: number(index)) }
+    }
+
+    static func parseStep(_ item: JSONValue, number: String) throws -> Step {
+        switch item {
+        case .string(let tool):
+            guard !controlKeys.contains(tool) else {
+                throw ToolFailure("Step \(number): \(tool) needs its settings, like \(example(tool)).")
+            }
+            return Step(tool)
+        case .object(var object):
+            var optional = false
+            if object.count == 2, let flag = object["optional"] {
+                guard let value = flag.boolValue else { throw ToolFailure("Step \(number): optional must be true or false.") }
+                optional = value
+                object["optional"] = nil
+            }
+            guard object.count == 1, let (key, value) = object.first, key != "optional" else {
+                throw ToolFailure(
+                    "Step \(number) must be a tool name or an object with one tool, like {\"tap_element\": {\"id\": \"save\"}}, and optionally \"optional\": true."
+                )
+            }
+            if controlKeys.contains(key) {
+                return Step(try parseControl(key, value, number: number), optional: optional)
+            }
+            switch value {
+            case .object(let arguments): return Step(key, arguments, optional: optional)
+            case .null: return Step(key, optional: optional)
+            default: throw ToolFailure("Step \(number): the arguments of \(key) must be an object.")
+            }
+        default:
+            throw ToolFailure(
+                "Step \(number) must be a tool name or an object with one tool, like {\"tap_element\": {\"id\": \"save\"}}.")
+        }
+    }
+
+    static func example(_ key: String) -> String {
+        switch key {
+        case "if": #"{"if": {"visible": {"text": "Allow"}, "then": [{"tap_element": {"text": "Allow"}}]}}"#
+        case "repeat": #"{"repeat": {"times": 3, "steps": ["home"]}}"#
+        case "retry": #"{"retry": {"times": 2, "steps": [{"tap_element": {"id": "reload"}}]}}"#
+        case "run": #"{"run": "sign-in.json"}"#
+        case "set": #"{"set": {"EMAIL": "me@example.com"}}"#
+        default: #"{"extract": {"id": "total", "into": "TOTAL"}}"#
+        }
+    }
+
+    static func parseControl(_ key: String, _ value: JSONValue, number: String) throws -> Control {
+        func failure(_ message: String) -> ToolFailure { ToolFailure("Step \(number): \(message)") }
+        switch key {
+        case "run":
+            guard let path = value.stringValue, !path.isEmpty else {
+                throw failure("run takes the path of a flow file, like \(example(key)).")
+            }
+            return .subflow(path: path, flow: nil)
+        case "set":
+            guard let object = value.objectValue, !object.isEmpty else {
+                throw failure("set takes variables and their values, like \(example(key)).")
+            }
+            var values: [String: String] = [:]
+            for (name, item) in object {
+                guard Variables.isName(name) else {
+                    throw failure("\"\(name)\" is not a variable name: letters, digits and _, like EMAIL.")
+                }
+                switch item {
+                case .string(let text): values[name] = text
+                case .number, .bool: values[name] = item.compactString
+                default: throw failure("the value of \(name) must be text.")
+                }
+            }
+            return .set(values)
+        default:
+            break
+        }
+        guard let object = value.objectValue else { throw failure("\(key) takes an object, like \(example(key)).") }
+        let fields = Fields(object: object, context: "Step \(number): \(key)")
+        switch key {
+        case "if":
+            try fields.allow(["visible", "not_visible", "platform", "then", "else"])
+            let conditions = ["visible", "not_visible", "platform"].filter { object[$0] != nil }
+            guard conditions.count == 1 else {
+                throw failure("if takes one of visible, not_visible and platform, like \(example(key)).")
+            }
+            let condition: Condition
+            switch conditions[0] {
+            case "visible": condition = .visible(try fields.target("visible"))
+            case "not_visible": condition = .notVisible(try fields.target("not_visible"))
+            default:
+                guard let platform = object["platform"]?.stringValue, TestCase.platforms.contains(platform) else {
+                    throw failure("platform must be \(TestCase.platforms.map { "\"\($0)\"" }.joined(separator: " or ")).")
+                }
+                condition = .platform(platform)
+            }
+            guard object["then"] != nil else { throw failure("if needs then: the steps to run when it holds.") }
+            let then = try fields.steps("then", number: { "\(number).\($0 + 1)" })
+            let offset = then.count
+            let otherwise = object["else"] == nil ? [] : try fields.steps("else", number: { "\(number).\(offset + $0 + 1)" })
+            return .branch(condition, then: then, else: otherwise)
+        case "repeat":
+            try fields.allow(["times", "while_visible", "until_visible", "max", "steps"])
+            let modes = ["times", "while_visible", "until_visible"].filter { object[$0] != nil }
+            guard modes.count == 1 else {
+                throw failure(
+                    "repeat takes one of times, while_visible and until_visible, like \(example(key)) or {\"repeat\": {\"until_visible\": {\"text\": \"Done\"}, \"max\": 10, \"steps\": [...]}}."
+                )
+            }
+            let loop: Loop
+            if modes[0] == "times" {
+                guard object["max"] == nil else { throw failure("max goes with while_visible and until_visible; times is the count.") }
+                loop = .times(try fields.int("times", in: 1...maxRounds) ?? 1)
+            } else {
+                let max = try fields.int("max", in: 1...maxRounds) ?? defaultMaxRounds
+                let target = try fields.target(modes[0])
+                loop = modes[0] == "while_visible" ? .whileVisible(target, max: max) : .untilVisible(target, max: max)
+            }
+            return .loop(loop, steps: try fields.steps("steps", number: { "\(number).\($0 + 1)" }, required: true))
+        case "retry":
+            try fields.allow(["times", "steps"])
+            let times = try fields.int("times", in: 1...maxRetries) ?? 1
+            return .retry(times: times, steps: try fields.steps("steps", number: { "\(number).\($0 + 1)" }, required: true))
+        default:
+            try fields.allow(["id", "text", "into", "from", "index", "timeout"])
+            let target = try fields.target(nil)
+            guard let into = object["into"]?.stringValue, Variables.isName(into) else {
+                throw failure("extract needs into: the name of a variable, like TOTAL.")
+            }
+            var from: String?
+            if let given = object["from"] {
+                guard let text = given.stringValue, ["value", "label"].contains(text) else {
+                    throw failure("from must be \"value\" or \"label\".")
+                }
+                from = text
+            }
+            let index = try fields.int("index", in: 0...999)
+            var timeout: Double?
+            if let given = object["timeout"] {
+                guard let seconds = given.doubleValue, (0...60).contains(seconds) else {
+                    throw failure("timeout must be seconds from 0 to 60.")
+                }
+                timeout = seconds
+            }
+            return .extract(Extraction(target: target, into: into, from: from, index: index, timeout: timeout))
+        }
+    }
+
+    /// The fields of a control step's object, with errors that say which step.
+    private struct Fields {
+        let object: [String: JSONValue]
+        let context: String
+
+        func allow(_ keys: Set<String>) throws {
+            if let unknown = object.keys.sorted().first(where: { !keys.contains($0) }) {
+                throw ToolFailure("\(context) has an unknown key \"\(unknown)\". Keys: \(keys.sorted().joined(separator: ", ")).")
+            }
+        }
+
+        func int(_ key: String, in range: ClosedRange<Int>) throws -> Int? {
+            guard let value = object[key] else { return nil }
+            guard let number = value.doubleValue, number.rounded() == number, range.contains(Int(number)) else {
+                throw ToolFailure("\(context): \(key) must be a whole number from \(range.lowerBound) to \(range.upperBound).")
+            }
+            return Int(number)
+        }
+
+        func steps(_ key: String, number: (Int) -> String, required: Bool = false) throws -> [Step] {
+            guard let list = object[key]?.arrayValue else { throw ToolFailure("\(context): \(key) must be a list of steps.") }
+            guard !required || !list.isEmpty else { throw ToolFailure("\(context): \(key) needs at least one step.") }
+            return try Flow.parseSteps(list, number: number)
+        }
+
+        /// {"id": …} or {"text": …}, a bare string for text; with `key` nil, from the object itself.
+        func target(_ key: String?) throws -> Target {
+            let value: JSONValue = key.map { object[$0] ?? .null } ?? .object(object)
+            let what = key ?? "it"
+            if let text = value.stringValue, !text.isEmpty { return Target(text: text) }
+            if let fields = value.objectValue {
+                let id = fields["id"]?.stringValue
+                let text = fields["text"]?.stringValue
+                if let id, !id.isEmpty, fields["text"] == nil { return Target(id: id) }
+                if let text, !text.isEmpty, fields["id"] == nil { return Target(text: text) }
+            }
+            throw ToolFailure("\(context): \(what) needs an id or a text, like {\"id\": \"save\"} or {\"text\": \"Save\"}, not both.")
+        }
+    }
+
+    static func conditionJSON(_ condition: Condition) -> [String: JSONValue] {
+        switch condition {
+        case .visible(let target): ["visible": target.json]
+        case .notVisible(let target): ["not_visible": target.json]
+        case .platform(let platform): ["platform": .string(platform)]
+        }
+    }
+
+    static func loopJSON(_ loop: Loop) -> [String: JSONValue] {
+        switch loop {
+        case .times(let times): ["times": .number(Double(times))]
+        case .whileVisible(let target, let max): ["while_visible": target.json, "max": .number(Double(max))]
+        case .untilVisible(let target, let max): ["until_visible": target.json, "max": .number(Double(max))]
+        }
+    }
+
+    /// A flow file: JSON, or Maestro's YAML (.yaml, .yml), with builds next to it found from
+    /// anywhere and its subflows loaded, relative to the file and then to `folders`.
+    public static func load(_ url: URL, folders: [URL] = []) throws -> Flow {
+        var flow = try read(url)
+        try flow.loadSubflows(relativeTo: url.deletingLastPathComponent(), also: folders, chain: [url.standardizedFileURL])
+        return flow
+    }
+
+    /// A flow file as written, without loading its subflows.
+    static func read(_ url: URL) throws -> Flow {
         let data: Data
         do {
             data = try Data(contentsOf: url)
         } catch {
             throw ToolFailure("Could not read \(url.path): \(error.localizedDescription)")
         }
-        guard let value = try? JSONValue.parse(data) else { throw ToolFailure("\(url.lastPathComponent) is not JSON.") }
-        var flow = try parse(value, name: url.deletingPathExtension().lastPathComponent)
+        var flow: Flow
+        if Maestro.isMaestroFile(url) {
+            flow = try Maestro.flow(from: String(decoding: data, as: UTF8.self), file: url)
+        } else {
+            guard let value = try? JSONValue.parse(data) else { throw ToolFailure("\(url.lastPathComponent) is not JSON.") }
+            flow = try parse(value, name: url.deletingPathExtension().lastPathComponent)
+        }
         flow.resolveInstallPaths(relativeTo: url.deletingLastPathComponent())
         return flow
     }
 
     /// A build next to the flow file is found from wherever the flow runs: the app, an agent, CI.
     mutating func resolveInstallPaths(relativeTo folder: URL) {
-        for index in steps.indices where steps[index].tool == "install_app" {
-            guard let path = steps[index].arguments["path"]?.stringValue, !path.hasPrefix("/"), !path.hasPrefix("~")
-            else { continue }
-            steps[index].arguments["path"] = .string(folder.appendingPathComponent(path).standardizedFileURL.path)
+        steps = Self.resolvingInstallPaths(steps, relativeTo: folder)
+    }
+
+    static func resolvingInstallPaths(_ steps: [Step], relativeTo folder: URL) -> [Step] {
+        steps.map { step in
+            var step = step
+            if step.tool == "install_app", step.control == nil, let path = step.arguments["path"]?.stringValue,
+                !path.hasPrefix("/"), !path.hasPrefix("~")
+            {
+                step.arguments["path"] = .string(folder.appendingPathComponent(path).standardizedFileURL.path)
+            }
+            // A subflow's builds are relative to its own file, which reading it took care of.
+            if !step.isSubflow { step.mapChildren { resolvingInstallPaths($0, relativeTo: folder) } }
+            return step
         }
     }
+
+    /// Loads the flows that run steps name: a path relative to `folder` (the file that names it),
+    /// else to one of `folders`, or an absolute one. Without a folder, only absolute paths work.
+    mutating func loadSubflows(relativeTo folder: URL?, also folders: [URL] = [], chain: [URL] = []) throws {
+        steps = try Self.loadingSubflows(steps, number: { "\($0 + 1)" }, folder: folder, folders: folders, chain: chain)
+        try checkSize()
+    }
+
+    static func loadingSubflows(
+        _ steps: [Step], number: (Int) -> String, folder: URL?, folders: [URL], chain: [URL]
+    ) throws -> [Step] {
+        try steps.enumerated().map { index, step in
+            var step = step
+            let stepNumber = number(index)
+            switch step.control {
+            case .subflow(let path, nil)?:
+                let url = try subflowURL(path, number: stepNumber, folder: folder, folders: folders)
+                if let start = chain.firstIndex(of: url) {
+                    let loop = (chain[start...] + [url]).map(\.lastPathComponent).joined(separator: " → ")
+                    throw ToolFailure("Step \(stepNumber): \(path) runs itself in a loop: \(loop).")
+                }
+                guard chain.count < maxSubflowDepth else {
+                    throw ToolFailure("Step \(stepNumber): subflows may run other subflows at most \(maxSubflowDepth) deep.")
+                }
+                var flow = try read(url)
+                flow.steps = try loadingSubflows(
+                    flow.steps, number: { "\(stepNumber).\($0 + 1)" }, folder: url.deletingLastPathComponent(),
+                    folders: folders, chain: chain + [url])
+                step.control = .subflow(path: path, flow: flow)
+            case .subflow?, nil:
+                break
+            default:
+                // Numbered as written: else's steps count on from then's.
+                var offset = 0
+                try step.mapChildren { children in
+                    let start = offset
+                    offset += children.count
+                    return try loadingSubflows(
+                        children, number: { "\(stepNumber).\(start + $0 + 1)" }, folder: folder, folders: folders,
+                        chain: chain)
+                }
+            }
+            return step
+        }
+    }
+
+    static func subflowURL(_ path: String, number: String, folder: URL?, folders: [URL]) throws -> URL {
+        let expanded = (path as NSString).expandingTildeInPath
+        if expanded.hasPrefix("/") {
+            let url = URL(fileURLWithPath: expanded).standardizedFileURL
+            guard FileManager.default.fileExists(atPath: url.path) else {
+                throw ToolFailure("Step \(number): there is no flow \(url.path).")
+            }
+            return url
+        }
+        guard let folder else {
+            throw ToolFailure(
+                "Step \(number): run \(path) needs an absolute path here, since the steps are not in a file.")
+        }
+        let candidates = ([folder] + folders).map { $0.appendingPathComponent(path).standardizedFileURL }
+        guard let found = candidates.first(where: { FileManager.default.fileExists(atPath: $0.path) }) else {
+            let places = candidates.map { $0.deletingLastPathComponent().path }
+            throw ToolFailure("Step \(number): there is no flow \(path) in \(places.joined(separator: " or ")).")
+        }
+        return found
+    }
+
+    // MARK: Variables
+
+    /// The first step that uses a variable neither known nor set by a set or extract step anywhere
+    /// in the steps, with the error that says so. Checked before a run, so a typo in the last step
+    /// does not leave a half-run flow.
+    static func unsetVariable(in steps: [Step], variables: Variables) -> (index: Int, error: ToolFailure)? {
+        var known = Set(variables.values.keys)
+        func define(_ steps: [Step]) {
+            for step in steps {
+                switch step.control {
+                case .set(let values)?: known.formUnion(values.keys)
+                case .extract(let extraction)?: known.insert(extraction.into)
+                default: break
+                }
+                define(step.children)
+            }
+        }
+        define(steps)
+        func used(_ step: Step) -> [String] {
+            var names: [String]
+            switch step.control {
+            case nil: names = Variables.references(in: .object(step.arguments))
+            case .branch(.visible(let target), _, _)?, .branch(.notVisible(let target), _, _)?,
+                .loop(.whileVisible(let target, _), _)?, .loop(.untilVisible(let target, _), _)?:
+                names = Variables.references(in: target.json)
+            case .set(let values)?: names = values.values.flatMap { Variables.references(in: .string($0)) }
+            case .extract(let extraction)?: names = Variables.references(in: extraction.target.json)
+            default: names = []
+            }
+            return names + step.children.flatMap(used)
+        }
+        for (index, step) in steps.enumerated() {
+            if let name = used(step).first(where: { !known.contains($0) }) {
+                return (index, variables.unset(name))
+            }
+        }
+        return nil
+    }
+
+    // MARK: Writing
 
     /// One step per line, so a flow reads and diffs well.
     public func encoded() -> Data {
-        let lines = steps.map { "    " + $0.json.compactString }
+        let lines = Self.encode(steps, indent: "    ")
         let text = "{\n  \"name\": \(JSONValue.string(name).compactString),\n  \"steps\": [\n"
-            + lines.joined(separator: ",\n") + (lines.isEmpty ? "" : "\n") + "  ]\n}\n"
+            + lines + (steps.isEmpty ? "" : "\n") + "  ]\n}\n"
         return Data(text.utf8)
+    }
+
+    /// The steps as the lines of a JSON array, without the brackets: one line per tool call, and
+    /// the steps inside a control step on lines of their own, indented below it.
+    static func encode(_ steps: [Step], indent: String) -> String {
+        steps.map { $0.lines(indent: indent).joined(separator: "\n") }.joined(separator: ",\n")
     }
 }
 
-// MARK: - Running
-
-extension PhoneTools {
-    static let flowDefinitions: [ToolDefinition] = [
-        ToolDefinition(
-            name: "run_flow", title: "Run flow",
-            description:
-                "Replay a flow: a list of tool calls saved as JSON, e.g. recorded in the Mobdev app or written by hand ({\"steps\": [{\"tap_element\": {\"id\": \"login\"}}, {\"type_text\": {\"text\": \"hi\"}}, \"home\"]}). Stops at the first step that fails and says which. Pass path (a .json file on this Mac) or steps, and video to keep a recording of the run.",
-            inputSchema: schema([
-                "path": ["type": "string", "description": "A flow file on the Mac that runs Mobdev"],
-                "steps": [
-                    "type": "array", "description": "The steps inline, each a tool name or {\"tool\": {arguments}}",
-                ],
-                "video": [
-                    "type": "string",
-                    "description":
-                        "Where to save a video of the run on the Mac that runs Mobdev: an absolute path ending in .mp4, in an existing folder. A file there is replaced.",
-                ],
-            ]),
-            readOnly: false)
-    ]
-
-    /// Tools a flow may not call: another flow or the tests, and nothing that picks a different device.
-    static let flowExcluded: Set<String> = ["run_flow", "run_tests", "list_devices", "crawl_app"]
-
-    func runFlowTool(_ args: Arguments, source: String) async throws -> ToolOutput {
-        let flow: Flow
-        // Named baselines of a flow file live next to it.
-        var checks = CheckContext.current
-        if args.has("path") {
-            let path = (try args.string("path") as NSString).expandingTildeInPath
-            let file = URL(fileURLWithPath: path)
-            flow = try Flow.load(file)
-            checks = CheckContext(root: file.deletingLastPathComponent(), artifacts: nil)
-        } else if let steps = args.value["steps"], !steps.isNull {
-            flow = try Flow.parse(steps)
-        } else {
-            throw ToolFailure("Pass path or steps.")
-        }
-        let video = try args.has("video") ? Flow.videoURL(try args.string("video")) : nil
-        let result = await CheckContext.$current.withValue(checks) {
-            await Flow.recording(phone, to: video) { await run(flow, source: source) }
-        }
-        return ToolOutput(text: result.text, data: result.json, isError: !result.passed)
+extension Flow.Step {
+    var isSubflow: Bool {
+        if case .subflow? = control { return true }
+        return false
     }
 
-    /// Runs every step through `call`, so each shows in the device's activity and records like any
-    /// other call. Stops at the first failure, and before the next step once the task is cancelled.
-    public func run(
-        _ flow: Flow, source: String, progress: (@Sendable (Int, Flow.Step, ToolOutput, TimeInterval) -> Void)? = nil
-    ) async -> FlowResult {
-        let started = Date()
-        var results: [FlowResult.StepResult] = []
-        for (index, step) in flow.steps.enumerated() {
-            if Task.isCancelled {
-                let output = ToolOutput(text: "Cancelled.", isError: true)
-                results.append(.init(step: step, text: output.text, passed: false, seconds: 0))
-                progress?(index, step, output, 0)
-                break
-            }
-            let stepStarted = Date()
-            var output: ToolOutput
-            if Self.flowExcluded.contains(step.tool) || step.arguments["device"] != nil {
-                output = ToolOutput(
-                    text: "\(step.tool) cannot run inside a flow; a flow runs on one device, without device arguments.",
-                    isError: true)
-            } else {
-                var arguments = step.arguments
-                arguments["screenshot"] = false
-                do {
-                    output = try await call(step.tool, arguments: .object(arguments), source: source, screenshotByDefault: false)
-                } catch {
-                    output = ToolOutput(text: String(describing: error), isError: true)
-                }
-                // A wait interrupted by the cancellation says so, not "CancellationError()".
-                if output.isError, Task.isCancelled { output = ToolOutput(text: "Cancelled.", isError: true) }
-            }
-            let seconds = Date().timeIntervalSince(stepStarted)
-            results.append(.init(step: step, text: output.text, passed: !output.isError, seconds: seconds))
-            progress?(index, step, output, seconds)
-            if output.isError { break }
+    /// Applies `transform` to every list of steps written inside this control step, in order.
+    mutating func mapChildren(_ transform: ([Flow.Step]) throws -> [Flow.Step]) rethrows {
+        switch control {
+        case .branch(let condition, let then, let otherwise)?:
+            let newThen = try transform(then)
+            control = .branch(condition, then: newThen, else: otherwise.isEmpty ? [] : try transform(otherwise))
+        case .loop(let loop, let steps)?: control = .loop(loop, steps: try transform(steps))
+        case .retry(let times, let steps)?: control = .retry(times: times, steps: try transform(steps))
+        default: break
         }
-        return FlowResult(flow: flow, steps: results, seconds: Date().timeIntervalSince(started))
+    }
+
+    /// The step's JSON lines for `Flow.encode`.
+    func lines(indent: String) -> [String] {
+        let close = optional ? "},\"optional\":true}" : "}}"
+        func block(_ head: [String: JSONValue], _ sections: [(String, [Flow.Step])]) -> [String] {
+            // The head's fields first, compact, the condition before max, then each list of steps
+            // one per line.
+            let order = ["visible", "not_visible", "platform", "while_visible", "until_visible", "times", "max"]
+            let fields = head.keys.sorted { (order.firstIndex(of: $0) ?? 99) < (order.firstIndex(of: $1) ?? 99) }
+                .map { "\(JSONValue.string($0).compactString):\(head[$0]!.compactString)," }.joined()
+            var lines = ["\(indent){\"\(tool)\":{\(fields)\"\(sections[0].0)\":["]
+            for (index, section) in sections.enumerated() {
+                if index > 0 { lines.append("\(indent)],\"\(section.0)\":[") }
+                let inner = Flow.encode(section.1, indent: indent + "  ")
+                if !inner.isEmpty { lines.append(inner) }
+            }
+            lines.append("\(indent)]" + close)
+            return lines
+        }
+        switch control {
+        case .branch(let condition, let then, let otherwise)?:
+            return block(Flow.conditionJSON(condition), [("then", then)] + (otherwise.isEmpty ? [] : [("else", otherwise)]))
+        case .loop(let loop, let steps)?:
+            return block(Flow.loopJSON(loop), [("steps", steps)])
+        case .retry(let times, let steps)?:
+            return block(["times": .number(Double(times))], [("steps", steps)])
+        case nil where !arguments.isEmpty || optional:
+            // The tool before "optional", which sorted keys would put first.
+            return [
+                "\(indent){\(JSONValue.string(tool).compactString):\(JSONValue.object(arguments).compactString)"
+                    + (optional ? ",\"optional\":true}" : "}")
+            ]
+        default:
+            return [indent + json.compactString]
+        }
     }
 }
 
@@ -240,9 +736,28 @@ public struct FlowResult: Sendable {
         public var text: String
         public var passed: Bool
         public var seconds: TimeInterval
+        /// Where the step is written: "3", or "3.2" for the second step inside step 3. Empty for
+        /// results made without one, which then count by position.
+        public var number: String = ""
+        /// "round 2" or "attempt 2" when a repeat or retry ran the step again.
+        public var round: String? = nil
+        /// It failed, and the flow went on: the step was optional, or its retry ran the steps again.
+        public var tolerated: Bool = false
+
+        /// How deep the step is nested: 0 for the flow's own steps.
+        public var depth: Int { number.filter { $0 == "." }.count }
+
+        /// "✓", "✗", or "–" for a failure the flow went on after.
+        public var mark: String { passed ? "✓" : tolerated ? "–" : "✗" }
+
+        /// "3.2. tap_element {…} (round 2)": the step's number, what it is and which round.
+        public func label(_ fallback: Int) -> String {
+            "\(number.isEmpty ? String(fallback) : number). \(step.summary)" + (round.map { " (\($0))" } ?? "")
+        }
     }
 
     public var flow: Flow
+    /// Every step that ran, in order: a control step before the steps inside it.
     public var steps: [StepResult]
     public var seconds: TimeInterval
     /// The run's video, when one was asked for and written.
@@ -250,20 +765,34 @@ public struct FlowResult: Sendable {
     /// Why there is no video although one was asked for.
     public var videoProblem: String?
 
-    public var passed: Bool { steps.count == flow.steps.count && steps.allSatisfy(\.passed) }
+    /// The step that stopped the flow: the innermost that failed, after which nothing else ran.
+    public var failure: (index: Int, result: StepResult)? {
+        guard let index = steps.lastIndex(where: { !$0.passed && !$0.tolerated }) else { return nil }
+        return (index, steps[index])
+    }
+
+    /// The failed step's number as the window and results show it.
+    public var failedNumber: String? {
+        failure.map { $0.result.number.isEmpty ? String($0.index + 1) : $0.result.number }
+    }
+
+    public var passed: Bool {
+        let ran = steps.filter { $0.depth == 0 }.count
+        return ran >= flow.steps.count && failure == nil
+    }
 
     public var text: String {
         let total = flow.steps.count
         let lines = steps.enumerated().map { index, result in
-            let mark = result.passed ? "✓" : "✗"
             let first = result.text.split(separator: "\n", omittingEmptySubsequences: false).first.map(String.init) ?? ""
-            return "\(mark) \(index + 1). \(result.step.summary): \(result.passed ? first : result.text)"
+            let shown = result.passed ? first : result.text
+            return String(repeating: "  ", count: result.depth) + "\(result.mark) \(result.label(index + 1)): \(shown)"
         }
         let head =
             passed
-            ? "Flow \"\(flow.name)\" passed: \(total) steps in \(String(format: "%.1f", seconds)) s."
-            : "Flow \"\(flow.name)\" failed at step \(steps.count) of \(total): \(steps.last?.step.summary ?? "no steps")."
-        return ([head] + lines + [videoLine].compactMap { $0 }).joined(separator: "\n")
+            ? "Flow \"\(flow.name)\" passed: \(steps.count) steps in \(String(format: "%.1f", seconds)) s."
+            : "Flow \"\(flow.name)\" failed at step \(failedNumber ?? String(steps.count)) of \(total): \(failure.map { $0.result.step.summary + ($0.result.round.map { " (\($0))" } ?? "") } ?? "no steps")."
+        return ([head] + lines + flow.notes.map { "Note: \($0)" } + [videoLine].compactMap { $0 }).joined(separator: "\n")
     }
 
     /// "Video: /path/run.mp4 (12.3 s, 98 frames)", or why there is none.
@@ -282,24 +811,32 @@ public struct FlowResult: Sendable {
         var lines = [
             "### \(passed ? "✅" : "❌") Mobdev flow: \(cell(flow.name))", "",
             passed
-                ? String(format: "Passed: %d steps in %.1f s.", flow.steps.count, seconds)
-                : "Failed at step \(steps.count) of \(flow.steps.count).",
+                ? String(format: "Passed: %d steps in %.1f s.", steps.count, seconds)
+                : "Failed at step \(failedNumber ?? String(steps.count)) of \(flow.steps.count).",
             "", "| | Step | Time | Result |", "|---|---|---|---|",
         ]
         for (index, result) in steps.enumerated() {
             let text = result.passed ? (result.text.split(separator: "\n").first.map(String.init) ?? "") : result.text
+            let icon = result.passed ? "✅" : result.tolerated ? "➖" : "❌"
+            let number = result.number.isEmpty ? String(index + 1) : result.number
+            let round = result.round.map { " (\($0))" } ?? ""
             lines.append(
-                "| \(result.passed ? "✅" : "❌") | \(index + 1). `\(cell(result.step.summary))` | "
+                "| \(icon) | \(number). `\(cell(result.step.summary))`\(round) | "
                     + String(format: "%.1f s", result.seconds) + " | \(cell(text)) |")
         }
+        if !flow.notes.isEmpty { lines += [""] + flow.notes.map { "Note: \(cell($0))" } }
         return lines.joined(separator: "\n") + "\n"
     }
 
     var json: JSONValue {
-        [
+        // failed_step stays the number of the flow's own step; failed_at says where inside it.
+        let failed = passed ? nil : failedNumber ?? String(steps.count)
+        let top = failed.flatMap { Double($0.split(separator: ".").first.map(String.init) ?? "") }
+        return [
             "name": .string(flow.name), "passed": .bool(passed), "seconds": .number((seconds * 10).rounded() / 10),
             "steps": .number(Double(flow.steps.count)),
-            "failed_step": passed ? .null : .number(Double(steps.count)),
+            "failed_step": top.map(JSONValue.number) ?? .null,
+            "failed_at": failed.map(JSONValue.string) ?? .null,
             "video": video.map { JSONValue.string($0.url.path) } ?? .null,
         ]
     }

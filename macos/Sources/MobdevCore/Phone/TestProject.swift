@@ -7,7 +7,7 @@ import Foundation
 ///       mobdev.json
 ///       tests/
 ///         sign-in.json
-///         checkout.json
+///         checkout.yaml
 ///
 /// `mobdev.json` names the app and what every test starts with. Every key is optional:
 ///
@@ -26,7 +26,8 @@ import Foundation
 /// `android`), relative to the project folder. `before_each` runs before every test. `${NAME}` in
 /// a step's strings is replaced by a variable; a run and the environment override the file. A
 /// secret is a variable whose value comes from the run or the environment only and never appears
-/// in results.
+/// in results. A test is a flow in JSON or Maestro's YAML; its `run` steps name subflows next to
+/// it or relative to the project folder.
 public struct TestProject: Sendable, Equatable {
     public struct App: Sendable, Equatable {
         public var bundleID: String?
@@ -84,7 +85,7 @@ public struct TestProject: Sendable, Equatable {
         }
     }
 
-    /// A test by its file name (without .json) or its name.
+    /// A test by its file name (without .json or .yaml) or its name.
     public func test(_ query: String) -> TestCase? {
         tests.first { $0.slug == query } ?? tests.first { $0.name == query }
             ?? tests.first { $0.slug == Self.slug(query) }
@@ -124,7 +125,7 @@ public struct TestProject: Sendable, Equatable {
             let testsFolder = folder.appendingPathComponent(testsFolderName)
             guard files.fileExists(atPath: testsFolder.path, isDirectory: &isFolder), isFolder.boolValue else {
                 throw ToolFailure(
-                    "\(folder.path) has no \(fileName) and no \(testsFolderName) folder. A project is a folder with tests/*.json, and optionally \(fileName) naming the app."
+                    "\(folder.path) has no \(fileName) and no \(testsFolderName) folder. A project is a folder with tests/*.json or Maestro tests/*.yaml, and optionally \(fileName) naming the app."
                 )
             }
             project = TestProject(folder: folder, name: folder.lastPathComponent)
@@ -135,8 +136,18 @@ public struct TestProject: Sendable, Equatable {
 
     static func loadTests(in folder: URL) throws -> [TestCase] {
         guard let names = try? FileManager.default.contentsOfDirectory(atPath: folder.path) else { return [] }
-        return try names.filter { $0.hasSuffix(".json") && !$0.hasPrefix(".") }.sorted()
-            .map { try TestCase.load(folder.appendingPathComponent($0)) }
+        let project = folder.deletingLastPathComponent()
+        let tests = try names.filter { TestCase.isTestFile($0) && !$0.hasPrefix(".") }.sorted()
+            .map { try TestCase.load(folder.appendingPathComponent($0), project: project) }
+        var seen: [String: String] = [:]
+        for test in tests {
+            if let other = seen[test.slug] {
+                throw ToolFailure(
+                    "\(other) and \(test.file.lastPathComponent) in \(folder.path) are both the test \(test.slug); rename one.")
+            }
+            seen[test.slug] = test.file.lastPathComponent
+        }
+        return tests
     }
 
     public static func parse(_ value: JSONValue, folder: URL) throws -> TestProject {
@@ -169,7 +180,13 @@ public struct TestProject: Sendable, Equatable {
         }
         if let before = object["before_each"], !before.isNull {
             guard before.arrayValue != nil else { throw ToolFailure("before_each must be an array of steps.") }
-            project.beforeEach = try Flow.parse(before).steps
+            do {
+                var flow = try Flow.parse(before, name: "before_each")
+                try flow.loadSubflows(relativeTo: folder)
+                project.beforeEach = flow.steps
+            } catch {
+                throw ToolFailure("before_each: \(error)")
+            }
         }
         if let variables = object["variables"], !variables.isNull {
             guard let map = variables.objectValue else { throw ToolFailure("variables must be an object of strings.") }
@@ -208,17 +225,18 @@ public struct TestProject: Sendable, Equatable {
         }
         if isFolder.boolValue { return (try load(url), []) }
         if url.lastPathComponent == fileName { return (try load(url.deletingLastPathComponent()), []) }
-        guard url.pathExtension.lowercased() == "json" else {
-            throw ToolFailure("\(url.path) is neither a project folder nor a .json test.")
+        guard TestCase.isTestFile(url.lastPathComponent) else {
+            throw ToolFailure("\(url.path) is neither a project folder nor a test (.json, or Maestro's .yaml).")
         }
-        let test = try TestCase.load(url)
         let folder = url.deletingLastPathComponent()
         if folder.lastPathComponent == testsFolderName {
             let root = folder.deletingLastPathComponent()
             if FileManager.default.fileExists(atPath: root.appendingPathComponent(fileName).path) {
+                let test = try TestCase.load(url, project: root)
                 return (try load(root), [test.slug])
             }
         }
+        let test = try TestCase.load(url)
         return (TestProject(folder: folder, name: test.name, tests: [test]), [test.slug])
     }
 
@@ -234,8 +252,7 @@ public struct TestProject: Sendable, Equatable {
         }
         if !appFields.isEmpty { lines.append("  \"app\": {" + appFields.joined(separator: ", ") + "}") }
         if !beforeEach.isEmpty {
-            let steps = beforeEach.map { "    " + $0.json.compactString }.joined(separator: ",\n")
-            lines.append("  \"before_each\": [\n" + steps + "\n  ]")
+            lines.append("  \"before_each\": [\n" + Flow.encode(beforeEach, indent: "    ") + "\n  ]")
         }
         if !variables.isEmpty {
             lines.append("  \"variables\": \(JSONValue.object(variables.mapValues(JSONValue.string)).compactString)")
@@ -258,7 +275,8 @@ public struct TestProject: Sendable, Equatable {
     }
 }
 
-/// One test: a flow in `tests/`, with a description and the platforms it runs on.
+/// One test: a flow in `tests/`, with a description and the platforms it runs on. A Maestro flow
+/// (.yaml) is a test too, named by its config's name.
 ///
 ///     {
 ///       "name": "Sign in",
@@ -275,7 +293,7 @@ public struct TestCase: Sendable, Equatable {
     static let keys: Set<String> = ["name", "description", "platforms", "steps"]
 
     public var file: URL
-    /// The file name without .json: what selects the test.
+    /// The file name without .json or .yaml: what selects the test.
     public var slug: String
     public var name: String
     public var description: String
@@ -303,15 +321,43 @@ public struct TestCase: Sendable, Equatable {
 
     public func runs(on kind: DeviceKind) -> Bool { platforms.isEmpty || platforms.contains(Self.platformName(kind)) }
 
-    public static func load(_ url: URL) throws -> TestCase {
-        let data: Data
-        do {
-            data = try Data(contentsOf: url)
-        } catch {
-            throw ToolFailure("Could not read \(url.path): \(error.localizedDescription)")
+    /// A test file name: .json, or Maestro's .yaml and .yml.
+    static func isTestFile(_ name: String) -> Bool {
+        let lowered = name.lowercased()
+        return lowered.hasSuffix(".json") || Maestro.isMaestroFile(URL(fileURLWithPath: lowered))
+    }
+
+    /// A test file with its subflows loaded, from next to it and else from `project`.
+    public static func load(_ url: URL, project: URL? = nil) throws -> TestCase {
+        var test: TestCase
+        if Maestro.isMaestroFile(url) {
+            let flow = try Flow.read(url)
+            test = TestCase(file: url, name: flow.name, steps: flow.steps)
+        } else {
+            let data: Data
+            do {
+                data = try Data(contentsOf: url)
+            } catch {
+                throw ToolFailure("Could not read \(url.path): \(error.localizedDescription)")
+            }
+            guard let value = try? JSONValue.parse(data) else { throw ToolFailure("\(url.lastPathComponent) is not JSON.") }
+            test = try parse(value, file: url)
         }
-        guard let value = try? JSONValue.parse(data) else { throw ToolFailure("\(url.lastPathComponent) is not JSON.") }
-        return try parse(value, file: url)
+        try test.loadSubflows(project: project)
+        return test
+    }
+
+    /// Loads the subflows its run steps name, next to the test and else in the project folder.
+    mutating func loadSubflows(project: URL?) throws {
+        var flow = Flow(name: name, steps: steps)
+        do {
+            try flow.loadSubflows(
+                relativeTo: file.deletingLastPathComponent(), also: project.map { [$0] } ?? [],
+                chain: [file.standardizedFileURL])
+        } catch {
+            throw ToolFailure("\(file.lastPathComponent): \(error)")
+        }
+        steps = flow.steps
     }
 
     public static func parse(_ value: JSONValue, file: URL) throws -> TestCase {
@@ -354,7 +400,7 @@ public struct TestCase: Sendable, Equatable {
         if !platforms.isEmpty {
             lines.append("  \"platforms\": \(JSONValue.array(platforms.map(JSONValue.string)).compactString)")
         }
-        let steps = self.steps.map { "    " + $0.json.compactString }.joined(separator: ",\n")
+        let steps = Flow.encode(self.steps, indent: "    ")
         lines.append("  \"steps\": [\n" + steps + (self.steps.isEmpty ? "" : "\n") + "  ]")
         return Data(("{\n" + lines.joined(separator: ",\n") + "\n}\n").utf8)
     }
@@ -368,15 +414,22 @@ public struct TestCase: Sendable, Equatable {
     }
 }
 
-/// `${NAME}` in a step's strings. Values come from the run, then the environment, then the
-/// project file; secrets are the names whose values stay out of every result.
+/// `${NAME}` in a step's strings. In tests, values come from the run, then the environment, then
+/// the project file; secrets are the names whose values stay out of every result. A flow's set and
+/// extract steps add values while it runs.
 struct Variables: Sendable {
-    let values: [String: String]
+    private(set) var values: [String: String]
     let secrets: Set<String>
+    /// Where a variable that is not set can be set, for the error that says so.
+    let hint: String
 
-    init(values: [String: String], secrets: [String]) {
+    static let flowHint =
+        "Set it with a set or extract step before the step that uses it, or pass it with --var to Mobdev flow or in variables to run_flow."
+
+    init(values: [String: String] = [:], secrets: [String] = [], hint: String = Variables.flowHint) {
         self.values = values
         self.secrets = Set(secrets)
+        self.hint = hint
     }
 
     init(project: TestProject, overrides: [String: String], environment: [String: String]) {
@@ -385,12 +438,48 @@ struct Variables: Sendable {
             if let value = environment[name] { values[name] = value }
         }
         for (name, value) in overrides { values[name] = value }
-        self.init(values: values, secrets: project.secrets)
+        self.init(
+            values: values, secrets: project.secrets,
+            hint:
+                "Set it under variables in \(TestProject.fileName) or with a set step, pass it in variables when running the tests, or export it."
+        )
     }
 
     static func isName(_ text: String) -> Bool {
         guard let first = text.first, first.isLetter || first == "_" else { return false }
         return text.allSatisfy { $0.isLetter || $0.isNumber || $0 == "_" }
+    }
+
+    mutating func set(_ name: String, _ value: String) { values[name] = value }
+
+    /// The names of the variables a value uses, in order.
+    static func references(in value: JSONValue) -> [String] {
+        switch value {
+        case .string(let text):
+            var names: [String] = []
+            var rest = text[...]
+            while let start = rest.range(of: "${") {
+                let after = rest[start.upperBound...]
+                if let end = after.firstIndex(of: "}"), isName(String(after[..<end])) {
+                    names.append(String(after[..<end]))
+                    rest = after[after.index(after: end)...]
+                } else {
+                    rest = after
+                }
+            }
+            return names
+        case .array(let items): return items.flatMap(references)
+        case .object(let object): return object.keys.sorted().flatMap { references(in: object[$0]!) }
+        default: return []
+        }
+    }
+
+    /// The error for a variable that is not set, saying where to set it.
+    func unset(_ name: String) -> ToolFailure {
+        let hint = secrets.contains(name)
+            ? "Pass it in variables when running the tests, or export it before Mobdev test."
+            : self.hint
+        return ToolFailure("Variable \(name) is not set. \(hint)")
     }
 
     /// The step's arguments with every `${NAME}` replaced. A name without a value is an error
@@ -417,12 +506,7 @@ struct Variables: Sendable {
                 continue
             }
             let name = String(after[..<end])
-            guard let value = values[name] else {
-                let hint = secrets.contains(name)
-                    ? "Pass it in variables when running the tests, or export it before Mobdev test."
-                    : "Set it under variables in \(TestProject.fileName), pass it in variables when running the tests, or export it."
-                throw ToolFailure("Variable \(name) is not set. \(hint)")
-            }
+            guard let value = values[name] else { throw unset(name) }
             result += value
             rest = after[after.index(after: end)...]
         }
