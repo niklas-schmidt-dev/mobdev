@@ -185,6 +185,19 @@ import Testing
         #expect(DeviceHub.crossedScreens([blankPhone, ipadShowingPhone, phoneShowingIPad]).map { [$0.0, $0.1] } == [[1, 2]])
     }
 
+    /// An exchange holds while both devices are plugged in; once one leaves, both show their own again.
+    @Test func exchangedPicturesGoBackWhenADeviceLeaves() {
+        // The iPhone of a crossed pair was unplugged, the iPad stayed (2026-10-08).
+        #expect(DeviceHub.capturesToReturn([("iphone", "ipad", false), ("ipad", "iphone", true)]) == [0, 1])
+        // Both plugged in and crossed: the exchange stays.
+        #expect(DeviceHub.capturesToReturn([("iphone", "ipad", true), ("ipad", "iphone", true)]).isEmpty)
+        // Nothing exchanged, whether plugged in or not.
+        #expect(DeviceHub.capturesToReturn([("iphone", "iphone", false), ("ipad", "ipad", true)]).isEmpty)
+        // The other device was replaced in the list, or the iPad left instead.
+        #expect(DeviceHub.capturesToReturn([("ipad", "gone", true)]) == [0])
+        #expect(DeviceHub.capturesToReturn([("iphone", "ipad", true), ("ipad", "iphone", false)]) == [0, 1])
+    }
+
     @Test func aScreenStateTakesTheDevicesName() {
         let state = ScreenState.connected(name: "iPad", width: 1180, height: 2556)
         #expect(state.named("iPhone") == .connected(name: "iPhone", width: 1180, height: 2556))

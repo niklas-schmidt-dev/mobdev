@@ -13,6 +13,8 @@ public final class HardwareDevice: PhoneBackend, @unchecked Sendable {
     /// crossed two devices' pictures (see `DeviceHub.uncrossScreens`).
     public var capture: ScreenCapture { screen.get() }
     private let screen: Locked<ScreenCapture>
+    /// The capture of `captureID`, which `capture` is unless the pictures were exchanged.
+    let ownCapture: ScreenCapture
     public let activity: ActivityLog
     private let peripheral: HIDPeripheral
     private let layout: Locked<KeyboardLayout>
@@ -32,7 +34,8 @@ public final class HardwareDevice: PhoneBackend, @unchecked Sendable {
         self.peripheral = peripheral
         self.layout = layout
         self.onChange = onChange
-        screen = Locked(ScreenCapture(onlyDeviceID: captureID) { _ in onChange() })
+        ownCapture = ScreenCapture(onlyDeviceID: captureID) { _ in onChange() }
+        screen = Locked(ownCapture)
         activity = ActivityLog(limit: 1000, file: MobdevPaths.activityFile(device: id))
         state = Locked((info, captureName, host, host.map { HIDInput(sink: HostSink(peripheral: peripheral, host: $0)) }))
     }
@@ -69,6 +72,12 @@ public final class HardwareDevice: PhoneBackend, @unchecked Sendable {
         first.screen.set(second.capture)
         second.screen.set(capture)
     }
+
+    /// The capture device whose picture this device shows: its own, or another one's after an exchange.
+    var shownCaptureID: String { capture.pinnedDeviceID ?? captureID }
+
+    /// Shows this device's own capture again, after an exchange that no longer holds.
+    func returnCapture() { screen.set(ownCapture) }
 
     func assign(host: UUID?) {
         state.withLock { current in
@@ -433,7 +442,9 @@ public final class DeviceHub: @unchecked Sendable {
             // A device listed from USB alone (locked, or seen before) gets its screen now.
             if let info, let index = list.firstIndex(where: { $0.id == info.id }) {
                 let old = list[index]
-                old.capture.stop()
+                // Its own capture: one it got in an exchange is another device's, which goes back
+                // to that device (see `uncrossScreens`).
+                old.ownCapture.stop()
                 list[index] = makeDevice(
                     id: old.id, captureID: capture.id, captureName: capture.name, info: info, host: old.host)
                 Log.info("device \(info.name) now captured as \(capture.id)")
@@ -487,12 +498,31 @@ public final class DeviceHub: @unchecked Sendable {
     /// iPhones or two iPads crossed this way look alike and stay crossed.
     private func uncrossScreens() {
         let list = deviceList.get()
+        // An exchange only holds while both devices are plugged in: once one leaves, it would show the
+        // other one's picture under its own name, and the one still plugged in nothing (2026-10-08,
+        // after the iPhone of a crossed pair was unplugged and only the iPad stayed).
+        let returning = Self.capturesToReturn(list.map { ($0.captureID, $0.shownCaptureID, $0.isOnUSB) })
+        for index in returning {
+            list[index].returnCapture()
+            Log.info("\(list[index].name) shows its own picture again")
+        }
         let pairs = Self.crossedScreens(list.map { $0.isOnUSB ? $0.screenShapes : nil })
         for (tablet, phone) in pairs {
             HardwareDevice.exchangeCaptures(list[tablet], list[phone])
             Log.info("the pictures of \(list[tablet].name) and \(list[phone].name) arrived crossed; exchanged them")
         }
-        if !pairs.isEmpty { onChange() }
+        if !pairs.isEmpty || !returning.isEmpty { onChange() }
+    }
+
+    /// The devices that show another device's capture and get their own back: those no longer
+    /// plugged in, and those whose capture's device is no longer plugged in or listed.
+    static func capturesToReturn(_ devices: [(captureID: String, shownCaptureID: String, onUSB: Bool)]) -> [Int] {
+        devices.indices.filter { index in
+            let device = devices[index]
+            guard device.shownCaptureID != device.captureID else { return false }
+            let ownerOnUSB = devices.first { $0.captureID == device.shownCaptureID }?.onUSB ?? false
+            return !device.onUSB || !ownerOnUSB
+        }
     }
 
     /// Index pairs of a tablet showing a phone-shaped picture and a phone showing a tablet-shaped

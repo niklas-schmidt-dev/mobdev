@@ -71,6 +71,9 @@ public final class ScreenCapture: NSObject, AVCaptureVideoDataOutputSampleBuffer
     private var stopped = false
     private var frameWait: TimeInterval = 5
 
+    /// The capture device this capture is pinned to, if any.
+    public var pinnedDeviceID: String? { onlyDeviceID }
+
     /// `onlyDeviceID` pins the capture to one device; without it the preferred or first iPhone is used.
     public init(onlyDeviceID: String? = nil, onStateChange: @escaping @Sendable (ScreenState) -> Void = { _ in }) {
         self.onlyDeviceID = onlyDeviceID
