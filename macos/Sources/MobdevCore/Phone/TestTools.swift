@@ -91,7 +91,7 @@ public enum ProjectTools {
             ToolDefinition(
                 name: "list_tests", title: "List tests",
                 description:
-                    "The tests of a project: tests/*.json (or Maestro .yaml), each a flow with a name, description, platforms and steps, and mobdev.json with the app's bundle id, builds per platform, before_each steps, variables and secrets. Also the newest run's results. Use run_tests to run them and save_test to add one.",
+                    "The tests of a project: tests/*.json (or Maestro .yaml), each a flow with a name, description, platforms and steps, and mobdev.json with the app's bundle id, builds per platform, before_each steps, variables, secrets and native_tests (the app's own Xcode and Gradle suites). Also the newest run's results. Use run_tests to run them and save_test to add one; run_native_tests runs the native suites.",
                 inputSchema: PhoneTools.schema(["project": projectArgument(orTestFile: true)], screenshot: false),
                 readOnly: true),
             ToolDefinition(
@@ -133,7 +133,7 @@ public enum ProjectTools {
                         "run": ["type": "string", "description": "A run from list_tests, e.g. 2026-10-07 14.03.22; default the newest"],
                     ], screenshot: false),
                 readOnly: true),
-        ]
+        ] + nativeTestDefinitions
     }()
 
     public static func isProjectTool(_ name: String) -> Bool { definitions.contains { $0.name == name } }
@@ -161,6 +161,7 @@ public enum ProjectTools {
         case "save_test": return try saveTest(args, projects: projects)
         case "save_flow": return try saveFlow(args, projects: projects)
         case "test_result": return try testResult(args, projects: projects)
+        case "native_test_result": return try nativeTestResult(args, projects: projects)
         default: throw UnknownToolError(name: name)
         }
     }
@@ -284,9 +285,11 @@ public enum ProjectTools {
         if let last {
             lines.append("Newest run: \(last.summaryLine) Call test_result for details.")
         }
+        lines += nativeLines(project)
         var data = project.json
         if case .object(var object) = data {
             object["last_run"] = last?.json ?? .null
+            object["last_native_run"] = NativeTestRuns.result(for: project)?.json ?? .null
             object["runs"] = .array(TestRuns.runs(for: project).map { .string($0.lastPathComponent) })
             data = .object(object)
         }

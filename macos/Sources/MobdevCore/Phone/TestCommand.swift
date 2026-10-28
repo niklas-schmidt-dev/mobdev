@@ -8,7 +8,8 @@ import Foundation
 /// Prints a line per test and exits 0 when every test passed, 1 when one failed and 2 when the
 /// tests could not start. The artifacts directory gets results.json, junit.xml, each test's video
 /// and failure screenshot, the activity log and copied crash reports. Ctrl-C stops after the
-/// current step and still writes the results.
+/// current step and still writes the results. With `--native` it runs the app's own XCTest or
+/// Gradle suite instead (see `NativeTestCommand`).
 public enum TestCommand {
     static let usage = """
         Usage: Mobdev test <project> [--device <id or name>]... [--simulator <device type>]... [--emulator <avd>]... [--language <tag>]... [--artifacts <dir>] [--test <name>]... [--var NAME=value]... [--no-video] [--wait <seconds>]
@@ -35,6 +36,9 @@ public enum TestCommand {
                        Secrets can also come from the environment or `Mobdev secret set`.
           --no-video   do not record the tests
           --wait       how long to wait for the device to appear, default 120
+
+        Mobdev test <project> --native runs the app's own XCTest or Gradle suite instead; see
+        Mobdev test --native --help.
         """
 
     public static func run(_ arguments: [String]) -> Never {
@@ -111,6 +115,7 @@ public enum TestCommand {
     }
 
     static func execute(_ arguments: [String], output: @escaping @Sendable (String) -> Void) async -> Int32 {
+        if arguments.contains("--native") { return await NativeTestCommand.execute(arguments, output: output) }
         let options: Options
         do {
             options = try parse(arguments)

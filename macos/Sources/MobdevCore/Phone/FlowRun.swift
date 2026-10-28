@@ -27,7 +27,7 @@ extension PhoneTools {
     ]
 
     /// Tools a flow may not call: another flow or the tests, and nothing that picks a different device.
-    static let flowExcluded: Set<String> = ["run_flow", "run_tests", "list_devices", "crawl_app"]
+    static let flowExcluded: Set<String> = ["run_flow", "run_tests", "run_native_tests", "list_devices", "crawl_app"]
 
     func runFlowTool(_ args: Arguments, source: String) async throws -> ToolOutput {
         var flow: Flow

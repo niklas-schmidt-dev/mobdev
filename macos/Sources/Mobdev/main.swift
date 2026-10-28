@@ -51,7 +51,8 @@ if CommandLine.arguments.dropFirst().first == "convert" {
     ConvertCommand.run(Array(CommandLine.arguments.dropFirst(2)))
 }
 
-// `Mobdev test <project>` runs a project's tests on a simulator or Android device without the app.
+// `Mobdev test <project>` runs a project's tests on a simulator or Android device without the app;
+// with --native, the app's own XCTest or Gradle suite.
 if CommandLine.arguments.dropFirst().first == "test" {
     TestCommand.run(Array(CommandLine.arguments.dropFirst(2)))
 }

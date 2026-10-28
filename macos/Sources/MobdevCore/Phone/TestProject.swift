@@ -19,7 +19,8 @@ import Foundation
 ///       },
 ///       "before_each": [{"launch_app": {"bundle_id": "com.example.MyApp", "restart": true}}],
 ///       "variables": {"EMAIL": "me@example.com"},
-///       "secrets": ["PASSWORD"]
+///       "secrets": ["PASSWORD"],
+///       "native_tests": {"ios": {"project": "../MyApp.xcodeproj", "scheme": "MyApp"}}
 ///     }
 ///
 /// A build is installed once per run on a device of its platform (`iphone`, `simulator` or
@@ -27,7 +28,8 @@ import Foundation
 /// a step's strings is replaced by a variable; a run and the environment override the file. A
 /// secret is a variable whose value comes from the run or the environment only and never appears
 /// in results. A test is a flow in JSON or Maestro's YAML; its `run` steps name subflows next to
-/// it or relative to the project folder.
+/// it or relative to the project folder. `native_tests` says where the app's own XCTest and
+/// Gradle suites are (see `NativeTestConfig`).
 public struct TestProject: Sendable, Equatable {
     public struct App: Sendable, Equatable {
         public var bundleID: String?
@@ -43,7 +45,7 @@ public struct TestProject: Sendable, Equatable {
     public static let fileName = "mobdev.json"
     public static let testsFolderName = "tests"
     static let buildPlatforms = ["iphone", "simulator", "android"]
-    static let keys: Set<String> = ["name", "app", "before_each", "variables", "secrets"]
+    static let keys: Set<String> = ["name", "app", "before_each", "variables", "secrets", NativeTestConfig.key]
 
     public var folder: URL
     public var name: String
@@ -53,10 +55,12 @@ public struct TestProject: Sendable, Equatable {
     public var secrets: [String]
     /// The tests in `tests/`, by file name.
     public var tests: [TestCase]
+    /// Where the app's own test suites are, for `run_native_tests`.
+    public var nativeTests: NativeTestConfig?
 
     public init(
         folder: URL, name: String, app: App = App(), beforeEach: [Flow.Step] = [], variables: [String: String] = [:],
-        secrets: [String] = [], tests: [TestCase] = []
+        secrets: [String] = [], tests: [TestCase] = [], nativeTests: NativeTestConfig? = nil
     ) {
         self.folder = folder
         self.name = name
@@ -65,6 +69,7 @@ public struct TestProject: Sendable, Equatable {
         self.variables = variables
         self.secrets = secrets
         self.tests = tests
+        self.nativeTests = nativeTests
     }
 
     public var file: URL { folder.appendingPathComponent(Self.fileName) }
@@ -207,6 +212,9 @@ public struct TestProject: Sendable, Equatable {
             }
             project.secrets = names
         }
+        if let native = object[NativeTestConfig.key], !native.isNull {
+            project.nativeTests = try NativeTestConfig.parse(native)
+        }
         return project
     }
 
@@ -258,6 +266,7 @@ public struct TestProject: Sendable, Equatable {
             lines.append("  \"variables\": \(JSONValue.object(variables.mapValues(JSONValue.string)).compactString)")
         }
         if !secrets.isEmpty { lines.append("  \"secrets\": \(JSONValue.array(secrets.map(JSONValue.string)).compactString)") }
+        if let nativeTests { lines.append("  \"\(NativeTestConfig.key)\": \(nativeTests.json.compactString)") }
         return Data(("{\n" + lines.joined(separator: ",\n") + "\n}\n").utf8)
     }
 
@@ -271,6 +280,7 @@ public struct TestProject: Sendable, Equatable {
             "variables": .object(variables.mapValues(JSONValue.string)),
             "secrets": .array(secrets.map(JSONValue.string)),
             "tests": .array(tests.map(\.json)),
+            "native_tests": nativeTests?.json ?? .null,
         ]
     }
 }

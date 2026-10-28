@@ -146,7 +146,9 @@ public final class PhoneTools: Sendable {
         of your working folder, else the active one (`list_projects`, `open_project`, `create_project`; ask \
         before creating one). `list_tests` shows its tests, `save_test` and `save_flow` write one, \
         `run_tests` runs them on a device with a video and a screenshot of each failure, and \
-        `test_result` returns the newest results. \
+        `test_result` returns the newest results. `run_native_tests` runs the app's own XCTest or \
+        Gradle suite on the device in the background and `native_test_result` reads its failures with \
+        file and line. \
         With an App Store Connect key in Mobdev's settings, `appstore_apps`, `appstore_builds`, \
         `appstore_testflight`, `appstore_versions` and `appstore_reviews` read the user's apps, builds, \
         TestFlight groups, review states and customer reviews; the tools that change App Store Connect \
@@ -278,7 +280,7 @@ public final class PhoneTools: Sendable {
                     ], required: ["text"]), readOnly: true),
         ] + secretDefinitions + observeDefinitions + treeDefinitions + appDefinitions + settingsDefinitions + recordingDefinitions
             + sessionDefinitions + crawlDefinitions + checkDefinitions + flowDefinitions + testDefinitions
-            + devLoopDefinitions + profilingDefinitions + networkDefinitions
+            + nativeTestDefinitions + devLoopDefinitions + profilingDefinitions + networkDefinitions
     }()
 
     public static func definition(named name: String) -> ToolDefinition? {
@@ -306,7 +308,11 @@ public final class PhoneTools: Sendable {
                 }
             } else {
                 if !definition.readOnly { try checkNotHeld() }
-                output = try await name == "type_secret" ? typeSecret(args, source: source) : run(name, args)
+                switch name {
+                case "type_secret": output = try await typeSecret(args, source: source)
+                case "run_native_tests": output = try await runNativeTestsTool(args, source: source)
+                default: output = try await run(name, args)
+                }
             }
             let wantsScreenshot = args.bool("screenshot") ?? screenshotByDefault
             let offersScreenshot = definition.inputSchema["properties"]?["screenshot"] != nil && !definition.readOnly

@@ -186,6 +186,8 @@ only device, or the connected iPhone when simulators or Android devices run next
 | `save_test` | `project`, `name`, `steps`, `description`, `platforms`, `file` | Writes a test into the project, creating it when needed |
 | `save_flow` | `project`, `name`, `steps`, `file` | Writes a flow into the project's `flows/` |
 | `test_result` | `project`, `run` | The newest run's results, with each failure's step, screenshot and video |
+| `run_native_tests` | `project`, `platform`, `only`, `workspace`, `xcode_project`, `scheme`, `test_plan`, `build`, `gradle_root`, `task`, `module`, `wait` | Runs the app's own XCTest/Swift Testing or Gradle suite on this device in the background (see [Native tests](#native-tests)) |
+| `native_test_result` | `project`, `run` | A native run's progress, else its results: every failure with message and file:line, attachments, the .xcresult |
 | `save_screenshot` | `path` | The screen as a full-resolution PNG in the project's `screenshots/`, such as `de-DE/iphone-6.9/01-home` |
 | `crawl_app` | `bundle_id`, `max_actions`, `max_screens`, `max_depth`, `seconds`, `avoid`, `output` | Explores an app without a model, maps its screens and keeps every crash with the steps to it |
 | `navigate_to` | `bundle_id`, `screen`, `map` | Goes to a screen the map of `crawl_app` knows |
@@ -574,13 +576,13 @@ the app:
 
 ```
 mobdev/
-  mobdev.json    the app, its builds and what every test starts with (see Tests)
+  mobdev.json    the app, its builds, what every test starts with and its native suites (see Tests)
   tests/         tests
   flows/         saved flows
   baselines/     assert_screenshot's reference pictures
   screenshots/   save_screenshot's pictures, such as App Store screenshots
   maps/          crawl_app's map of each app
-  output/        test runs, recordings, crawls, traces, failed checks and flow videos
+  output/        test runs, native test runs, recordings, crawls, traces, failed checks and flow videos
 ```
 
 Commit everything but `output/`. It brings its own `.gitignore`, so the repository's stays as it
@@ -912,6 +914,71 @@ iOS, and the other way round.
 [`.github/workflows/flows.yml`](../.github/workflows/flows.yml) runs it on GitHub's `macos-26`
 runners next to the flow; a job for your app looks like the one above with `Mobdev test` in place
 of `Mobdev flow`, and `junit.xml` in the artifacts.
+
+### Native tests
+
+Mobdev also runs the app's own test suite on the device you pick: XCTest, XCUITest and Swift
+Testing through Xcode on a simulator or an iPhone (with Developer Mode), and Android's
+instrumented tests through Gradle on an emulator or phone. A Gradle unit-test task such as
+`testDebugUnitTest` runs on the Mac without a device. Mobdev finds the suite in the repository when
+there is one candidate: its only Xcode workspace (else project) and the only shared scheme with
+tests, and its `gradlew`. Otherwise name it in `mobdev.json`; every key is optional and paths are
+relative to the project folder, like `app.builds`:
+
+```json
+"native_tests": {
+  "ios": {"workspace": "../ios/MyApp.xcworkspace", "scheme": "MyApp", "test_plan": "UnitTests"},
+  "android": {"gradle_root": "../android", "module": "app", "task": "connectedDebugAndroidTest"}
+}
+```
+
+`ios` takes `workspace` or `project` (an .xcodeproj), `scheme` and `test_plan`; `android` takes
+`gradle_root`, `task` (default `connectedDebugAndroidTest`) and `module`, which qualifies the task
+(`:app:connectedDebugAndroidTest`) and limits where results are read.
+
+- **iOS** runs `xcodebuild test -scheme … -destination id=<udid> -resultBundlePath …`
+  (`test-without-building` with `build: false`), and on an iPhone with `-allowProvisioningUpdates`
+  as Xcode does. It passes `-collect-test-diagnostics never`: after a failure Xcode would otherwise
+  gather a sysdiagnose-like report from the device, which takes minutes. The results come from the result bundle (`xcrun xcresulttool get test-results`,
+  Xcode 26 or later): each test's outcome and time, every failure's message with its file and line,
+  the compiler's errors with file and line when the build failed, and each failed test's
+  attachments (for a UI test the screen recording, its UI hierarchy and element descriptions),
+  exported from the bundle under the names Xcode gives them, for up to 20 failed tests.
+- **Android** runs `./gradlew <task>` in the Gradle root with `ANDROID_SERIAL` set to the device, and
+  reads the JUnit XML the run wrote under `build/outputs/androidTest-results` and `build/test-results`;
+  a failure's place is the test's own frame in the stack trace. When Gradle finds a unit-test task
+  up to date and runs nothing, the results of its previous run stand, with a note. An app started
+  from Finder gets `ANDROID_HOME` from the SDK Mobdev finds adb in and `JAVA_HOME` from Android
+  Studio's own Java when it has none.
+- `only` (`--test` on the command line) picks tests: `Target`, `Target/Class` or
+  `Target/Class/method` for Xcode, as `-only-testing:` takes them (a Swift Testing function with its
+  parentheses, `AppTests/adding()`), and a class or `Class#method` for Gradle.
+- Builds take minutes, more than an agent's call or the relays' 90 seconds should wait. A run goes
+  on in the background and holds the device, so other callers get "Busy" until it ends, as with
+  `run_tests`. `run_native_tests` waits up to `wait` seconds (by default until the end; through a
+  relay at most 75) and otherwise answers while it runs; `native_test_result` then says how it is
+  doing (building, testing, how many tests finished) and, once done, every failure. A project runs
+  one native suite at a time.
+- Each run keeps `results.json`, `junit.xml`, `summary.md`, the log (`xcodebuild.log` or
+  `gradle.log`), `Tests.xcresult` and the failures' attachments in the project's
+  `output/native-runs`, the newest 20.
+- In the app, **Native Tests** at the top of a project's **Tests** shows the suite that runs on the
+  chosen device, **Run** and **Stop**, the progress, and the results by suite: a failure's file and
+  line open in Xcode at that line, its attachments open with a click, and **Open in Xcode** opens
+  the result bundle. **Runs** lists native runs next to test runs.
+- `Mobdev test --native` runs the suite without the app, for CI, on a booted simulator or Android
+  device, or on one it creates for the run:
+
+  ```sh
+  Mobdev test mobdev/ --native --simulator "iPhone 17" --artifacts native-artifacts
+  Mobdev test mobdev/ --native --platform android --task testDebugUnitTest
+  ```
+
+  It prints the phases and a line per test, and exits 0 when every test passed, 1 when one failed
+  and 2 when the tests could not run (no suite found, the build failed, no device). `--scheme`,
+  `--test-plan`, `--workspace`, `--xcode-project`, `--no-build`, `--gradle-root`, `--task` and
+  `--module` override `mobdev.json`; `--device`, `--emulator`, `--artifacts` and `--wait` work as
+  for `Mobdev test`. `--artifacts` gets the files above.
 
 ### Checks
 

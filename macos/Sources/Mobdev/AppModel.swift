@@ -159,6 +159,8 @@ final class AppModel {
         UIRunners.shared.onChange { signal.fire() }
         // Agents open and create projects too; the list in the tools is the one that counts.
         projectList.onChange { [weak self] in Task { @MainActor in self?.refreshProjects() } }
+        // Native test runs go on by themselves, started here or by an agent; their progress shows in Tests.
+        NativeTestRuns.onChange { [weak self] folder in Task { @MainActor in self?.refreshNativeRun(folder) } }
         projectList.onOutput { [weak self] folder, _ in
             Task { @MainActor in
                 guard let self else { return }
@@ -946,6 +948,35 @@ final class AppModel {
 
     /// Stops after the current step; what ran so far is kept as the run's result.
     func stopTests(_ project: TestProject) { testTasks[project.folder.path]?.cancel() }
+
+    /// Each project's native test run in progress, else its newest one, by normalized folder path.
+    private(set) var nativeResults: [String: NativeTestResult] = [:]
+
+    func nativeResult(_ folder: URL) -> NativeTestResult? { nativeResults[ProjectList.normalized(folder).path] }
+
+    func isRunningNativeTests(_ folder: URL) -> Bool { nativeResult(folder)?.running == true }
+
+    /// Reads a project's native run again: the one going on, else the newest saved one.
+    func refreshNativeRun(_ folder: URL) {
+        let key = ProjectList.normalized(folder).path
+        if let running = NativeTestRuns.running(for: folder) {
+            nativeResults[key] = running.snapshot
+        } else if let project = try? TestProject.load(folder) {
+            nativeResults[key] = NativeTestRuns.result(for: project)
+        }
+    }
+
+    /// Runs the project's native suite on a device through `run_native_tests`, as an agent would,
+    /// and returns at once; progress arrives through `NativeTestRuns.onChange`. Nil, or why the
+    /// run could not start.
+    func runNativeTests(_ project: TestProject, on device: String) async -> String? {
+        let output = await run("run_native_tests", on: device, ["project": .string(project.folder.path), "wait": 0])
+        refreshNativeRun(project.folder)
+        return output.isError ? output.text : nil
+    }
+
+    /// Stops xcodebuild or Gradle; the tests that finished stay in the run's results.
+    func stopNativeTests(_ folder: URL) { NativeTestRuns.running(for: folder)?.cancel() }
 
     // MARK: Flows
 

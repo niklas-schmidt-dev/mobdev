@@ -228,6 +228,7 @@ import Testing
         #expect(
             Set(projectTools) == [
                 "list_projects", "create_project", "open_project", "list_tests", "save_test", "save_flow", "test_result",
+                "native_test_result",
             ])
         let macTools = projectTools + ["list_secrets"] + VirtualDeviceTools.definitions.map(\.name)
             + AppStoreTools.definitions.map(\.name)
