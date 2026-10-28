@@ -8,9 +8,11 @@ enum Pane: Hashable {
     /// The active project's tests, or how to get a project: what the Tests pane of 0.2.50 and
     /// earlier, stored as "tests", opens now.
     case projects
+    /// An app in App Store Connect, by its App Store Connect ID.
+    case appStoreApp(String)
 
     /// Stored in user defaults as "overview", "device:<id>", "remote-device:<mac>/<id>",
-    /// "project:<section>:<path>", "agents", …
+    /// "project:<section>:<path>", "appstore:<app id>", "agents", …
     var rawValue: String {
         switch self {
         case .overview: "overview"
@@ -18,6 +20,7 @@ enum Pane: Hashable {
         case .remoteDevice(let mac, let id): "remote-device:\(mac)/\(id)"
         case .project(let path, let section): "project:\(section.rawValue):\(path)"
         case .projects: "projects"
+        case .appStoreApp(let id): "appstore:\(id)"
         case .agents: "agents"
         case .activity: "activity"
         case .remote: "remote"
@@ -31,6 +34,7 @@ enum Pane: Hashable {
         case "activity": self = .activity
         case "remote": self = .remote
         case let value where value.hasPrefix("device:"): self = .device(String(value.dropFirst("device:".count)))
+        case let value where value.hasPrefix("appstore:"): self = .appStoreApp(String(value.dropFirst("appstore:".count)))
         case let value where value.hasPrefix("project:"):
             let parts = value.dropFirst("project:".count).split(separator: ":", maxSplits: 1)
             if parts.count == 2, let section = ProjectSection(rawValue: String(parts[0])) {
@@ -94,6 +98,8 @@ struct MainView: View {
                 ProjectDetailView(folder: URL(fileURLWithPath: path, isDirectory: true), section: section).id(path + section.rawValue)
             case .projects:
                 NoProjectView()
+            case .appStoreApp(let id):
+                AppStoreAppView(appID: id).id(id)
             case .agents: AgentsView()
             case .activity: ActivityView()
             case .remote: RemoteView()
@@ -181,6 +187,7 @@ private struct Sidebar: View {
                     }
                 }
             }
+            AppStoreSidebarSection()
             Section("Agents") {
                 NavigationLink(value: Pane.agents) {
                     Label("Connect", systemImage: "point.3.connected.trianglepath.dotted")
