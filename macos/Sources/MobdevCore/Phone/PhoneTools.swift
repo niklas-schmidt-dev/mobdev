@@ -58,6 +58,8 @@ public final class PhoneTools: Sendable {
     public let recorder = FlowRecorder()
     /// The newest successful actions, always, so `recent_steps` can turn what just worked into a test.
     let history = FlowRecorder(limit: 200)
+    /// The flow, test run or crawl that holds this device while it runs.
+    let hold = Locked<DeviceHold?>(nil)
     /// The marks of the last `observe`, for `tap_mark`.
     let observed = Locked<ObservedMarks?>(nil)
     /// The screen recording `start_recording` started.
@@ -288,12 +290,17 @@ public final class PhoneTools: Sendable {
         do {
             try AppBlocklist.check(name, args)
             var output: ToolOutput
-            switch name {
-            case "run_flow": output = try await runFlowTool(args, source: source)
-            case "type_secret": output = try await typeSecret(args, source: source)
-            case "run_tests": output = try await runTestsTool(args, source: source)
-            case "crawl_app", "navigate_to": output = try await runCrawlTool(name, args, source: source)!
-            default: output = try await run(name, args)
+            if let what = Self.holdingTools[name] {
+                output = try await holding(what, source: source) {
+                    switch name {
+                    case "run_flow": try await runFlowTool(args, source: source)
+                    case "run_tests": try await runTestsTool(args, source: source)
+                    default: try await runCrawlTool(name, args, source: source)!
+                    }
+                }
+            } else {
+                if !definition.readOnly { try checkNotHeld() }
+                output = try await name == "type_secret" ? typeSecret(args, source: source) : run(name, args)
             }
             let wantsScreenshot = args.bool("screenshot") ?? screenshotByDefault
             let offersScreenshot = definition.inputSchema["properties"]?["screenshot"] != nil && !definition.readOnly
