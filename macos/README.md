@@ -215,8 +215,10 @@ only device, or the connected iPhone when simulators or Android devices run next
 | `stop_recording` | | Ends the recording and says where it is |
 | `recent_steps` | `count`, `clear` | The newest actions that worked, as flow steps for `save_test` |
 | `run_shortcut` | `name` | Runs a shortcut from Apple's Shortcuts app |
-| `performance` | `bundle_id`, `seconds`, `max_cpu`, `max_memory_mb`, `max_janky_percent` | CPU, memory and (Android) frames of a running app; budgets fail the call. Simulators and Android |
+| `performance` | `bundle_id`, `seconds`, `max_cpu`, `max_memory_mb`, `max_janky_percent` | CPU, memory and (Android) frames of a running app; budgets fail the call. iPhones through Instruments |
 | `measure_launch` | `bundle_id`, `runs`, `method`, `max_ms`, `stable` | Cold launch time over several runs: min, median, max |
+| `record_trace` | `template`, `seconds`, `bundle_id`, `launch`, `path` | An Instruments trace (iPhones, simulators) or a Perfetto trace (Android) into the project's `output/traces`, with a short summary |
+| `device_load` | `count` | The whole device: busiest processes by CPU and memory, memory used and total, thermal state |
 | `dev_menu` | `port` | Opens a React Native or Expo app's developer menu |
 | `reload_app` | `port` | Reloads a React Native or Expo app through Metro, else through its developer menu |
 
@@ -366,19 +368,61 @@ goes over `max_cpu` (average), `max_memory_mb` (peak), `max_janky_percent` or `m
   with `proc_pid_rusage`. Launch time is iOS's own `ApplicationFirstFramePresentation` signpost,
   streamed with `simctl spawn <udid> log stream`: from SpringBoard taking the launch request to the
   app's first frame, the number Xcode's Organizer and MetricKit report. Simulators have no frame
-  times; use Android or Instruments for those. A simulator shares the Mac's CPU, so its numbers say
-  how an app compares with itself, not how fast an iPhone is.
+  times, and Instruments' Animation Hitches does not run on them; use an iPhone or Android for
+  those. A simulator shares the Mac's CPU, so its numbers say how an app compares with itself, not
+  how fast an iPhone is.
+- **iPhone** (Developer Mode, Xcode on the Mac): `performance` records Instruments' Activity
+  Monitor template with `xcrun xctrace record --template 'Activity Monitor' --attach <pid>`, the pid
+  `devicectl` names, and reads its `activity-monitor-process-live` table with `xctrace export`: the
+  app's CPU time, the percent of one core in each interval (about once a second) and its physical
+  footprint. Instruments needs 10 to 20 seconds more than `seconds` to start and to save.
+  `measure_launch` times the screen: one App Launch recording per run would add that much each
+  time, so three runs do not fit a relay's call. Record `record_trace` with `template: "App Launch"`
+  for Instruments' own view of a launch.
 - **Android**: one adb shell command reads `/proc/<pid>/stat` and `VmRSS` about once a second,
   resets `dumpsys gfxinfo` before and reads it after (frames, janky share, 50th to 99th percentile
   frame times), and adds the PSS from `dumpsys meminfo`. Launch time is `am start -W`'s `TotalTime`
   after `am force-stop`.
-- **iPhone**: CPU and memory need Instruments, so `performance` says how to record them with
-  `xcrun xctrace record --template 'Activity Monitor'`. `measure_launch` times the screen instead.
 - `method: "screen"` (any device): from the first frame that changes (the launch animation) to the
   last change before the screen stays still for `stable` seconds (default 2). It includes what the
   app loads after its first frame, but a launch or splash screen shown longer than `stable` ends it
   early.
 - Over a relay a call has 90 seconds, so keep `seconds`, and `runs` times the launch, below that.
+
+`record_trace` records a trace for `seconds` (default 10, at most 60) to look at in Instruments or
+Perfetto, by default into the project's `output/traces` (without a project, `traces/` in Mobdev's
+folder), or to `path`:
+
+- **iPhones and simulators**: any template `xcrun xctrace list templates` names, such as Time
+  Profiler (the default), Allocations, Leaks, Network, Animation Hitches, SwiftUI, Power Profiler,
+  App Launch or your own. With `bundle_id` it attaches to the running app, with `launch: true` it
+  starts the app for the recording (App Launch always does), without `bundle_id` it records every
+  process, which takes a minute or more for Time Profiler. xctrace sometimes does not find an app
+  that started moments ago; Mobdev tries again once. Activity Monitor and Animation Hitches need
+  an iPhone: simulators have no activity monitoring service and no hitch recording. Where the
+  export makes it cheap, the answer adds a summary: Time Profiler's heaviest functions (self time)
+  and potential hangs, the number of hitches, Activity Monitor's CPU and memory. Leaks keeps its
+  findings in Instruments: `xctrace export` has no table of them. Open the trace in Instruments
+  with `open <path>`.
+- **Android**: a Perfetto trace from the device's own `perfetto` (scheduling, CPU frequencies and
+  idle states, activity and window manager, graphics, views, input, binder; with `bundle_id` the
+  app's own trace sections too), written to `/data/misc/perfetto-traces`, pulled to the Mac and
+  deleted on the device. Open it at [ui.perfetto.dev](https://ui.perfetto.dev) or in Android
+  Studio. Android 9 and 10 need `adb shell setprop persist.traced.enable 1` once.
+- Instruments takes 10 to 20 seconds more than `seconds`, so 60 still fits a relay's 90 seconds.
+
+`device_load` shows the whole device right now: its busiest processes by CPU and by memory (`count`
+of each, default 10), memory used and total, and the thermal state.
+
+| | How | Memory | Thermal state |
+|---|---|---|---|
+| iPhone | 3 seconds of Instruments' Activity Monitor for every process (about 15 s in all) | Memory used, the iPhone's total; physical footprint per process | Nominal, Fair, Serious or Critical |
+| iOS Simulator | The processes the simulator's launchd lists, read on the Mac twice a second apart | What they take together, out of the Mac's memory | The Mac's, which the simulator shares |
+| Android | `top` (two frames a second apart), `/proc/meminfo`, `dumpsys thermalservice` | `MemTotal` less `MemAvailable`; resident memory per process | Android's thermal status and the HAL's temperatures |
+
+The device inspector in the app has the same in its **Performance** section: pick an app and
+**Sample** it, see the **Device Load**, or **Record Trace…** with a template and a duration; the
+trace opens in Instruments, a Perfetto trace in Finder next to ui.perfetto.dev.
 
 ### React Native, Expo and Flutter
 
@@ -536,7 +580,7 @@ mobdev/
   baselines/     assert_screenshot's reference pictures
   screenshots/   save_screenshot's pictures, such as App Store screenshots
   maps/          crawl_app's map of each app
-  output/        test runs, recordings, crawls, failed checks and flow videos
+  output/        test runs, recordings, crawls, traces, failed checks and flow videos
 ```
 
 Commit everything but `output/`. It brings its own `.gitignore`, so the repository's stays as it

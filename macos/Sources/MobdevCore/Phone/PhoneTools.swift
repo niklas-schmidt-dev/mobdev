@@ -128,7 +128,9 @@ public final class PhoneTools: Sendable {
         `start_recording` and `stop_recording` keep a video of the screen; `save_screenshot` saves the \
         screen at full resolution, e.g. for App Store screenshots. \
         `performance` samples an app's CPU, memory and frames and `measure_launch` times its cold launch, \
-        both with optional budgets that fail the call; `reload_app` and `dev_menu` reload a React Native \
+        both with optional budgets that fail the call; `record_trace` records an Instruments template \
+        (iPhones, simulators) or a Perfetto trace (Android) and `device_load` shows the whole device's \
+        busiest processes, memory and thermal state; `reload_app` and `dev_menu` reload a React Native \
         or Expo app and open its developer menu. \
         `start_network_capture`, `network_log` and `stop_network_capture` show which requests an app makes \
         (Android through Mobdev's proxy, iOS from the app's own CFNetwork log; HTTPS is not decrypted). \
@@ -276,7 +278,7 @@ public final class PhoneTools: Sendable {
                     ], required: ["text"]), readOnly: true),
         ] + secretDefinitions + observeDefinitions + treeDefinitions + appDefinitions + settingsDefinitions + recordingDefinitions
             + sessionDefinitions + crawlDefinitions + checkDefinitions + flowDefinitions + testDefinitions
-            + devLoopDefinitions + networkDefinitions
+            + devLoopDefinitions + profilingDefinitions + networkDefinitions
     }()
 
     public static func definition(named name: String) -> ToolDefinition? {
@@ -522,6 +524,7 @@ public final class PhoneTools: Sendable {
             if let output = try await runSessionTool(name, args) { return output }
             if let output = try await runCheckTool(name, args) { return output }
             if let output = try await runDevLoopTool(name, args) { return output }
+            if let output = try await runProfilingTool(name, args) { return output }
             if let output = try await runNetworkTool(name, args) { return output }
             return try await runAppTool(name, args)
         }

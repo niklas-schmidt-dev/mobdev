@@ -3,7 +3,9 @@ import Foundation
 /// Performance on Android through adb. One shell command samples the app on the device: its CPU
 /// time from /proc/<pid>/stat and its resident memory from /proc/<pid>/status about once a second,
 /// with `dumpsys gfxinfo` reset before and read after for frame times, and `dumpsys meminfo` for
-/// the PSS Android Studio shows. Launches are timed with `am start -W` after `am force-stop`.
+/// the PSS Android Studio shows. Launches are timed with `am start -W` after `am force-stop`. The
+/// device's load comes from `top`, /proc/meminfo and `dumpsys thermalservice`; traces from the
+/// device's own `perfetto`, pulled to the Mac.
 extension AndroidApps: AppPerformance {
     var launchMethod: String { "am start -W, Android's own TotalTime until the first frame" }
 
@@ -181,6 +183,197 @@ extension AndroidApps: AppPerformance {
         guard let milliseconds = (values["TotalTime"] ?? values["WaitTime"]).flatMap(Double.init), milliseconds > 0
         else { return nil }
         return LaunchTiming(milliseconds: milliseconds, state: values["LaunchState"])
+    }
+}
+
+// MARK: - Device load and Perfetto
+
+extension AndroidApps {
+    func deviceLoad() async throws -> DeviceLoad {
+        let output = try await adb.shell(serial, Self.loadScript, timeout: 40)
+        return Self.parseLoad(output)
+    }
+
+    /// `top` twice a second apart, since its first frame's percentages count from boot; then
+    /// memory and the thermal service. Sections start with a marker line.
+    static let loadScript = [
+        "echo TOP",
+        "top -b -n 2 -d 1 -o PID,%CPU,RES,NAME 2>/dev/null || top -b -n 1",
+        "echo MEMINFO",
+        "cat /proc/meminfo",
+        "echo THERMAL",
+        "dumpsys thermalservice 2>/dev/null",
+        "true",
+    ].joined(separator: "; ")
+
+    static func parseLoad(_ output: String) -> DeviceLoad {
+        var sections: [String: [Substring]] = [:]
+        var section = ""
+        for line in output.split(separator: "\n", omittingEmptySubsequences: false) {
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            if ["TOP", "MEMINFO", "THERMAL"].contains(trimmed) {
+                section = trimmed
+                continue
+            }
+            sections[section, default: []].append(line)
+        }
+        let top = parseTop(sections["TOP"] ?? [])
+        let memory = parseMeminfo(sections["MEMINFO"] ?? [])
+        let thermal = parseThermal(sections["THERMAL"] ?? [])
+        return DeviceLoad(
+            processes: top.processes, cpuPercent: top.cpuPercent, cores: top.cores,
+            memoryUsedMB: memory.used, memoryTotalMB: memory.total, thermalState: thermal.state,
+            temperatures: thermal.temperatures, memoryKind: "resident (RSS)", seconds: 1,
+            source: "top, /proc/meminfo and dumpsys thermalservice")
+    }
+
+    /// The last frame of `top -b`: its "800%cpu … 750%idle" line and the rows under its header.
+    /// The header marks the sort column with brackets, such as "[%CPU]".
+    static func parseTop(_ lines: [Substring]) -> (processes: [DeviceLoad.Process], cpuPercent: Double?, cores: Int?) {
+        var header: [String] = []
+        var rows: [[String]] = []
+        var cpu: (total: Double, idle: Double)?
+        for line in lines {
+            let text = line.replacingOccurrences(of: "[", with: " ").replacingOccurrences(of: "]", with: " ")
+            let fields = text.split(separator: " ", omittingEmptySubsequences: true).map(String.init)
+            guard !fields.isEmpty else { continue }
+            if let total = fields.first(where: { $0.hasSuffix("%cpu") }).flatMap({ Double($0.dropLast(4)) }) {
+                let idle = fields.first(where: { $0.hasSuffix("%idle") }).flatMap { Double($0.dropLast(5)) } ?? 0
+                cpu = (total, idle)
+                continue
+            }
+            if fields.contains("PID"), fields.contains(where: { $0.contains("CPU") }) {
+                // A new frame: its rows replace the previous frame's.
+                header = fields
+                rows = []
+                continue
+            }
+            if !header.isEmpty, Int(fields[0]) != nil { rows.append(fields) }
+        }
+        func column(_ names: [String]) -> Int? { header.firstIndex { names.contains($0) } }
+        guard let pidColumn = column(["PID"]) else { return ([], nil, nil) }
+        let cpuColumn = column(["%CPU", "CPU%", "S%CPU"])
+        let memoryColumn = column(["RES", "RSS"])
+        // The name is the last column and may contain spaces.
+        let nameColumn = column(["NAME", "ARGS", "CMD", "CMDLINE", "Name"]) ?? header.count - 1
+        let processes = rows.compactMap { fields -> DeviceLoad.Process? in
+            guard fields.count >= header.count, let pid = Int(fields[pidColumn]) else { return nil }
+            let name = fields[nameColumn...].joined(separator: " ")
+            return DeviceLoad.Process(
+                name: name, pid: pid, cpuPercent: cpuColumn.flatMap { Double(fields[$0]) } ?? 0,
+                memoryMB: memoryColumn.flatMap { megabytes(fields[$0]) } ?? 0)
+        }
+        let cores = cpu.map { Int(($0.total / 100).rounded()) }
+        return (processes, cpu.map { max($0.total - $0.idle, 0) }, cores)
+    }
+
+    /// top's "183M", "45K", "1.2G"; a plain number is kilobytes.
+    static func megabytes(_ text: String) -> Double? {
+        let units: [Character: Double] = ["K": 1.0 / 1024, "M": 1, "G": 1024, "T": 1024 * 1024]
+        if let last = text.last, let factor = units[Character(last.uppercased())], let value = Double(text.dropLast()) {
+            return value * factor
+        }
+        return Double(text).map { $0 / 1024 }
+    }
+
+    /// MemTotal and MemAvailable, in MB; used is what is not available.
+    static func parseMeminfo(_ lines: [Substring]) -> (used: Double?, total: Double?) {
+        var values: [String: Double] = [:]
+        for line in lines {
+            let parts = line.split(separator: ":", maxSplits: 1)
+            guard parts.count == 2, let kilobytes = parts[1].split(separator: " ").first.flatMap({ Double($0) }) else { continue }
+            values[parts[0].trimmingCharacters(in: .whitespaces)] = kilobytes / 1024
+        }
+        guard let total = values["MemTotal"] else { return (nil, nil) }
+        let available = values["MemAvailable"] ?? values["MemFree"]
+        return (available.map { max(total - $0, 0) }, total)
+    }
+
+    /// "Thermal Status: 0" and the HAL's current temperatures, e.g.
+    /// "Temperature{mValue=31.0, mType=0, mName=CPU, mStatus=0}".
+    static func parseThermal(_ lines: [Substring]) -> (state: String?, temperatures: [String]) {
+        let names = ["none", "light", "moderate", "severe", "critical", "emergency", "shutdown"]
+        var state: String?
+        var temperatures: [String] = []
+        var current = false
+        for line in lines {
+            let text = line.trimmingCharacters(in: .whitespaces)
+            if text.hasPrefix("Thermal Status:"), let code = Int(text.dropFirst("Thermal Status:".count).trimmingCharacters(in: .whitespaces)) {
+                state = code >= 0 && code < names.count ? "\(names[code]) (\(code))" : "status \(code)"
+            } else if text.hasPrefix("Current temperatures from HAL") {
+                current = true
+            } else if current, text.hasPrefix("Temperature{") {
+                func field(_ key: String) -> String? {
+                    guard let range = text.range(of: key + "=") else { return nil }
+                    return String(text[range.upperBound...].prefix { $0 != "," && $0 != "}" })
+                }
+                if let value = field("mValue").flatMap(Double.init), let name = field("mName"), temperatures.count < 8 {
+                    temperatures.append(String(format: "%@ %.1f °C", name, value))
+                }
+            } else if current, !text.isEmpty, !text.hasPrefix("Temperature") {
+                current = false
+            }
+        }
+        return (state, temperatures)
+    }
+
+    /// What Perfetto records: scheduling, CPU frequencies and idle states from the kernel, and the
+    /// framework's own sections (activity and window manager, graphics, views, input, binder).
+    static let perfettoCategories = "sched freq idle am wm gfx view binder_driver hal dalvik input res"
+
+    /// Records with the device's `perfetto` into its trace folder, then pulls the file to the Mac.
+    /// With a package, the app's own trace sections are recorded too; with a launch, the app is
+    /// started fresh once the recording runs.
+    func recordTrace(_ request: TraceRequest) async throws -> TraceRecording {
+        let seconds = Int(request.seconds.rounded(.up))
+        let remote = "/data/misc/perfetto-traces/mobdev-\(UUID().uuidString.prefix(8)).perfetto-trace"
+        var command: String
+        let target: String
+        switch request.target {
+        case .allProcesses:
+            target = "the whole device"
+            command = Self.perfettoCommand(remote: remote, seconds: seconds, package: nil, background: false)
+        case .attach(let bundleID):
+            let package = try ADB.checkPackage(bundleID)
+            target = package
+            command = Self.perfettoCommand(remote: remote, seconds: seconds, package: package, background: false)
+        case .launch(let bundleID):
+            let package = try ADB.checkPackage(bundleID)
+            let component = try await launcherActivity(package)
+            target = "\(package), launched for the recording"
+            command = "am force-stop \(package); "
+                + "p=$(\(Self.perfettoCommand(remote: remote, seconds: seconds, package: package, background: true))) || exit 1; "
+                + "sleep 1; am start --activity-clear-task -n \(ADB.quote(component)) >/dev/null; "
+                + "while kill -0 $p 2>/dev/null; do sleep 0.5; done"
+        }
+        do {
+            _ = try await adb.shell(serial, command, timeout: request.seconds + 40)
+        } catch let error as DeveloperError {
+            _ = try? await adb.shell(serial, "rm -f \(remote)")
+            throw DeveloperError(
+                "Perfetto could not record: \(error.description) Android 9 and 10 need it turned on first: adb shell setprop persist.traced.enable 1.")
+        }
+        try FileManager.default.createDirectory(at: request.output.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let pulled = try await adb.run(serial, ["pull", remote, request.output.path], timeout: 60)
+        _ = try? await adb.shell(serial, "rm -f \(remote)")
+        guard pulled.status == 0, FileManager.default.fileExists(atPath: request.output.path) else {
+            throw DeveloperError("Could not copy the trace from the device: \(pulled.output.trimmingCharacters(in: .whitespacesAndNewlines))")
+        }
+        let size = ((try? FileManager.default.attributesOfItem(atPath: request.output.path))?[.size] as? NSNumber)?.intValue ?? 0
+        return TraceRecording(
+            file: request.output, template: "Perfetto", target: target, seconds: Double(seconds),
+            summary: [String(format: "%.1f MB of trace data", Double(size) / 1_048_576)],
+            howToOpen: "Open it at https://ui.perfetto.dev (Open trace file), or in Android Studio's profiler")
+    }
+
+    /// Perfetto's short form: output, duration, buffer, the app's own sections, then categories.
+    /// `--background` prints the pid of the recording and returns at once.
+    static func perfettoCommand(remote: String, seconds: Int, package: String?, background: Bool) -> String {
+        var parts = ["perfetto"]
+        if background { parts.append("--background") }
+        parts += ["-o", remote, "-t", "\(seconds)s", "-b", "64mb"]
+        if let package { parts += ["-a", package] }
+        return (parts + [perfettoCategories]).joined(separator: " ")
     }
 }
 
