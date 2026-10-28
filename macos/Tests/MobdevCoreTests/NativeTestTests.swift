@@ -25,6 +25,8 @@ final class NativeCommands: CommandRunning, @unchecked Sendable {
     var manifests: [String: String] = [:]
     /// Holds the started command until `release()`.
     var held = false
+    /// xcresulttool takes half a minute, unless the run is cancelled.
+    var slowReads = false
     let started = Locked<[[String]]>([])
     let ran = Locked<[[String]]>([])
     private let exit = Locked<(@Sendable (Int32) -> Void)?>(nil)
@@ -32,6 +34,7 @@ final class NativeCommands: CommandRunning, @unchecked Sendable {
 
     func run(_ executable: URL, _ arguments: [String], timeout: TimeInterval) async throws -> CommandResult {
         ran.withLock { $0.append(arguments) }
+        if slowReads { try await Task.sleep(nanoseconds: 30_000_000_000) }
         let joined = arguments.joined(separator: " ")
         if joined.contains("test-results tests") { return CommandResult(status: 0, output: tests) }
         if joined.contains("test-results summary") { return CommandResult(status: 0, output: summary) }
@@ -727,12 +730,78 @@ final class NativeCommands: CommandRunning, @unchecked Sendable {
         let (_, project) = try repository(native: #"{"android": {"gradle_root": "../android", "task": "publish"}}"#)
         #expect(throws: ToolFailure.self) { try NativeTestPlan.resolve(project, platform: .android) }
         var overrides = NativeTestPlan.Overrides()
+        overrides.task = "publishTestPublicationToMavenLocal"
+        #expect(throws: ToolFailure.self) { try NativeTestPlan.resolve(project, platform: .android, overrides: overrides) }
         overrides.task = ":app:testDebugUnitTest"
         #expect(try NativeTestPlan.resolve(project, platform: .android, overrides: overrides).gradleTask == ":app:testDebugUnitTest")
         #expect(NativeTestRuns.isRunName("2026-10-28 18.04.12"))
         #expect(NativeTestRuns.isRunName("2026-10-28 18.04.12 (2)"))
         #expect(!NativeTestRuns.isRunName("baseline"))
         #expect(!NativeTestRuns.isRunName("2026-10-28 notes"))
+    }
+
+    @Test func stoppingWhileReadingResultsEndsTheRun() async throws {
+        let (project, commands, runner) = try xcodeSetup()
+        commands.slowReads = true
+        let (run, _) = runner.start(
+            try NativeTestPlan.resolve(project, platform: .ios), project: project, device: Self.simulator,
+            output: try NativeTestRuns.newRunFolder(for: project), source: "test")
+        while run.snapshot.progress?.phase != "Reading results" { try await Task.sleep(nanoseconds: 10_000_000) }
+        run.cancel()
+        let result = await run.wait(timeout: 5)
+        #expect(!result.running)
+    }
+
+    @Test func aGradleUnitTaskRunsWithoutADevice() async throws {
+        let (repo, project) = try repository(native: #"{"android": {"gradle_root": "../android", "task": "testDebugUnitTest"}}"#)
+        let reports = repo.appendingPathComponent("android/app/build/test-results/testDebugUnitTest")
+        try FileManager.default.createDirectory(at: reports, withIntermediateDirectories: true)
+        let commands = NativeCommands()
+        let xml = Self.unitXML
+        commands.onStart = { _ in try? Data(xml.utf8).write(to: reports.appendingPathComponent("TEST-com.example.app.MathTest.xml")) }
+        let tools = DeviceTools(hub: DeviceHub(keyboardLayout: .us) {}, emulators: EmulatorHub(devices: []), settleDelay: 0)
+        try await NativeTestRunner.$current.withValue(NativeTestRunner(commands: commands, environment: [:])) {
+            let result = try await tools.call(
+                "run_native_tests", arguments: ["project": .string(project.folder.path), "platform": "android"], source: "test",
+                screenshotByDefault: false)
+            #expect(result.text.contains("on this Mac: 1 passed, 1 failed"), "\(result.text)")
+            // An iOS suite needs one.
+            let ios = try await tools.call(
+                "run_native_tests", arguments: ["project": .string(project.folder.path), "platform": "ios"], source: "test",
+                screenshotByDefault: false)
+            #expect(ios.isError && ios.text.hasPrefix("No device to run"), "\(ios.text)")
+        }
+    }
+
+    @Test func gradleReportsComeFromTheTasksModulesOnly() async throws {
+        let (repo, project) = try repository(native: #"{"android": {"gradle_root": "../android"}}"#)
+        @Sendable func report(_ module: String, _ name: String, age: TimeInterval?) throws {
+            let folder = repo.appendingPathComponent("android/\(module)/build/test-results/testDebugUnitTest")
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            let file = folder.appendingPathComponent("TEST-\(name).xml")
+            try Data(Self.unitXML.replacingOccurrences(of: "com.example.app.MathTest", with: name).utf8).write(to: file)
+            if let age { try FileManager.default.setAttributes([.modificationDate: Date().addingTimeInterval(-age)], ofItemAtPath: file.path) }
+        }
+        // :app ran now, :lib was up to date, :other is not part of the task.
+        try report("lib", "LibTest", age: 120)
+        try report("other", "OtherTest", age: 60)
+        let commands = NativeCommands()
+        commands.onStart = { _ in try? report("app", "AppTest", age: nil) }
+        let runner = NativeTestRunner(commands: commands, environment: [:])
+        var overrides = NativeTestPlan.Overrides()
+        overrides.task = "testDebugUnitTest"
+        let all = try NativeTestPlan.resolve(project, platform: .android, overrides: overrides)
+        let (run, _) = runner.start(all, project: project, device: nil, output: try NativeTestRuns.newRunFolder(for: project), source: "test")
+        let result = await run.wait(timeout: 10)
+        #expect(Set(result.tests.map(\.suite)) == ["AppTest", "LibTest", "OtherTest"], "\(result.tests.map(\.suite))")
+        #expect(result.note?.hasPrefix("Gradle found the task up to date in some modules") == true)
+
+        overrides.task = ":lib:testDebugUnitTest"
+        commands.onStart = nil
+        let one = try NativeTestPlan.resolve(project, platform: .android, overrides: overrides)
+        let (again, _) = runner.start(one, project: project, device: nil, output: try NativeTestRuns.newRunFolder(for: project), source: "test")
+        let lib = await again.wait(timeout: 10)
+        #expect(Set(lib.tests.map(\.suite)) == ["LibTest"], "\(lib.tests.map(\.suite))")
     }
 
     @Test func quittingStopsRunsGoingOn() async throws {

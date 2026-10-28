@@ -255,7 +255,8 @@ public struct NativeTestPlan: Sendable, Equatable {
             }
             // A test task only: an agent's call must not publish, deploy or clean with the user's setup.
             let taskName = task.split(separator: ":").last.map(String.init) ?? task
-            guard taskName.lowercased().contains("test") else {
+            guard taskName == "test" || taskName.hasPrefix("test") || taskName.hasSuffix("Test") || taskName.hasSuffix("Tests")
+            else {
                 throw ToolFailure("\(task) is not a test task. Native tests run tasks such as connectedDebugAndroidTest or testDebugUnitTest.")
             }
             let module = overrides.module ?? config.module

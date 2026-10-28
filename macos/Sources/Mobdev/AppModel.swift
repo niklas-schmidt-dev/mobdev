@@ -1034,8 +1034,17 @@ final class AppModel {
     /// Runs the project's native suite on a device through `run_native_tests`, as an agent would,
     /// and returns at once; progress arrives through `NativeTestRuns.onChange`. Nil, or why the
     /// run could not start.
-    func runNativeTests(_ project: TestProject, on device: String) async -> String? {
-        let output = await run("run_native_tests", on: device, ["project": .string(project.folder.path), "wait": 0])
+    func runNativeTests(_ project: TestProject, on device: String?) async -> String? {
+        let arguments: [String: JSONValue] = ["project": .string(project.folder.path), "wait": 0]
+        // Without a device a Gradle unit-test task still runs, on the Mac.
+        let output: ToolOutput
+        if let device {
+            output = await run("run_native_tests", on: device, arguments)
+        } else {
+            output =
+                (try? await tools.call("run_native_tests", arguments: .object(arguments), source: "app", screenshotByDefault: false))
+                ?? ToolOutput(text: "The tests did not start.", isError: true)
+        }
         refreshNativeRun(project.folder)
         return output.isError ? output.text : nil
     }

@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 
 /// `run_native_tests`: the app's own test suites on this device, XCTest and Swift Testing through
@@ -71,7 +72,10 @@ extension PhoneTools {
         }
         var target: TestRunResult.Device?
         if plan.needsDevice {
-            guard let device else { throw ToolFailure("This device cannot run native tests.") }
+            guard let device else {
+                throw ToolFailure(
+                    "No device to run \(plan.title) on: boot a simulator or connect a device. A Gradle unit-test task such as testDebugUnitTest runs on the Mac without one.")
+            }
             target = TestRunResult.Device(id: device.id, name: device.name, kind: device.kind.rawValue)
         }
         // Xcode installs the app and drives it, so nothing else may tap meanwhile. Unit tests on
@@ -143,6 +147,23 @@ extension PhoneTools {
     func releaseHold(_ id: UUID) {
         hold.withLock { held in if held?.id == id { held = nil } }
     }
+}
+
+/// No device: a Gradle unit-test task runs on the Mac when none is connected, and `run_native_tests`
+/// goes through this in its place.
+struct ThisMac: PhoneBackend {
+    private func none() -> ToolFailure { ToolFailure("No device is connected.") }
+    func status() -> PhoneStatus {
+        PhoneStatus(screen: .searching, bluetooth: .unsupported("no device"), keyboardLayout: .us, input: .direct("this Mac"))
+    }
+    func frame() -> CGImage? { nil }
+    func tap(at point: NormalizedPoint, hold: TimeInterval) async throws { throw none() }
+    func swipe(from start: NormalizedPoint, to end: NormalizedPoint, duration: TimeInterval) async throws { throw none() }
+    func scroll(at point: NormalizedPoint, ticks: Int) async throws { throw none() }
+    func pan(at point: NormalizedPoint, ticks: Int) async throws { throw none() }
+    func type(_ strokes: [KeyStroke]) async throws { throw none() }
+    func press(_ stroke: KeyStroke) async throws { throw none() }
+    func press(_ button: ConsumerUsage) async throws { throw none() }
 }
 
 extension ProjectTools {

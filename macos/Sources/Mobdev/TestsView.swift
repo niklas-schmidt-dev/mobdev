@@ -91,9 +91,10 @@ struct ProjectTestsView: View {
                     Button("Stop", systemImage: "stop.fill") { model.stopNativeTests(folder) }
                         .help("Stop xcodebuild or Gradle; the tests that finished keep their results")
                 } else {
+                    // Without a device a Gradle unit-test task still runs, on the Mac; others say why not.
                     Button("Run", systemImage: "play.fill") { runNative() }
-                        .disabled(project == nil || device == nil)
-                        .help(device == nil ? "Connect a device or boot a simulator first" : "Run the app's own tests on \(device?.name ?? "the device")")
+                        .disabled(project == nil)
+                        .help(device.map { "Run the app's own tests on \($0.name)" } ?? "Run the app's own tests; without a device only Gradle unit tests, on this Mac")
                 }
             } else if running {
                 Button("Stop", systemImage: "stop.fill") { project.map(model.stopTests) }
@@ -125,8 +126,8 @@ struct ProjectTestsView: View {
     }
 
     private func runNative() {
-        guard let project, let device else { return }
-        Task { nativeProblem = await model.runNativeTests(project, on: device.id) }
+        guard let project else { return }
+        Task { nativeProblem = await model.runNativeTests(project, on: device?.id) }
     }
 }
 

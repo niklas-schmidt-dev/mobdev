@@ -11,6 +11,9 @@ public final class NativeTestRun: Sendable {
     public let source: String
     private let state: Locked<NativeTestResult>
     private let process = Locked<RunningCommand?>(nil)
+    /// The work from the build to the results, cancelled with the run: reading the results runs
+    /// xcresulttool for minutes after a failure too.
+    private let work = Locked<Task<Void, Never>?>(nil)
     private let stopped = Locked(false)
     private let lastNotice = Locked(Date.distantPast)
 
@@ -29,6 +32,12 @@ public final class NativeTestRun: Sendable {
     public func cancel() {
         stopped.set(true)
         process.get()?.stop()
+        work.get()?.cancel()
+    }
+
+    func attach(_ task: Task<Void, Never>) {
+        work.set(task)
+        if stopped.get() { task.cancel() }
     }
 
     func attach(_ running: RunningCommand) {
@@ -458,17 +467,23 @@ public struct NativeTestRunner: Sendable {
     private func readGradle(
         run: NativeTestRun, status: Int32, log: String, root: URL, module: String?, task: String, since started: Date
     ) -> NativeTestResult {
-        let reports = Self.junitReports(root: root, module: module)
-        // Gradle leaves the reports of earlier runs; a run reads what it wrote. A unit-test task
-        // Gradle found up to date wrote nothing, and its previous results still hold: those in its
-        // own folder, never another task's.
+        // A task named with its module, :app:testDebugUnitTest, ran in that module only.
+        let path = task.split(separator: ":", omittingEmptySubsequences: true).dropLast()
+        let reports = Self.junitReports(root: root, module: module ?? (path.isEmpty ? nil : path.joined(separator: "/")))
+        // Gradle leaves the reports of earlier runs; a run reads what it wrote. Where a unit-test
+        // task was up to date, in one module or all, it wrote nothing and its previous results still
+        // hold: those in its own folder, never another task's.
         let fresh = reports.filter { $0.modified >= started.addingTimeInterval(-2) }
+        let freshFolders = Set(fresh.map { $0.url.deletingLastPathComponent() })
+        let previous = Self.cachedReports(reports, task: task).filter { !freshFolders.contains($0.url.deletingLastPathComponent()) }
         var note: String?
         var chosen = fresh
-        let previous = Self.cachedReports(reports, task: task)
-        if fresh.isEmpty, status == 0, let newest = previous.map(\.modified).max(), !run.isStopped {
-            chosen = previous
-            note = "Gradle found the task up to date and ran nothing; these are its results from \(newest.formatted(date: .abbreviated, time: .shortened))."
+        if status == 0, let newest = previous.map(\.modified).max(), !run.isStopped {
+            chosen += previous
+            let when = newest.formatted(date: .abbreviated, time: .shortened)
+            note = fresh.isEmpty
+                ? "Gradle found the task up to date and ran nothing; these are its results from \(when)."
+                : "Gradle found the task up to date in some modules; their results are from \(when) or before."
         }
         var tests: [NativeTestResult.Test] = []
         for report in chosen {
@@ -573,11 +588,11 @@ extension NativeTestRunner {
             return (other, false)
         }
         let runner = self
-        Task.detached(priority: .utility) {
+        run.attach(Task.detached(priority: .utility) {
             let final = await runner.execute(plan, device: device, run: run)
             onEnd?(final)
             NativeTestRuns.changed(run.project)
-        }
+        })
         return (run, true)
     }
 }

@@ -174,6 +174,11 @@ public final class DeviceTools: ToolCalling {
             default: throw ToolFailure("device must be a device id or name from list_devices.")
             }
             if name == "status", query == nil, devices(matching: nil).count != 1 { return overview() }
+            // A Gradle unit-test task runs on the Mac, also with no device to name.
+            if name == "run_native_tests", query == nil, allDevices.isEmpty {
+                return try await PhoneTools(phone: ThisMac(), activity: ActivityLog(), settleDelay: settleDelay, uploads: uploads, projects: projects)
+                    .call(name, arguments: arguments, source: source, screenshotByDefault: false)
+            }
             let device = try resolve(query)
             var remaining = arguments ?? [:]
             if case .object(var object) = remaining {
