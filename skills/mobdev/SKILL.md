@@ -217,6 +217,11 @@ failing step and the screen, then fix the test or report the bug. `Mobdev test <
 Action `niklas-schmidt-dev/mobdev/actions/test` does that on a simulator and puts the results in
 the job summary.
 
+The app's own XCTest, Swift Testing or Gradle suite runs with `run_native_tests` on the chosen
+device; do not call xcodebuild or gradlew yourself for that. A long run goes on in the background:
+read it with `native_test_result`, which lists every failure with file and line, and fix the code
+there. `Mobdev test <folder> --native` does the same in CI.
+
 ## Safety
 
 This is the user's own phone, signed in to their accounts. Ask before anything that sends a

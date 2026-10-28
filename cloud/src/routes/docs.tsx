@@ -85,6 +85,8 @@ const tools = [
   ["save_test", "project, name, steps, description, platforms, file", msg("Write a test into a project, creating it when needed")],
   ["save_flow", "project, name, steps, file", msg("Write a flow into the project's flows/")],
   ["test_result", "project, run", msg("The newest run's results with each failure's step, screenshot and video")],
+  ["run_native_tests", "project, platform, only, scheme, test_plan, task, wait, …", msg("Run the app's own XCTest, Swift Testing or Gradle suite on the device, in the background")],
+  ["native_test_result", "project, run", msg("A native run's progress, else every failure with its file, line and attachments")],
 ];
 
 /** Set a device up directly instead of tapping through Settings. */
@@ -675,6 +677,23 @@ function Docs() {
                   app, <code className={code}>recent_steps</code> hands it the actions that worked, to save with <code className={code}>save_test</code>.
                 </p>
               </T>
+              <T>
+                <h3 className="pt-2 text-[21px] font-semibold tracking-tight text-ink">Native tests</h3>
+                <p>
+                  <code className={code}>run_native_tests</code> runs the app’s own XCTest, XCUITest, Swift Testing or
+                  Gradle suite on the chosen device: <code className={code}>xcodebuild test</code> on a simulator or a
+                  Developer Mode iPhone, <code className={code}>connectedDebugAndroidTest</code> on an emulator or phone,
+                  and <code className={code}>testDebugUnitTest</code> on the Mac. Mobdev finds the workspace, scheme
+                  and <code className={code}>gradlew</code> in the repository, or reads them from <code className={code}>native_tests</code> in
+                  mobdev.json. Every failure comes back with its message, file and line, failed UI tests with their screen
+                  recording. Long runs go on in the background, so agents and relays are not cut
+                  off; <code className={code}>native_test_result</code> reads them. Each run keeps junit.xml and the result
+                  bundle, and the app shows them under Tests › Native Tests.
+                </p>
+              </T>
+              <Code>
+                {'"native_tests": {\n  "ios": {"workspace": "MyApp.xcworkspace", "scheme": "MyApp", "test_plan": "CI"},\n  "android": {"gradle_root": "android", "task": "connectedDebugAndroidTest"}\n}\n\nMobdev test mobdev/ --native --simulator "iPhone 17" --artifacts native-artifacts'}
+              </Code>
             </Section>
 
             <Section id="checks">

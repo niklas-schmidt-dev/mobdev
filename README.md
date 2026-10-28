@@ -15,7 +15,7 @@ any MCP client get the same 70 tools on every device, and scripts get them on th
 | App Store Connect | Builds, TestFlight groups, review states and customer reviews in the app and for agents; changes only after you allow them |
 | Debug | Logs and crash reports of the apps you launch, screen recordings on demand; Diagnose checks and fixes an iPhone's connection |
 | Performance | CPU and memory of an app with budgets for tests, launch times, Instruments and Perfetto traces, and what keeps the whole device busy |
-| Tests and flows | A project folder with your app's tests: agents write and run them, the app shows the results, CI runs them with `Mobdev test` or the [GitHub Action](actions/test/README.md), with JUnit output and a Markdown summary for the job and the pull request. Record what you or an agent do and replay it as a flow |
+| Tests and flows | Your app's own XCTest, Swift Testing and Gradle suites on any device, with every failure's file and line. A project folder with Mobdev tests: agents write and run them, the app shows the results, CI runs them with `Mobdev test` or the [GitHub Action](actions/test/README.md), with JUnit output and a Markdown summary for the job and the pull request. Record what you or an agent do and replay it as a flow |
 | Command line | `Mobdev <tool> key=value` runs any tool from a terminal or script, for agents without MCP |
 | Test and research | [Skills](skills/README.md) for the dev loop, smoke tests, bug reproduction, store screenshots, onboarding audits and competitor research |
 | Guard rails | Agents cannot open or launch the apps you block, such as banking or mail |
