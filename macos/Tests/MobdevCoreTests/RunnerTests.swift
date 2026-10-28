@@ -362,7 +362,9 @@ import Testing
         let answers = Locked<[Bool?]>([false, nil, true])
         let reads = Locked(0)
         let changes = Locked(0)
-        let autoStart = RunnerAutoStart(recheck: 1) { udid in
+        // A clock moved by hand: a loaded Mac can pause this test longer than any recheck.
+        let clock = Locked(Date(timeIntervalSince1970: 0))
+        let autoStart = RunnerAutoStart(recheck: 30, now: { clock.get() }) { udid in
             #expect(udid == "U")
             reads.withLock { $0 += 1 }
             return answers.withLock { $0.isEmpty ? true : $0.removeFirst() }
@@ -381,16 +383,16 @@ import Testing
         #expect(ask() == false)
         #expect(reads.get() == 1)
         // Off: read again after `recheck`.
-        try await Task.sleep(for: .seconds(1.1))
+        clock.withLock { $0 += 31 }
         #expect(ask() == false)
         await waitForChanges(2)
         #expect(reads.get() == 2)
-        try await Task.sleep(for: .seconds(1.1))
+        clock.withLock { $0 += 31 }
         #expect(ask() == nil)
         await waitForChanges(3)
         #expect(autoStart.knownDeveloperMode(of: "U") == true)
         // Once on, it stays without reading again until the iPhone leaves.
-        try await Task.sleep(for: .seconds(1.1))
+        clock.withLock { $0 += 31 }
         #expect(ask() == true)
         #expect(reads.get() == 3)
         autoStart.forget("U")

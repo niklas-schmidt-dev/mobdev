@@ -313,12 +313,13 @@ final class FakeCommands: CommandRunning, @unchecked Sendable {
 
     @Test func aCancelledCommandEndsItsProcess() async throws {
         let started = Date()
-        let task = Task { try await ProcessRunner().run(URL(fileURLWithPath: "/bin/sleep"), ["30"], timeout: 60) }
+        // Ten minutes unless killed; a loaded CI runner may take a while to start the task at all.
+        let task = Task { try await ProcessRunner().run(URL(fileURLWithPath: "/bin/sleep"), ["600"], timeout: 900) }
         try await Task.sleep(nanoseconds: 300_000_000)
         task.cancel()
         let result = try await task.value
         #expect(result.status != 0)
-        #expect(Date().timeIntervalSince(started) < 10)
+        #expect(Date().timeIntervalSince(started) < 120)
     }
 
     @Test func avdHomeFollowsTheSDKsVariables() {

@@ -23,11 +23,17 @@ public final class RunnerAutoStart: Sendable {
 
     private let check: @Sendable (String) async -> Bool?
     private let recheck: TimeInterval
+    private let now: @Sendable () -> Date
     private let readings = Locked<[String: Reading]>([:])
 
     /// `check` reads Developer Mode for a UDID: true, false, or nil when Xcode cannot tell.
-    public init(recheck: TimeInterval = 30, check: @escaping @Sendable (String) async -> Bool?) {
+    /// `now` is the clock, which tests move by hand.
+    public init(
+        recheck: TimeInterval = 30, now: @escaping @Sendable () -> Date = { Date() },
+        check: @escaping @Sendable (String) async -> Bool?
+    ) {
         self.recheck = recheck
+        self.now = now
         self.check = check
     }
 
@@ -45,8 +51,8 @@ public final class RunnerAutoStart: Sendable {
     public func developerMode(of udid: String, onChange: @escaping @Sendable () -> Void) -> Bool? {
         let (value, due) = readings.withLock { readings -> (Bool?, Bool) in
             let reading = readings[udid]
-            let due = reading.map { !$0.checking && $0.value != true && Date().timeIntervalSince($0.checked) >= recheck } ?? true
-            if due { readings[udid] = Reading(value: reading?.value, checked: Date(), checking: true) }
+            let due = reading.map { !$0.checking && $0.value != true && now().timeIntervalSince($0.checked) >= recheck } ?? true
+            if due { readings[udid] = Reading(value: reading?.value, checked: now(), checking: true) }
             return (reading?.value, due)
         }
         if due {
@@ -56,7 +62,7 @@ public final class RunnerAutoStart: Sendable {
                     // Forgotten meanwhile: the iPhone was unplugged.
                     guard readings[udid] != nil else { return false }
                     let changed = readings[udid]?.value != read
-                    readings[udid] = Reading(value: read, checked: Date(), checking: false)
+                    readings[udid] = Reading(value: read, checked: self.now(), checking: false)
                     return changed
                 }
                 if changed { onChange() }
