@@ -140,7 +140,7 @@ private struct RemoteStateBadge: View {
     var body: some View {
         let (text, color): (String, Color) =
             !online ? ("Mac offline", .secondary) : device.ready ? ("Ready", .green)
-            : device.screen ? ("Pair over Bluetooth", .orange) : ("Not ready", .orange)
+            : device.screen ? ("Input not ready", .orange) : ("Not ready", .orange)
         HStack(spacing: 6) {
             Circle().fill(color).frame(width: 7, height: 7)
             Text(text)
@@ -180,7 +180,7 @@ struct RemoteDeviceView: View {
                     if !device.osVersion.isEmpty { LabeledContent("Software", value: device.info.systemName) }
                     LabeledContent("Mac", value: remote.name)
                     LabeledContent("Screen (USB)", value: device.screen ? "Connected" : "Not connected")
-                    LabeledContent("Input (Bluetooth)", value: device.bluetooth ? "Paired" : "Not paired")
+                    LabeledContent("Input", value: device.bluetooth ? "Ready" : "Not ready")
                 }
                 Section {
                     LabeledContent("Device ID") {
@@ -220,7 +220,9 @@ struct StateBadge: View {
 
     private var text: String {
         if device.isEmulated { return device.isReady ? "Ready" : "Starting" }
-        return device.isReady ? "Ready" : device.isConnected ? "Pair over Bluetooth" : device.onUSB ? "Locked" : "Not connected"
+        if device.isReady { return "Ready" }
+        if device.isConnected { return device.runnerStarting ? "Starting" : "Not controllable yet" }
+        return device.onUSB ? "Locked" : "Not connected"
     }
 
     private var color: Color {
@@ -437,6 +439,12 @@ struct DeviceInfoView: View {
                         LabeledContent("Finish", value: info.isLightColor ? "Light" : "Dark")
                     }
                 }
+                Section("Connection") {
+                    LabeledContent("Screen (USB)") { Text(screenText(state)).foregroundStyle(.secondary) }
+                    LabeledContent("Input") { Text(inputText(state)).foregroundStyle(.secondary) }
+                    LabeledContent("Bluetooth") { Text(state.status.bluetooth.summary).foregroundStyle(.secondary) }
+                }
+                DeveloperModeControl(state: state)
                 Section {
                     Picker(
                         "Keyboard Layout",
@@ -445,15 +453,10 @@ struct DeviceInfoView: View {
                         ForEach(KeyboardLayout.allCases) { Text($0.displayName).tag($0) }
                     }
                 } header: {
-                    Text("Keyboard")
+                    Text("Bluetooth Keyboard")
                 } footer: {
-                    Text("Match Settings › General › Keyboard › Hardware Keyboard on the \(state.noun), and turn off Auto-Correction there so typed text is not changed.")
+                    Text("Only for input over Bluetooth: match Settings › General › Keyboard › Hardware Keyboard on the \(state.noun), and turn off Auto-Correction there so typed text is not changed. Mobdev Runner types any text without it.")
                 }
-                Section("Connection") {
-                    LabeledContent("Screen (USB)") { Text(screenText(state)).foregroundStyle(.secondary) }
-                    LabeledContent("Input (Bluetooth)") { Text(state.status.bluetooth.summary).foregroundStyle(.secondary) }
-                }
-                UITreeSection(state: state)
                 Section {
                     LabeledContent("Device ID") {
                         HStack {
@@ -468,11 +471,13 @@ struct DeviceInfoView: View {
                 }
                 Section("Tips") {
                     StepRow(title: "Auto-Lock: Never", detail: "The \(state.noun) must stay unlocked while agents work.", state: .info)
-                    StepRow(
-                        title: "Re-pair", detail: "If taps stop working, forget this Mac on the \(state.noun) and pair again.",
-                        state: .info)
+                    if state.status.input == .bluetooth {
+                        StepRow(
+                            title: "Re-pair", detail: "If taps stop working, forget this Mac on the \(state.noun) and pair again.",
+                            state: .info)
+                    }
                     Button("Diagnose…") { diagnosing = true }
-                        .help("Check screen, USB, Bluetooth and AssistiveTouch, with a fix for each")
+                        .help("Check screen, USB, Developer Mode, Mobdev Runner and Bluetooth, with a fix for each")
                 }
                 if !state.isConnected {
                     Section {
@@ -493,6 +498,14 @@ struct DeviceInfoView: View {
     private func screenText(_ state: DeviceState) -> String {
         if case .connected(_, let width, let height) = state.status.screen, width > 0 { return "Connected · \(width) × \(height)" }
         return state.status.screen.summary
+    }
+
+    private func inputText(_ state: DeviceState) -> String {
+        switch state.status.input {
+        case .runner: "Mobdev Runner (Developer Mode)"
+        case .bluetooth where state.status.bluetooth.isConnected: "Bluetooth"
+        default: "Not available"
+        }
     }
 }
 

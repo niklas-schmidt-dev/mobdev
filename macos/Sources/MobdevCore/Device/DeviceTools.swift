@@ -72,7 +72,8 @@ public struct DeviceSummary: Sendable, Equatable, Codable {
             id: id, name: name, productType: model, osVersion: osVersion, buildVersion: "", deviceClass: deviceClass)
     }
 
-    /// `bluetooth` means "input connected": Bluetooth for iPhones, always for simulators and Android.
+    /// `bluetooth` means "input connected": Mobdev Runner or Bluetooth for iPhones, always for
+    /// simulators and Android.
     /// A simulator's model name says so, since the relays only pass these fields.
     public init(_ device: any Device) {
         let status = device.status()
@@ -255,7 +256,14 @@ public final class DeviceTools: ToolCalling {
         if summary.ready { return "ready" }
         let status = device.status()
         if status.screen.isConnected, status.frameSize == nil { return "connected, no picture yet (wake and unlock it)" }
-        if device.kind == .iPhone { return summary.screen ? "screen only, Bluetooth not paired" : "not connected" }
+        if device.kind == .iPhone {
+            guard summary.screen else { return "not connected" }
+            switch status.runner {
+            case .building?, .starting?: return "screen only, Mobdev Runner is starting"
+            case .failed?: return "screen only, Mobdev Runner could not start (see status)"
+            default: return "screen only: needs Developer Mode for Mobdev Runner, or Bluetooth pairing"
+            }
+        }
         return "screen not available yet"
     }
 

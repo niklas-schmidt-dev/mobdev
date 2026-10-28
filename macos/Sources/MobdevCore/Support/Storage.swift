@@ -133,10 +133,17 @@ public struct AppSettings: Codable, Equatable, Sendable {
     /// Chosen on the welcome page: simulators and Android only, so the setup assistant does not
     /// open by itself and nothing asks for camera or Bluetooth access until an iPhone is set up.
     public var iPhoneSetupDeferred = false
+    /// Chosen in the setup assistant: iPhones without Developer Mode, driven over Bluetooth. Only
+    /// then do setup and launch ask macOS for Bluetooth access.
+    public var usesBluetooth = false
     /// The development team that signs Mobdev Runner on iPhones, e.g. "ABCDE12345".
     public var runnerTeam = ""
-    /// UDIDs of the iPhones with the UI tree turned on: Mobdev Runner starts whenever one is connected.
+    /// UDIDs of the iPhones with Developer Mode Control turned on by hand: Mobdev Runner starts
+    /// whenever one is connected, also before Developer Mode shows in Xcode's device list.
     public var runnerDevices: [String] = []
+    /// UDIDs of the iPhones with Developer Mode Control turned off: their input goes over Bluetooth.
+    /// Every other iPhone starts Mobdev Runner by itself (see `RunnerAutoStart`).
+    public var runnerOffDevices: [String] = []
     /// Project folders the app knows, newest first: each holds a mobdev.json and the project's
     /// tests, flows, screenshots and outputs.
     public var projects: [String] = []
@@ -174,6 +181,8 @@ public struct AppSettings: Codable, Equatable, Sendable {
         iPhoneSetupDeferred = try container.decodeIfPresent(Bool.self, forKey: .iPhoneSetupDeferred) ?? false
         runnerTeam = (try? container.decodeIfPresent(String.self, forKey: .runnerTeam)) ?? ""
         runnerDevices = (try? container.decodeIfPresent([String].self, forKey: .runnerDevices)) ?? []
+        runnerOffDevices = (try? container.decodeIfPresent([String].self, forKey: .runnerOffDevices)) ?? []
+        usesBluetooth = (try? container.decodeIfPresent(Bool.self, forKey: .usesBluetooth)) ?? false
         projects = (try? container.decodeIfPresent([String].self, forKey: .projects)) ?? []
         if projects.isEmpty {
             // Before projects held more than tests (0.2.50 and earlier) the list was "testProjects".
@@ -184,6 +193,22 @@ public struct AppSettings: Codable, Equatable, Sendable {
         projectIcons = (try? container.decodeIfPresent([String: String].self, forKey: .projectIcons)) ?? [:]
         agentConnected = (try? container.decodeIfPresent(Bool.self, forKey: .agentConnected)) ?? false
         blockedApps = (try? container.decodeIfPresent([String].self, forKey: .blockedApps)) ?? []
+    }
+
+    /// Whether Mobdev Runner runs on an iPhone: by itself, turned on, or turned off.
+    public func runnerChoice(for udid: String) -> RunnerChoice {
+        if runnerOffDevices.contains(udid) { return .off }
+        return runnerDevices.contains(udid) ? .on : .automatic
+    }
+
+    public mutating func setRunnerChoice(_ choice: RunnerChoice, for udid: String) {
+        runnerDevices.removeAll { $0 == udid }
+        runnerOffDevices.removeAll { $0 == udid }
+        switch choice {
+        case .on: runnerDevices.append(udid)
+        case .off: runnerOffDevices.append(udid)
+        case .automatic: break
+        }
     }
 
     private enum LegacyKeys: String, CodingKey {

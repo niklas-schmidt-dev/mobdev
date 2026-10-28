@@ -307,14 +307,78 @@ import Testing
 
     @Test func settingsKeepTheRunnerChoices() throws {
         var settings = AppSettings()
-        #expect(settings.runnerTeam.isEmpty && settings.runnerDevices.isEmpty)
+        #expect(settings.runnerTeam.isEmpty && settings.runnerDevices.isEmpty && settings.runnerOffDevices.isEmpty)
+        #expect(!settings.usesBluetooth)
+        // Every iPhone starts by itself unless it was turned off.
+        #expect(settings.runnerChoice(for: "00008110-00AB12CD34EF5678") == .automatic)
         settings.runnerTeam = "Q1W2E3R4T5"
-        settings.runnerDevices = ["00008110-00AB12CD34EF5678"]
+        settings.setRunnerChoice(.on, for: "00008110-00AB12CD34EF5678")
+        settings.setRunnerChoice(.off, for: "00008030-0000000000000000")
+        settings.usesBluetooth = true
         let decoded = try JSONDecoder().decode(AppSettings.self, from: JSONEncoder().encode(settings))
         #expect(decoded.runnerTeam == "Q1W2E3R4T5")
-        #expect(decoded.runnerDevices == ["00008110-00AB12CD34EF5678"])
-        let old = try JSONDecoder().decode(AppSettings.self, from: Data(#"{"port": 4686}"#.utf8))
-        #expect(old.runnerTeam.isEmpty && old.runnerDevices.isEmpty)
+        #expect(decoded.runnerChoice(for: "00008110-00AB12CD34EF5678") == .on)
+        #expect(decoded.runnerChoice(for: "00008030-0000000000000000") == .off)
+        #expect(decoded.usesBluetooth)
+        settings.setRunnerChoice(.automatic, for: "00008030-0000000000000000")
+        #expect(settings.runnerOffDevices.isEmpty)
+        // Settings from before: an iPhone with the UI tree turned on stays on, the others start by themselves.
+        let old = try JSONDecoder().decode(AppSettings.self, from: Data(#"{"port": 4686, "runnerDevices": ["A"]}"#.utf8))
+        #expect(old.runnerChoice(for: "A") == .on)
+        #expect(old.runnerChoice(for: "B") == .automatic)
+        #expect(!old.usesBluetooth)
+    }
+
+    // MARK: Starting by itself
+
+    @Test func theRunnerStartsByItselfWithDeveloperModeAndATeam() {
+        let team = "Q1W2E3R4T5"
+        #expect(RunnerAutoStart.shouldStart(choice: .automatic, developerMode: true, team: team))
+        #expect(!RunnerAutoStart.shouldStart(choice: .automatic, developerMode: false, team: team))
+        // Unknown, as without Xcode: it waits.
+        #expect(!RunnerAutoStart.shouldStart(choice: .automatic, developerMode: nil, team: team))
+        #expect(!RunnerAutoStart.shouldStart(choice: .automatic, developerMode: true, team: ""))
+        #expect(!RunnerAutoStart.shouldStart(choice: .off, developerMode: true, team: team))
+        // Turned on by hand, it starts anyway and says what is missing if it cannot.
+        #expect(RunnerAutoStart.shouldStart(choice: .on, developerMode: nil, team: ""))
+    }
+
+    @Test func developerModeIsReadInTheBackgroundAndAgainWhileOff() async throws {
+        let answers = Locked<[Bool?]>([nil, false, true])
+        let reads = Locked(0)
+        let changes = Locked(0)
+        let autoStart = RunnerAutoStart(recheck: 0.2) { udid in
+            #expect(udid == "U")
+            reads.withLock { $0 += 1 }
+            return answers.withLock { $0.isEmpty ? true : $0.removeFirst() }
+        }
+        func read() async -> Bool? {
+            let value = autoStart.developerMode(of: "U") { changes.withLock { $0 += 1 } }
+            try? await Task.sleep(for: .milliseconds(100))
+            return value
+        }
+        // Unknown at first, while it is read.
+        #expect(await read() == nil)
+        #expect(reads.get() == 1)
+        // Not again before `recheck`.
+        #expect(await read() == nil)
+        #expect(reads.get() == 1)
+        try await Task.sleep(for: .milliseconds(250))
+        #expect(await read() == nil)
+        #expect(reads.get() == 2)
+        try await Task.sleep(for: .milliseconds(250))
+        #expect(await read() == false)
+        #expect(reads.get() == 3)
+        #expect(autoStart.knownDeveloperMode(of: "U") == true)
+        // Once on, it stays without reading again until the iPhone leaves.
+        try await Task.sleep(for: .milliseconds(250))
+        #expect(await read() == true)
+        #expect(reads.get() == 3)
+        #expect(changes.get() == 2)
+        autoStart.forget("U")
+        #expect(autoStart.knownDeveloperMode(of: "U") == nil)
+        #expect(await read() == nil)
+        #expect(reads.get() == 4)
     }
 
     // MARK: Helpers
