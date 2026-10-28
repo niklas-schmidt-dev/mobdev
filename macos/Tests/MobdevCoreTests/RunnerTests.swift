@@ -344,40 +344,47 @@ import Testing
     }
 
     @Test func developerModeIsReadInTheBackgroundAndAgainWhileOff() async throws {
-        let answers = Locked<[Bool?]>([nil, false, true])
+        // Each answer differs from the one before, so every finished reading shows as a change.
+        let answers = Locked<[Bool?]>([false, nil, true])
         let reads = Locked(0)
         let changes = Locked(0)
-        let autoStart = RunnerAutoStart(recheck: 0.2) { udid in
+        let autoStart = RunnerAutoStart(recheck: 1) { udid in
             #expect(udid == "U")
             reads.withLock { $0 += 1 }
             return answers.withLock { $0.isEmpty ? true : $0.removeFirst() }
         }
-        func read() async -> Bool? {
-            let value = autoStart.developerMode(of: "U") { changes.withLock { $0 += 1 } }
-            try? await Task.sleep(for: .milliseconds(100))
-            return value
+        func ask() -> Bool? { autoStart.developerMode(of: "U") { changes.withLock { $0 += 1 } } }
+        func waitForChanges(_ count: Int) async {
+            let deadline = Date().addingTimeInterval(10)
+            while changes.get() < count, Date() < deadline { try? await Task.sleep(for: .milliseconds(20)) }
         }
+
         // Unknown at first, while it is read.
-        #expect(await read() == nil)
-        #expect(reads.get() == 1)
+        #expect(ask() == nil)
+        await waitForChanges(1)
+        #expect(autoStart.knownDeveloperMode(of: "U") == false)
         // Not again before `recheck`.
-        #expect(await read() == nil)
+        #expect(ask() == false)
         #expect(reads.get() == 1)
-        try await Task.sleep(for: .milliseconds(250))
-        #expect(await read() == nil)
+        // Off: read again after `recheck`.
+        try await Task.sleep(for: .seconds(1.1))
+        #expect(ask() == false)
+        await waitForChanges(2)
         #expect(reads.get() == 2)
-        try await Task.sleep(for: .milliseconds(250))
-        #expect(await read() == false)
-        #expect(reads.get() == 3)
+        try await Task.sleep(for: .seconds(1.1))
+        #expect(ask() == nil)
+        await waitForChanges(3)
         #expect(autoStart.knownDeveloperMode(of: "U") == true)
         // Once on, it stays without reading again until the iPhone leaves.
-        try await Task.sleep(for: .milliseconds(250))
-        #expect(await read() == true)
+        try await Task.sleep(for: .seconds(1.1))
+        #expect(ask() == true)
         #expect(reads.get() == 3)
-        #expect(changes.get() == 2)
         autoStart.forget("U")
         #expect(autoStart.knownDeveloperMode(of: "U") == nil)
-        #expect(await read() == nil)
+        #expect(ask() == nil)
+        #expect(reads.get() >= 3)
+        let deadline = Date().addingTimeInterval(10)
+        while reads.get() < 4, Date() < deadline { try await Task.sleep(for: .milliseconds(20)) }
         #expect(reads.get() == 4)
     }
 
