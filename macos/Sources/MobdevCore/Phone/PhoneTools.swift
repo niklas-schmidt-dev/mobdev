@@ -144,7 +144,11 @@ public final class PhoneTools: Sendable {
         of your working folder, else the active one (`list_projects`, `open_project`, `create_project`; ask \
         before creating one). `list_tests` shows its tests, `save_test` and `save_flow` write one, \
         `run_tests` runs them on a device with a video and a screenshot of each failure, and \
-        `test_result` returns the newest results.
+        `test_result` returns the newest results. \
+        With an App Store Connect key in Mobdev's settings, `appstore_apps`, `appstore_builds`, \
+        `appstore_testflight`, `appstore_versions` and `appstore_reviews` read the user's apps, builds, \
+        TestFlight groups, review states and customer reviews; the tools that change App Store Connect \
+        work only when the user allowed it there.
         """
 
     /// A tool's input schema. Tools with `screenshot` return a screenshot after acting.

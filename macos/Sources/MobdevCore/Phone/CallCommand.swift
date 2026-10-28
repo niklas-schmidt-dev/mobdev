@@ -187,6 +187,19 @@ public enum CallCommand {
                 "\(options.tool) needs the running Mobdev app: without it every call is a process of its own, and the capture ends with it (on Android, with its proxy). Open Mobdev, or put the capture into a flow, which runs in one process.")
             return nil
         }
+        // App Store Connect needs no device, and its key is in Mobdev's folder, which the device
+        // calls below swap for a temporary one.
+        if AppStoreTools.isAppStoreTool(options.tool) {
+            var arguments = options.arguments
+            arguments["device"] = nil
+            let result = await ProjectScope.$pinned.withValue(project(options)) {
+                await AppStoreTools.call(
+                    options.tool, Arguments(.object(arguments)), connect: AppStoreConnect(), projects: ProjectList(), source: "cli")
+            }
+            var body: [String: JSONValue] = ["ok": .bool(!result.isError), "text": .string(result.text)]
+            if let data = result.data { body["data"] = data }
+            return .object(body)
+        }
         let home = CommandSupport.home(artifacts: nil)
         defer { try? FileManager.default.removeItem(at: home.url) }
         guard let connection = await CommandSupport.connect(device: options.device, wait: 10, output: output) else {

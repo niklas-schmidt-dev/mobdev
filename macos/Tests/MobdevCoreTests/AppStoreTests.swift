@@ -435,6 +435,18 @@ final class FakeAppStoreTransport: AppStoreTransport {
         #expect(unknown.isError && unknown.text.contains("No app with the bundle ID com.example.unknown"))
     }
 
+    /// `Mobdev call` runs the tools without a device and reads the key from Mobdev's own folder,
+    /// which has none in tests, so nothing is sent.
+    @Test func theTerminalCallsThemWithoutADevice() async throws {
+        #expect(!FileManager.default.fileExists(atPath: AppStoreKeyStore().file.path))
+        let lines = Locked<[String]>([])
+        let status = await CallCommand.execute(["appstore_apps", "--local", "--device", "nowhere"]) { line in
+            lines.withLock { $0.append(line) }
+        }
+        #expect(status == 1)
+        #expect(lines.get() == [AppStoreError.noKey.description])
+    }
+
     // MARK: Errors
 
     @Test func errorsSayWhatToDo() async throws {
