@@ -206,6 +206,10 @@ public struct NativeTestRunner: Sendable {
             arguments += [
                 "-destination", "id=\(device.id)",
                 "-resultBundlePath", output.appendingPathComponent(NativeTestResult.resultBundleName).path,
+                // After a failure Xcode would otherwise gather a sysdiagnose-like report from the
+                // device, which takes minutes; the failures, their places and attachments are in
+                // the bundle without it.
+                "-collect-test-diagnostics", "never",
             ]
             // On an iPhone, Xcode makes or renews the development profile as when you run from it.
             if device.kind == DeviceKind.iPhone.rawValue { arguments.append("-allowProvisioningUpdates") }

@@ -48,9 +48,10 @@ final class NativeCommands: CommandRunning, @unchecked Sendable {
         _ executable: URL, _ arguments: [String], onLine: @escaping @Sendable (String) -> Void,
         onExit: @escaping @Sendable (Int32) -> Void
     ) throws -> RunningCommand {
-        started.withLock { $0.append([executable.path] + arguments) }
         onStart?(arguments)
         for line in lines { onLine(line) }
+        // Recorded after the lines, so a test that sees the start sees their progress too.
+        started.withLock { $0.append([executable.path] + arguments) }
         let status = self.status
         if held {
             exit.set { _ in onExit(status) }
@@ -428,7 +429,7 @@ final class NativeCommands: CommandRunning, @unchecked Sendable {
         #expect(tool.path == "/usr/bin/xcodebuild")
         #expect(arguments == [
             "test", "-workspace", "/repo/App.xcworkspace", "-scheme", "App", "-testPlan", "Unit", "-destination", "id=SIM-UDID",
-            "-resultBundlePath", "/repo/mobdev/output/native-runs/run/Tests.xcresult",
+            "-resultBundlePath", "/repo/mobdev/output/native-runs/run/Tests.xcresult", "-collect-test-diagnostics", "never",
             "-only-testing:AppTests/LoginTests/testSignIn", "-only-testing:AppTests/adding()",
         ])
         // An iPhone lets Xcode renew its profile; test-without-building reuses the last build.
