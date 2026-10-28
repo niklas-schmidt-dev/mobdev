@@ -4,7 +4,7 @@ Mobile development, all in one app. Free and open source.
 
 Mobdev is a small native Mac app that puts your iPhones, iOS simulators and Android devices in one
 list and gives you and your AI agent everything to work with them. Claude Code, Codex, Cursor or
-any MCP client get the same 70 tools on every device, and scripts get them on the command line.
+any MCP client get the same 87 tools on every device, and scripts get them on the command line.
 
 | | |
 |---|---|
