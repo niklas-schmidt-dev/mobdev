@@ -312,7 +312,7 @@ export function Story() {
 
         {/* Chapter 2: three kinds of device. The title is only names, the same in every language. */}
         <StoryText refCallback={chapter("devices")} style={hidden} title={<>iPhone. Simulator.<br />Android.</>}>
-          <T>Every device in one list, and every device takes the same 23 tools.</T>
+          <T>Every device in one list, and every device takes the same 70 tools.</T>
         </StoryText>
         {labels.map((label, k) => (
           <div

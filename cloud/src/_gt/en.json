@@ -181,7 +181,7 @@
   "a23cdd89efb441fa": "Download for Mac",
   "53ea457ed050c196": "See what’s inside ›",
   "fb29bc8562fc5588": "Free. Updates itself. Requires macOS 26.",
-  "666ad49efd9c416e": "Every device in one list, and every device takes the same 23 tools.",
+  "0118879b5f6477a9": "Every device in one list, and every device takes the same 70 tools.",
   "6e3a1ad8ecdae7b4": "Your agent drives.",
   "38b4bfda87fcb470": "Claude Code, Codex, Cursor or any MCP client sees, taps and types on every phone. You watch it happen.",
   "d4615a60ce29cf83": "From anywhere.",
@@ -437,6 +437,8 @@
   "20e86a2df1b039bb": "Drag, e.g. to scroll",
   "8ba5b645cde2f75d": "Mouse wheel",
   "1c05592420abed0b": "Type into the focused field (up to 1000 characters per call)",
+  "55550b5f4e09f03f": "Type a stored password or code without the agent seeing it",
+  "02f5c269c01a2e8f": "The names of the stored secrets, never their values",
   "a6daf7dca0f6ab24": "e.g. space + cmd for Spotlight",
   "b1fc445861a7ba55": "Go to the home screen",
   "038de3a084a2d4de": "Open an app by name (Spotlight on an iPhone)",
@@ -455,7 +457,7 @@
   "7ac9020db1a7cd6e": "The newest actions that worked, as steps for a test",
   "bb53097697b33342": "Run a shortcut from Apple’s Shortcuts app",
   "d2cbdef90a410a0e": "Elements from the accessibility tree (simulators, Android, iPhones with the UI tree on)",
-  "631ced74c82986c2": "Tap an element by identifier or label",
+  "65fbd65bd75ffa0e": "Tap an element by identifier, label, role, state or the label next to it",
   "cde6ef43d109ddbf": "Wait for an element to appear or disappear",
   "cdc8646da3ae3f06": "Replay a flow (JSON or Maestro YAML); stops at the first failing step and can save a video",
   "530259be5a78b2f6": "Compare the screen with a baseline picture; fails with a diff image",
@@ -729,6 +731,55 @@
         "c": "scroll_until_visible"
       },
       " replaces guessed swipes."
+    ]
+  },
+  "c74d24d45867dd25": {
+    "t": "p",
+    "i": 1,
+    "c": [
+      {
+        "t": "code",
+        "i": 2,
+        "c": "tap_element"
+      },
+      " and ",
+      {
+        "t": "code",
+        "i": 3,
+        "c": "wait_for_element"
+      },
+      " combine an identifier, a label or a regex with a role, a value, the enabled state, a part of the screen and the label next to it. ",
+      {
+        "t": "code",
+        "i": 4,
+        "c": "{\"role\": \"textfield\", \"near\": {\"text\": \"Email\", \"direction\": \"below\"}}"
+      },
+      " is the field under Email on iOS and Android alike. When nothing matches, the error lists what is on screen."
+    ]
+  },
+  "31c9e9e3dee98214": {
+    "t": "p",
+    "i": 1,
+    "c": [
+      "Passwords and codes of test accounts go into ",
+      {
+        "t": "strong",
+        "i": 2,
+        "c": "Settings › Secrets"
+      },
+      " or ",
+      {
+        "t": "code",
+        "i": 3,
+        "c": "Mobdev secret set"
+      },
+      ". Agents type them with ",
+      {
+        "t": "code",
+        "i": 4,
+        "c": "type_secret"
+      },
+      " and only ever see the name, also in recorded flows and the activity. A test project’s secrets take the stored secret of the same name."
     ]
   },
   "95fdc038237fb016": {
@@ -1021,7 +1072,7 @@
       "c": "The network tools show which requests an app makes, for debugging, for checking analytics and API calls, and for privacy audits. Nothing is installed on the device, and HTTPS is never decrypted. On iOS, Mobdev relaunches the app with Apple’s network diagnostics on and reads its log: method, host, status, bytes and time, but iOS hides paths and queries. On Android, Mobdev points the device at a proxy on the Mac: plain HTTP in full, HTTPS as host, bytes and time. Stopping the capture removes the proxy again, and a dev server on the Mac stays reachable as 10.0.2.2."
     }
   ],
-  "b9b9c97857392266": {
+  "f99d189b406690fc": {
     "t": "p",
     "i": 1,
     "c": [
@@ -1067,7 +1118,7 @@
         "i": 8,
         "c": "video"
       },
-      " argument says."
+      " argument says. While a flow, a test run or a crawl runs, it holds its device: other agents get “Busy” until it ends, so nothing taps into the middle of it."
     ]
   },
   "8aa8e70bd804faab": {
@@ -1274,7 +1325,7 @@
       }
     ]
   },
-  "dad194319fe853ac": {
+  "c9bb2ab414dd61bf": {
     "t": "p",
     "i": 1,
     "c": [
@@ -1296,7 +1347,7 @@
         "i": 4,
         "c": "${NAME}"
       },
-      " takes a variable from the project, the environment or the run, and a secret’s value never appears in results."
+      " takes a variable from the project, the environment or the run. A secret’s value comes from the run, the environment or a secret stored under Settings › Secrets, and never appears in results."
     ]
   },
   "655bd7c01b4093de": {
@@ -1769,7 +1820,7 @@
       " set, only Macs that know the token may connect."
     ]
   },
-  "9978101bdfa6d692": {
+  "d0181e6c7319e631": {
     "t": "ul",
     "i": 1,
     "c": [
@@ -1805,6 +1856,11 @@
         "t": "li",
         "i": 7,
         "c": "Under Settings › Agents, list apps agents may never open, such as your bank. It prevents mistakes; it is not a sandbox."
+      },
+      {
+        "t": "li",
+        "i": 8,
+        "c": "Secrets that agents type are kept in a file only you can read. Agents see their names, never their values, and through a relay only the ones you allow."
       }
     ]
   },
@@ -1884,7 +1940,7 @@
       "c": "Mobdev covers everything that happens on the device, for you and for your agent. Keep building the way you do; Mobdev takes it from there."
     }
   ],
-  "73aec3672cade57f": [
+  "8cfe9b2c8a6ec492": [
     {
       "t": "h2",
       "i": 1,
@@ -1900,7 +1956,7 @@
     {
       "t": "p",
       "i": 3,
-      "c": "Plug in an iPhone, boot a simulator or start an emulator, and it shows up in Mobdev. Every device takes the same 27 tools, so one agent can test on all of them in one session."
+      "c": "Plug in an iPhone, boot a simulator or start an emulator, and it shows up in Mobdev. Every device takes the same 70 tools, so one agent can test on all of them in one session."
     }
   ],
   "0e93ea2eb9c558d4": [

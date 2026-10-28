@@ -181,7 +181,7 @@
   "a23cdd89efb441fa": "Download für Mac",
   "53ea457ed050c196": "Was alles drinsteckt ›",
   "fb29bc8562fc5588": "Kostenlos. Aktualisiert sich selbst. Erfordert macOS 26.",
-  "666ad49efd9c416e": "Alle Geräte in einer Liste, und alle verstehen dieselben 23 Tools.",
+  "0118879b5f6477a9": "Alle Geräte in einer Liste, und alle verstehen dieselben 70 Tools.",
   "6e3a1ad8ecdae7b4": "Dein Agent steuert.",
   "38b4bfda87fcb470": "Claude Code, Codex, Cursor oder jeder andere MCP-Client sieht, tippt und schreibt auf jedem Smartphone. Du siehst dabei zu.",
   "d4615a60ce29cf83": "Von überall.",
@@ -437,6 +437,8 @@
   "20e86a2df1b039bb": "Ziehen, z. B. zum Scrollen",
   "8ba5b645cde2f75d": "Mausrad",
   "1c05592420abed0b": "Text in das fokussierte Feld eingeben (bis zu 1000 Zeichen pro Aufruf)",
+  "55550b5f4e09f03f": "Ein gespeichertes Passwort oder einen Code tippen, ohne dass der Agent den Wert sieht",
+  "02f5c269c01a2e8f": "Die Namen der gespeicherten Secrets, nie ihre Werte",
   "a6daf7dca0f6ab24": "z. B. space + cmd für Spotlight",
   "b1fc445861a7ba55": "Zum Home-Bildschirm wechseln",
   "038de3a084a2d4de": "Eine App über ihren Namen öffnen (auf dem iPhone per Spotlight)",
@@ -455,7 +457,7 @@
   "7ac9020db1a7cd6e": "Die neuesten Aktionen, die geklappt haben, als Schritte für einen Test",
   "bb53097697b33342": "Einen Kurzbefehl aus Apples Kurzbefehle-App ausführen",
   "d2cbdef90a410a0e": "Elemente aus dem Accessibility-Baum (Simulatoren, Android, iPhones mit eingeschaltetem UI-Baum)",
-  "631ced74c82986c2": "Auf ein Element per Identifier oder Label tippen",
+  "65fbd65bd75ffa0e": "Auf ein Element tippen, per Identifier, Label, Rolle, Zustand oder dem Label daneben",
   "cde6ef43d109ddbf": "Warten, bis ein Element erscheint oder verschwindet",
   "cdc8646da3ae3f06": "Einen Flow abspielen (JSON oder Maestro-YAML); stoppt beim ersten fehlgeschlagenen Schritt und kann ein Video speichern",
   "530259be5a78b2f6": "Den Bildschirm mit einem Referenzbild vergleichen; schlägt mit einem Differenzbild fehl",
@@ -729,6 +731,55 @@
         "c": "scroll_until_visible"
       },
       " ersetzt geratene Wischgesten."
+    ]
+  },
+  "c74d24d45867dd25": {
+    "t": "p",
+    "i": 1,
+    "c": [
+      {
+        "t": "code",
+        "i": 2,
+        "c": "tap_element"
+      },
+      " und ",
+      {
+        "t": "code",
+        "i": 3,
+        "c": "wait_for_element"
+      },
+      " kombinieren einen Identifier, ein Label oder eine Regex mit Rolle, Wert, Aktivierungszustand, einem Bereich des Bildschirms und dem Label daneben. ",
+      {
+        "t": "code",
+        "i": 4,
+        "c": "{\"role\": \"textfield\", \"near\": {\"text\": \"Email\", \"direction\": \"below\"}}"
+      },
+      " ist das Feld unter „Email“, auf iOS genauso wie auf Android. Passt nichts, nennt die Fehlermeldung, was auf dem Bildschirm ist."
+    ]
+  },
+  "31c9e9e3dee98214": {
+    "t": "p",
+    "i": 1,
+    "c": [
+      "Passwörter und Codes von Testkonten kommen unter ",
+      {
+        "t": "strong",
+        "i": 2,
+        "c": "Settings › Secrets"
+      },
+      " oder mit ",
+      {
+        "t": "code",
+        "i": 3,
+        "c": "Mobdev secret set"
+      },
+      " in Mobdev. Agenten tippen sie mit ",
+      {
+        "t": "code",
+        "i": 4,
+        "c": "type_secret"
+      },
+      " und sehen immer nur den Namen, auch in aufgezeichneten Flows und in der Activity. Die Secrets eines Testprojekts nehmen das gespeicherte Secret mit demselben Namen."
     ]
   },
   "95fdc038237fb016": {
@@ -1022,7 +1073,7 @@
       "c": "Die Netzwerk-Tools zeigen, welche Anfragen eine App stellt: zum Debuggen, um Analytics- und API-Aufrufe zu prüfen und für Datenschutz-Audits. Auf dem Gerät wird nichts installiert, und HTTPS wird nie entschlüsselt. Auf iOS startet Mobdev die App mit Apples Netzwerkdiagnose neu und liest ihr Log: Methode, Host, Status, Bytes und Dauer, Pfade und Queries verbirgt iOS allerdings. Auf Android leitet Mobdev das Gerät über einen Proxy auf dem Mac: einfaches HTTP vollständig, HTTPS als Host, Bytes und Dauer. Endet die Aufzeichnung, verschwindet auch der Proxy wieder, und ein Dev-Server auf dem Mac bleibt unter 10.0.2.2 erreichbar."
     }
   ],
-  "b9b9c97857392266": {
+  "f99d189b406690fc": {
     "t": "p",
     "i": 1,
     "c": [
@@ -1068,7 +1119,7 @@
         "i": 8,
         "c": "video"
       },
-      " es angibt."
+      " es angibt. Solange ein Flow, ein Testlauf oder ein Crawl läuft, gehört ihm das Gerät: Andere Agenten bekommen „Busy“, bis er endet, damit niemand mitten hineintippt."
     ]
   },
   "8aa8e70bd804faab": {
@@ -1276,7 +1327,7 @@
       }
     ]
   },
-  "dad194319fe853ac": {
+  "c9bb2ab414dd61bf": {
     "t": "p",
     "i": 1,
     "c": [
@@ -1298,7 +1349,7 @@
         "i": 4,
         "c": "${NAME}"
       },
-      " nimmt eine Variable aus dem Projekt, der Umgebung oder dem Lauf, und der Wert eines Secrets taucht nie in Ergebnissen auf."
+      " nimmt eine Variable aus dem Projekt, der Umgebung oder dem Lauf. Der Wert eines Secrets kommt aus dem Lauf, der Umgebung oder einem Secret, das unter „Settings › Secrets“ gespeichert ist, und taucht nie in Ergebnissen auf."
     ]
   },
   "655bd7c01b4093de": {
@@ -1771,7 +1822,7 @@
       " gesetzt, dürfen sich nur Macs verbinden, die das Token kennen."
     ]
   },
-  "9978101bdfa6d692": {
+  "d0181e6c7319e631": {
     "t": "ul",
     "i": 1,
     "c": [
@@ -1807,6 +1858,11 @@
         "t": "li",
         "i": 7,
         "c": "Unter „Settings › Agents“ trägst du Apps ein, die Agenten nie öffnen dürfen, etwa deine Bank. Das verhindert Versehen; eine Sandbox ist es nicht."
+      },
+      {
+        "t": "li",
+        "i": 8,
+        "c": "Secrets, die Agenten tippen, liegen in einer Datei, die nur du lesen kannst. Agenten sehen ihre Namen, nie ihre Werte, und über ein Relay nur die, die du freigibst."
       }
     ]
   },
@@ -1886,7 +1942,7 @@
       "c": "Mobdev deckt alles ab, was auf dem Gerät passiert, für dich und für deinen Agenten. Bau weiter wie bisher, ab da übernimmt Mobdev."
     }
   ],
-  "73aec3672cade57f": [
+  "8cfe9b2c8a6ec492": [
     {
       "t": "h2",
       "i": 1,
@@ -1902,7 +1958,7 @@
     {
       "t": "p",
       "i": 3,
-      "c": "Schließ ein iPhone an, starte einen Simulator oder einen Emulator, und das Gerät erscheint in Mobdev. Jedes Gerät versteht dieselben 27 Tools, so kann ein Agent in einer Sitzung auf allen testen."
+      "c": "Schließ ein iPhone an, starte einen Simulator oder einen Emulator, und das Gerät erscheint in Mobdev. Jedes Gerät versteht dieselben 70 Tools, so kann ein Agent in einer Sitzung auf allen testen."
     }
   ],
   "0e93ea2eb9c558d4": [
