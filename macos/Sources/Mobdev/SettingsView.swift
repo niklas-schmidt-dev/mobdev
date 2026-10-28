@@ -7,6 +7,7 @@ struct SettingsView: View {
             Tab("General", systemImage: "gearshape") { GeneralSettings() }
             Tab("Agents", systemImage: "hand.raised") { AgentSettings() }
             Tab("Secrets", systemImage: "key.horizontal") { SecretsSettings() }
+            Tab("App Store Connect", systemImage: "app.badge") { AppStoreSettings() }
             Tab("API", systemImage: "key") { APISettings() }
         }
         .frame(width: 480)

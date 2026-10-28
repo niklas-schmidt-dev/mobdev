@@ -198,6 +198,17 @@ public enum CallCommand {
                 return nil
             }
         }
+        // App Store Connect needs no device, and its key is in Mobdev's folder, which the device
+        // calls below swap for a temporary one.
+        if AppStoreTools.isAppStoreTool(options.tool) {
+            var arguments = options.arguments
+            arguments["device"] = nil
+            let result = await ProjectScope.$pinned.withValue(project(options)) {
+                await AppStoreTools.call(
+                    options.tool, Arguments(.object(arguments)), connect: AppStoreConnect(), projects: ProjectList(), source: "cli")
+            }
+            return body(result)
+        }
         let home = CommandSupport.home(artifacts: nil)
         defer { try? FileManager.default.removeItem(at: home.url) }
         guard let connection = await CommandSupport.connect(device: options.device, wait: 10, output: output) else {

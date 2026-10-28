@@ -96,6 +96,8 @@ Activity lists every agent action, and Settings (⌘,) holds the keyboard layout
   Developer Mode, and offers the fix for each, such as restarting a stuck capture helper.
 - **Projects** (at the top of the sidebar) hold an app's tests, flows, screenshots, map, recordings
   and runs in a folder of its repository; see [Projects](#projects).
+- **App Store Connect** (in the sidebar, after a key in Settings) shows your apps' builds,
+  TestFlight groups, versions and reviews; see [App Store Connect](#app-store-connect).
 - **Record** and **Run Flow…** (in the activity header) record and replay flows; see below.
 - **Inspect** (in the toolbar) lays an inspector over the screen: the element under the pointer is
   outlined with its role, label and identifier, and a click copies the step that taps it, such as
@@ -947,6 +949,65 @@ a few seconds. The on-device model is small: ask about one visible thing at a ti
 A recorded flow keeps the checks; `accessibility_audit` only with `fail_on`, since without it the
 call only looks.
 
+### App Store Connect
+
+With an App Store Connect API key, Mobdev shows your apps the way Helm does, and agents read them
+with the `appstore_` tools: builds and their TestFlight states, TestFlight groups, App Store
+versions and their review state, and customer reviews.
+
+**Set up (once):**
+
+1. In [App Store Connect](https://appstoreconnect.apple.com) open **Users and Access ›
+   Integrations › App Store Connect API** and create a **team key** with the **App Manager** role,
+   which allows everything Mobdev does. A key with a narrower role sees less, and the tools answer
+   403 for the rest. Individual keys are not supported.
+2. Download the key's `AuthKey_<key ID>.p8` file; Apple offers it only once. Copy the **issuer ID**
+   shown above the list of keys.
+3. In Mobdev open **Settings › App Store Connect**, enter the issuer ID, choose the `.p8` file (the
+   key ID is taken from its name) and click **Save Key**. **Test Connection** says how many apps the
+   key sees.
+
+The key is stored in `app-store-connect.json` in Mobdev's folder, readable only by you (mode 0600),
+like the API token. No tool, API or log returns it and it never goes through a relay: Mobdev signs
+a token with it (ES256, valid for 19 minutes, reused until shortly before it expires) and sends
+requests to `api.appstoreconnect.apple.com` only. **Remove Key…** deletes the file; revoke the key in
+App Store Connect when you no longer need it.
+
+**In the app**, the sidebar's **App Store Connect** section lists the key's apps. An app's page
+shows **Builds**, **TestFlight**, **Versions** and **Reviews** (the control in the toolbar; ⌘R loads
+again). Select a build to add it to a TestFlight group or change its What to Test; select a review
+to reply to it or replace your reply. Each change asks first.
+
+**Agents** call these tools from anywhere Mobdev's tools work (MCP, the HTTP API, `Mobdev call`,
+relays). They need no device. `app` is a bundle ID or App Store Connect app ID; without it Mobdev
+takes the active project's bundle ID, else the key's only app.
+
+| Tool | Arguments | |
+|---|---|---|
+| `appstore_apps` | | The key's apps: name, bundle ID, App Store Connect app ID, SKU |
+| `appstore_builds` | `app`, `version`, `limit` | Newest first: version and build number, platform, processing state, upload date, expiry, TestFlight state for internal and external testers, beta app review, What to Test, id |
+| `appstore_testflight` | `app` | TestFlight groups: internal or external, how many testers, public link, their builds. Testers' names and addresses are not read |
+| `appstore_versions` | `app`, `limit` | App Store versions: state (`PREPARE_FOR_SUBMISSION`, `WAITING_FOR_REVIEW`, `IN_REVIEW`, `REJECTED`, `READY_FOR_SALE`, …), platform, build, release type, phased release |
+| `appstore_reviews` | `app`, `rating`, `territory`, `unanswered`, `limit` | Customer reviews, newest first: rating, title, text, nickname, country, date, id, your reply and its state |
+| `appstore_add_build_to_group` | `app`, `build`, `version`, `group` | Gives a TestFlight group a build (by build number, or id from `appstore_builds`); external testers get it after beta app review |
+| `appstore_set_what_to_test` | `app`, `build`, `version`, `text`, `locale` | Sets a build's What to Test, at most 4000 characters |
+| `appstore_reply_to_review` | `review`, `text` | Replies to a review or replaces your reply, at most 5970 characters; Apple checks it before it appears |
+
+The last three change data testers and customers see. Agents may call them only after you turn on
+**Agents may change App Store Connect** in Settings › App Store Connect (off by default); until then
+they are refused with a message that says so, and nothing is sent. A build number that appears in
+several versions needs `version` (or the build's id).
+
+```sh
+M=/Applications/Mobdev.app/Contents/MacOS/Mobdev
+$M appstore_builds app=com.example.MyApp limit=5
+$M appstore_reviews unanswered=true
+```
+
+App Store Connect allows each key a limited number of requests an hour; when it is used up, the
+tools say so (429) and when to try again. A 401 means the key ID, the issuer ID or the key is
+wrong or revoked, a 403 that the key's role does not allow the request.
+
 ## HTTP API
 
 Everything listens on `127.0.0.1:4686` (`MOBDEV_PORT` overrides it) and needs
@@ -1051,9 +1112,12 @@ Mobdev's log (Console, subsystem `dev.mobdev.mac`), the install in the device's 
 
 - The API binds only to 127.0.0.1, requires the bearer token, rejects browser requests (`Origin`)
   and foreign `Host` headers.
-- The token, the relay secret and the [secrets](#secrets) agents type are files readable only by
-  you (mode 0600) in `~/Library/Application Support/dev.mobdev.mac`. `MOBDEV_HOME` moves that
-  directory.
+- The token, the relay secret, the [secrets](#secrets) agents type and the
+  [App Store Connect](#app-store-connect) key are files readable only by you (mode 0600) in
+  `~/Library/Application Support/dev.mobdev.mac`. `MOBDEV_HOME` moves that directory.
+- Agents read App Store Connect with your key but never get the key. They change it (TestFlight
+  groups, What to Test, replies to reviews) only after you turn on **Agents may change App Store
+  Connect**; in the app every change asks first.
 - No telemetry, no account. Every agent action appears under **Activity** in the app.
 - Live view in the browser is off until **Allow live view** is turned on under Remote Access; the
   app shows while someone watches and can stop it (see [Live view](#live-view)).
@@ -1096,6 +1160,8 @@ Mobdev's log (Console, subsystem `dev.mobdev.mac`), the install in the device's 
 - Recording does not capture the scroll wheel; drag to scroll while recording.
 - A double tap (`double`) on Android takes two `input tap` calls through adb, which can be slower
   than an app's double-tap timeout.
+- App Store Connect is tested against answers shaped like the API's, not yet against a live
+  account. The key's token is checked with OpenSSL.
 - Mobdev Runner finds the app in front through XCTest's private API, as WebDriverAgent does; tested
   with Xcode 27 on simulators. Its frames assume portrait. It is built with your Xcode, so a new
   Xcode can break it until Mobdev catches up.

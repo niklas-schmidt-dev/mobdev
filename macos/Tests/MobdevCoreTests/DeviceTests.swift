@@ -230,11 +230,12 @@ import Testing
                 "list_projects", "create_project", "open_project", "list_tests", "save_test", "save_flow", "test_result",
             ])
         let macTools = projectTools + ["list_secrets"] + VirtualDeviceTools.definitions.map(\.name)
+            + AppStoreTools.definitions.map(\.name)
         #expect(Set(VirtualDeviceTools.definitions.map(\.name)) == VirtualDeviceTools.names)
         #expect(Set(names) == Set(PhoneTools.definitions.map(\.name) + ["list_devices"] + macTools))
         for definition in DeviceTools.definitions where definition.name != "list_devices" {
-            // A project's files, the secrets' names and simulators that are not running need no
-            // device; everything else acts on one.
+            // A project's files, the secrets' names, simulators that are not running and App Store
+            // Connect need no device; everything else acts on one.
             let takesDevice = definition.inputSchema["properties"]?["device"]?["type"] == "string"
             #expect(takesDevice == !macTools.contains(definition.name), "\(definition.name)")
         }

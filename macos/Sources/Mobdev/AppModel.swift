@@ -100,6 +100,8 @@ final class AppModel {
     let emulators: EmulatorHub
     /// The tools agents call, which the app's own controls call too.
     @ObservationIgnored let tools: DeviceTools
+    /// The App Store Connect key and apps, with the client the tools use.
+    let appStore: AppStoreModel
     @ObservationIgnored private let router: APIRouter
     @ObservationIgnored private let server: HTTPServer
     /// Where `Mobdev mcp` connects: a Unix socket in the private data directory.
@@ -135,6 +137,7 @@ final class AppModel {
         projectNames = Self.names(of: projectList.known)
         let tools = DeviceTools(hub: hub, emulators: emulators, projects: projectList)
         self.tools = tools
+        appStore = AppStoreModel(connect: tools.appStore)
         let portBox = self.portBox
         let router = APIRouter(tools: tools, token: { tokenBox.get() }, port: { portBox.get() })
         self.router = router
@@ -444,6 +447,12 @@ final class AppModel {
         settings.blockedApps = apps.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
         save()
         AppBlocklist.reload()
+    }
+
+    /// Whether agents may add builds to TestFlight groups, set What to Test and reply to reviews.
+    func setAppStoreAgentChanges(_ allowed: Bool) {
+        settings.appStoreAgentChanges = allowed
+        save()
     }
 
     func forget(_ id: String) { hub.forget(id) }
