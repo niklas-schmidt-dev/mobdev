@@ -454,6 +454,7 @@ struct DeviceInfoView: View {
                     LabeledContent("Input (Bluetooth)") { Text(state.status.bluetooth.summary).foregroundStyle(.secondary) }
                 }
                 UITreeSection(state: state)
+                PerformanceSection(state: state)
                 Section {
                     LabeledContent("Device ID") {
                         HStack {
@@ -511,6 +512,7 @@ private struct EmulatorInfo: View {
                 if let info = state.info { LabeledContent("Software", value: info.systemName) }
                 if let size = state.status.frameSize { LabeledContent("Screen", value: "\(size.width) × \(size.height)") }
             }
+            PerformanceSection(state: state)
             Section {
                 LabeledContent("Device ID") {
                     HStack {
@@ -677,6 +679,8 @@ struct ToolIcon: View {
         case "crash_reports": "exclamationmark.triangle.fill"
         case "performance": "gauge.with.dots.needle.67percent"
         case "measure_launch": "stopwatch"
+        case "record_trace": "waveform.path.ecg"
+        case "device_load": "cpu"
         case "dev_menu": "ellipsis.rectangle"
         case "reload_app": "arrow.clockwise"
         case "live_view": "eye.fill"
@@ -695,7 +699,8 @@ struct ToolIcon: View {
         case "list_projects", "open_project", "create_project": .cyan
         case "install_app", "uninstall_app", "launch_app", "stop_app", "open_url", "measure_launch", "dev_menu",
             "reload_app": .teal
-        case "list_apps", "logs", "crash_reports", "performance": .brown
+        case "list_apps", "logs", "crash_reports", "performance", "device_load": .brown
+        case "record_trace": .teal
         case "live_view": .red
         default: .gray
         }
