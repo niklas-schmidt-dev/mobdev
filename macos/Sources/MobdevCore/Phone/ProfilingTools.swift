@@ -60,7 +60,7 @@ extension PhoneTools {
                 throw ToolFailure(
                     "\(what) needs Instruments, which reaches an iPhone once Mobdev has read its identity over USB: connect it with a cable and unlock it.")
             }
-            throw ToolFailure("This device cannot \(what.lowercased()).")
+            throw ToolFailure("\(what) is not available on this device.")
         }
         return performance
     }
