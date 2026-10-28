@@ -450,7 +450,9 @@ final class AppModel {
     /// known, each drag is followed by a check that moves the pointer without clicking; the setup
     /// panel shows the result.
     func checkPointerAfterDrag(_ id: String, at point: NormalizedPoint) {
-        guard let device = hardware(id), device.status().pointer != .follows, !checkingPointer.contains(id) else {
+        guard let device = hardware(id), device.status().input == .bluetooth, device.status().pointer != .follows,
+            !checkingPointer.contains(id)
+        else {
             return
         }
         checkingPointer.insert(id)
@@ -473,7 +475,8 @@ final class AppModel {
     private func checkPointersByThemselves() {
         for device in hub.devices {
             let status = device.status()
-            guard status.isReady else {
+            // Mobdev Runner needs no pointer.
+            guard status.isReady, status.input == .bluetooth else {
                 automaticChecks[device.id] = nil
                 continue
             }
@@ -1023,7 +1026,7 @@ final class AppModel {
         }
     }
 
-    /// A click or drag in a simulator's or Android device's screen.
+    /// A click in a simulator's or Android device's screen, or an iPhone's through Mobdev Runner.
     func tap(_ id: String, at point: NormalizedPoint) {
         guard let device = device(id) else { return }
         recordTap(id, at: point)
@@ -1041,6 +1044,26 @@ final class AppModel {
         guard let device = device(id) else { return }
         recordKey(id, stroke)
         enqueue(id) { try? await device.press(stroke) }
+    }
+
+    /// Wheel steps from an iPhone's mirror through Mobdev Runner, as a swipe. Like the wheel over
+    /// Bluetooth, it is not recorded.
+    func scroll(_ id: String, at point: NormalizedPoint, ticks: Int, sideways: Bool) {
+        guard let device = device(id) else { return }
+        enqueue(id) {
+            if sideways { try? await device.pan(at: point, ticks: ticks) } else { try? await device.scroll(at: point, ticks: ticks) }
+        }
+    }
+
+    /// Whole gestures for an iPhone's mirror while Mobdev Runner takes its input; nil over Bluetooth.
+    func mirrorActions(_ id: String) -> MirrorActions? {
+        guard state(id)?.status.input == .runner else { return nil }
+        return MirrorActions(
+            tap: { [weak self] in self?.tap(id, at: $0) },
+            swipe: { [weak self] in self?.swipe(id, from: $0, to: $1, duration: $2) },
+            scroll: { [weak self] in self?.scroll(id, at: $0, ticks: $1, sideways: $2) },
+            text: { [weak self] in self?.type($0, on: id) },
+            key: { [weak self] in self?.pressKey($0, on: id) })
     }
 
     func saveScreenshot(_ id: String) {

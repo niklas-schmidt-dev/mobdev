@@ -289,7 +289,7 @@ private struct PhoneStage: View {
             VStack(spacing: 16) {
                 PhoneMirrorView(
                     id: id, session: model.hardware(id)?.capture.session, input: model.hardware(id)?.input,
-                    layout: model.settings.keyboardLayout, focused: $focused,
+                    actions: model.mirrorActions(id), layout: model.settings.keyboardLayout, focused: $focused,
                     onDrag: { model.checkPointerAfterDrag(id, at: $0) },
                     onInput: { input in
                         switch input {
@@ -345,8 +345,9 @@ private struct PhoneStage: View {
 
     private var hint: String {
         if inspecting { return "Inspecting: point at an element to see it · click to copy the step that taps it" }
-        guard model.state(id)?.status.bluetooth.isConnected == true else {
-            return "Pair over Bluetooth to control the \(noun) from here."
+        guard let state = model.state(id), state.status.inputReady else {
+            if model.state(id)?.runnerStarting == true { return "Mobdev Runner is starting on the \(noun)…" }
+            return "Turn on Developer Mode or pair over Bluetooth to control the \(noun) from here."
         }
         return focused
             ? "Typing goes to the \(noun). ⌘V types the Mac clipboard."
@@ -441,6 +442,14 @@ private struct StatusSummary: View {
                             : "Keys are sent for the simulator's own keyboard layout.")
                 row("Apps", symbol: "square.stack.3d.up", value: "Install, launch, logs")
                     .help("install_app, launch_app, logs and crash_reports work without further setup.")
+            } else if status?.input == .runner {
+                row("Screen", symbol: "rectangle.on.rectangle", value: screenText(status?.screen))
+                row("Input", symbol: "hand.tap", value: "Mobdev Runner")
+                    .help("Developer Mode: Mobdev Runner taps, swipes and types on the \(noun). No Bluetooth needed.")
+                row("Keyboard", symbol: "keyboard", value: "Typed as text")
+                    .help("Mobdev Runner types any text, emoji included, whatever the keyboard layout.")
+                row("Apps", symbol: "square.stack.3d.up", value: "Install, launch, logs")
+                    .help("install_app, launch_app, logs and crash_reports work with Developer Mode.")
             } else {
                 row("Screen", symbol: "rectangle.on.rectangle", value: screenText(status?.screen))
                 row("Bluetooth", symbol: "dot.radiowaves.left.and.right", value: "Paired")
@@ -489,7 +498,8 @@ private struct StatusSummary: View {
     }
 }
 
-/// What the device still needs: screen, Bluetooth and AssistiveTouch, with the way to fix each.
+/// What the device still needs, with the way to fix each: the screen, then Developer Mode, the
+/// way agents control an iPhone; Bluetooth and AssistiveTouch as the way without it.
 struct SetupSteps: View {
     @Environment(AppModel.self) private var model
     let id: String
@@ -500,6 +510,9 @@ struct SetupSteps: View {
             ?? PhoneStatus(screen: model.setupScreen, bluetooth: model.setupBluetooth, keyboardLayout: model.settings.keyboardLayout)
     }
 
+    /// Bluetooth is set up or on its way: show its steps in full.
+    private var bluetoothInUse: Bool { model.bluetoothStarted || model.settings.usesBluetooth }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Setup").font(.headline)
@@ -507,36 +520,63 @@ struct SetupSteps: View {
             if case .noPicture = status.screen {
                 Button("Restart Screen Capture…") { model.restartScreenCapture() }
             }
-            StepRow(title: "Bluetooth", detail: bluetoothDetail, state: bluetoothState)
-            if status.bluetooth == .unauthorized {
-                Button("Open Bluetooth Settings") { model.openPrivacySettings("Privacy_Bluetooth") }
-            } else if status.bluetooth == .advertising, !model.setupBluetooth.isConnected {
-                // Hidden while another iPhone is paired: republishing would interrupt it.
-                Button("Show on \(noun) Again", systemImage: "arrow.clockwise") { model.offerBluetoothAgain() }
+            if let state = model.state(id) {
+                let control = state.control(teamChosen: UIRunner.isTeamID(model.settings.runnerTeam))
+                StepRow(
+                    title: "Developer Mode", detail: [control.title, control.detail].compactMap { $0 }.joined(separator: ". "),
+                    state: control.step)
+                if case .failed = state.runner { Button("Try Again") { model.restartRunner(id) } }
             }
-            if let host = model.state(id)?.replacementHost {
-                // Input never moves to another Bluetooth host on its own: a host's name is only what it says.
-                Text(
-                    "“\(host.name ?? "An iPhone")” is connected over Bluetooth, but this \(noun) was paired as another device before. Use the connection only if it is this \(noun)."
-                )
-                .font(.callout)
+            Text("Without Developer Mode")
+                .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-                Button("Use This Connection") { model.useBluetoothHost(host.id, for: id) }
+                .padding(.top, 4)
+            if bluetoothInUse {
+                bluetoothSteps
+            } else {
+                Text("\(MobdevPaths.appName) can tap and type as a Bluetooth keyboard and pointer instead. It needs pairing and AssistiveTouch.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button("Use Bluetooth") {
+                    model.setUsesBluetooth(true)
+                    model.startBluetooth()
+                }
+                .help("Start the Bluetooth keyboard and pointer; macOS asks for Bluetooth access the first time")
             }
-            StepRow(title: "AssistiveTouch", detail: assistiveTouchDetail, state: assistiveTouchState)
             HStack {
                 Button("Open Setup Assistant…") { model.showsOnboarding = true }
                     .buttonStyle(.glass)
                 if model.state(id) != nil {
                     Button("Diagnose…") { diagnosing = true }
                         .buttonStyle(.glass)
-                        .help("Check screen, USB, Bluetooth and AssistiveTouch, with a fix for each")
+                        .help("Check screen, USB, Developer Mode, Mobdev Runner and Bluetooth, with a fix for each")
                 }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .sheet(isPresented: $diagnosing) { DiagnosisView(id: id) }
+    }
+
+    @ViewBuilder private var bluetoothSteps: some View {
+        StepRow(title: "Bluetooth", detail: bluetoothDetail, state: bluetoothState)
+        if status.bluetooth == .unauthorized {
+            Button("Open Bluetooth Settings") { model.openPrivacySettings("Privacy_Bluetooth") }
+        } else if status.bluetooth == .advertising, !model.setupBluetooth.isConnected {
+            // Hidden while another iPhone is paired: republishing would interrupt it.
+            Button("Show on \(noun) Again", systemImage: "arrow.clockwise") { model.offerBluetoothAgain() }
+        }
+        if let host = model.state(id)?.replacementHost {
+            // Input never moves to another Bluetooth host on its own: a host's name is only what it says.
+            Text(
+                "“\(host.name ?? "An iPhone")” is connected over Bluetooth, but this \(noun) was paired as another device before. Use the connection only if it is this \(noun)."
+            )
+            .font(.callout)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+            Button("Use This Connection") { model.useBluetoothHost(host.id, for: id) }
+        }
+        StepRow(title: "AssistiveTouch", detail: assistiveTouchDetail, state: assistiveTouchState)
     }
 
     @State private var diagnosing = false

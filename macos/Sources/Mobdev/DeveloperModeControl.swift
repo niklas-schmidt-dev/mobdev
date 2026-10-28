@@ -50,36 +50,9 @@ struct DeveloperModeControl: View {
         .task { await model.refreshTeams() }
     }
 
-    /// What the runner does, and what to do about it.
     private var status: (title: String, detail: String?) {
-        switch state.runner ?? .off {
-        case .running: return ("Controls the \(state.noun)", nil)
-        case .failed(let reason): return ("Could not start", reason)
-        case .building, .starting: return (state.runner?.summary ?? "", nil)
-        case .off: break
-        }
-        if state.runnerChoice == .off { return ("Off", "Input goes over Bluetooth.") }
-        guard state.onUSB else { return ("Starts when the \(state.noun) is connected", nil) }
-        if state.runnerChoice == .on { return ("Starting…", nil) }
-        switch state.developerMode {
-        case false?:
-            return (
-                "Waiting for Developer Mode",
-                "On the \(state.noun): Settings › Privacy & Security › Developer Mode. The \(state.noun) restarts, then \(MobdevPaths.appName) starts by itself."
-            )
-        case nil:
-            return (
-                "Waiting for Developer Mode",
-                "Xcode does not report Developer Mode for this \(state.noun) yet. With Xcode installed, open Window › Devices and Simulators once while the \(state.noun) is connected, or click Turn On."
-            )
-        case true? where UIRunner.isTeamID(model.settings.runnerTeam):
-            return ("Starting…", nil)
-        case true?:
-            return (
-                "Needs a development team",
-                "Sign in to Xcode with your Apple Account (Xcode › Settings › Apple Accounts), or enter your team ID below."
-            )
-        }
+        let control = state.control(teamChosen: UIRunner.isTeamID(model.settings.runnerTeam))
+        return (control.title, control.detail)
     }
 
     /// A menu of the teams found, or a field for the team ID when none is.
@@ -95,6 +68,42 @@ struct DeveloperModeControl: View {
         } else if model.teams != nil {
             TextField("Team ID", text: selection, prompt: Text("ABCDE12345"))
                 .help("No Apple Development certificate was found. Sign in to Xcode with your Apple Account, or enter your team ID.")
+        }
+    }
+}
+
+extension DeviceState {
+    /// What Mobdev Runner does on this iPhone, and what to do about it, for the info, the panel and
+    /// Diagnose: a step state, a short title and the detail.
+    func control(teamChosen: Bool) -> (step: StepRow.State, title: String, detail: String?) {
+        switch runner ?? .off {
+        case .running: return (.done, "Controls the \(noun)", nil)
+        case .failed(let reason): return (.attention, "Could not start", reason)
+        case .building, .starting:
+            return (.waiting, runner?.summary ?? "Starting…", "The first build takes a minute or two.")
+        case .off: break
+        }
+        if runnerChoice == .off { return (.info, "Off", "Turned off for this \(noun): input goes over Bluetooth.") }
+        guard onUSB else { return (.waiting, "Starts when the \(noun) is connected", nil) }
+        if runnerChoice == .on { return (.waiting, "Starting…", nil) }
+        switch developerMode {
+        case false?:
+            return (
+                .attention, "Waiting for Developer Mode",
+                "On the \(noun): Settings › Privacy & Security › Developer Mode. The \(noun) restarts, then \(MobdevPaths.appName) starts by itself."
+            )
+        case nil:
+            return (
+                .info, "Waiting for Developer Mode",
+                "Xcode does not report Developer Mode for this \(noun) yet. With Xcode installed, open Window › Devices and Simulators once while the \(noun) is connected, or click Turn On in its info."
+            )
+        case true? where teamChosen:
+            return (.waiting, "Starting…", nil)
+        case true?:
+            return (
+                .attention, "Needs a development team",
+                "Sign in to Xcode with your Apple Account (Xcode › Settings › Apple Accounts), or enter your team ID in the \(noun)'s info."
+            )
         }
     }
 }
