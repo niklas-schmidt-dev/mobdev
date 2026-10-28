@@ -153,7 +153,9 @@ struct ProjectSidebarRows: View {
                     Label(section.title, systemImage: section.systemImage)
                         .padding(.leading, 14)
                 }
-                .badge(section == .tests && model.runningTests.contains(folder.path) ? Text("Running") : nil)
+                .badge(
+                    section == .tests && (model.runningTests.contains(folder.path) || model.isRunningNativeTests(folder))
+                        ? Text("Running") : nil)
                 .tag(Pane.project(folder.path, section))
             }
         }
@@ -813,15 +815,16 @@ private struct ProjectRunsView: View {
     @Environment(AppModel.self) private var model
     let folder: URL
     @State private var runs: [(folder: URL, result: TestRunResult?)] = []
+    @State private var nativeRuns: [(folder: URL, result: NativeTestResult?)] = []
     @State private var crawls: [(folder: URL, map: AppMap?)] = []
 
     var body: some View {
         Group {
-            if runs.isEmpty && crawls.isEmpty {
+            if runs.isEmpty && nativeRuns.isEmpty && crawls.isEmpty {
                 ContentUnavailableView {
                     Label("No Runs Yet", systemImage: ProjectSection.runs.systemImage)
                 } description: {
-                    Text("Test runs from the app and run_tests, and crawls, keep their results, videos and screenshots in output/. The newest 20 runs and 10 crawls stay.")
+                    Text("Test runs from the app and run_tests, native test runs, and crawls keep their results, videos and screenshots in output/. The newest 20 runs and 10 crawls stay.")
                 }
             } else {
                 List {
@@ -829,6 +832,13 @@ private struct ProjectRunsView: View {
                         Section("Test Runs") {
                             ForEach(runs, id: \.folder) { run in
                                 runRow(run.folder, run.result)
+                            }
+                        }
+                    }
+                    if !nativeRuns.isEmpty {
+                        Section("Native Test Runs") {
+                            ForEach(nativeRuns, id: \.folder) { run in
+                                nativeRunRow(run.folder, run.result)
                             }
                         }
                     }
@@ -842,7 +852,37 @@ private struct ProjectRunsView: View {
                 }
             }
         }
-        .task(id: "\(folder.path) \(model.projectRevision(folder)) \(model.runningTests.contains(folder.path))") { load() }
+        .task(id: "\(folder.path) \(model.projectRevision(folder)) \(model.runningTests.contains(folder.path)) \(model.isRunningNativeTests(folder))") { load() }
+    }
+
+    private func nativeRunRow(_ run: URL, _ result: NativeTestResult?) -> some View {
+        let (passed, failed, skipped) = result?.counts ?? (0, 0, 0)
+        var parts = ["\(passed) passed"]
+        if failed > 0 { parts.append("\(failed) failed") }
+        if skipped > 0 { parts.append("\(skipped) skipped") }
+        let title = result.map { $0.error != nil && $0.tests.isEmpty ? "Could not run" : parts.joined(separator: ", ") } ?? "No results"
+        let subtitle = result.map {
+            "\($0.suite) · \($0.device?.name ?? "This Mac") · \($0.started.shortText) · \(String(format: "%.1f", $0.seconds)) s"
+        } ?? run.lastPathComponent
+        return ProjectRow(
+            systemImage: result == nil ? "questionmark.circle" : result?.passed == true ? "checkmark.circle.fill" : "xmark.circle.fill",
+            tint: result == nil ? .secondary : result?.passed == true ? .green : .red, title: title, subtitle: subtitle
+        ) {
+            if let bundle = result?.resultBundle {
+                Button("Open in Xcode", systemImage: "hammer") { NSWorkspace.shared.open(URL(fileURLWithPath: bundle)) }
+                    .buttonStyle(.borderless).labelStyle(.iconOnly)
+                    .help("Open the run's result bundle in Xcode")
+            }
+            Button("Show in Finder", systemImage: "folder") { NSWorkspace.shared.activateFileViewerSelecting([run]) }
+                .buttonStyle(.borderless).labelStyle(.iconOnly)
+                .help("Show the run's results, log and result bundle in Finder")
+        }
+        .contextMenu {
+            if let bundle = result?.resultBundle {
+                Button("Open in Xcode") { NSWorkspace.shared.open(URL(fileURLWithPath: bundle)) }
+            }
+            Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([run]) }
+        }
     }
 
     private func runRow(_ run: URL, _ result: TestRunResult?) -> some View {
@@ -892,6 +932,7 @@ private struct ProjectRunsView: View {
     private func load() {
         if let project = try? TestProject.load(folder) {
             runs = TestRuns.runs(for: project).map { ($0, try? TestRunResult.load($0)) }
+            nativeRuns = NativeTestRuns.runs(for: project).map { ($0, try? NativeTestResult.load($0)) }
         }
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
