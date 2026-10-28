@@ -169,6 +169,26 @@ import Testing
         #expect(phone.events.get().isEmpty)
     }
 
+    @Test func throughTheRunnerTextNeedsNoKeyboardLayout() async throws {
+        let phone = FakePhone(lines: [], bluetoothConnected: false, layout: .us)
+        phone.route.set((.runner, .running))
+        let tools = PhoneTools(phone: phone, activity: ActivityLog(), settleDelay: 0)
+        // ü and 😀 have no key on the U.S. layout.
+        let typed = try await tools.call("type_text", arguments: ["text": "Grüße 😀", "submit": true], source: "test", screenshotByDefault: false)
+        #expect(!typed.isError, "\(typed.text)")
+        let pressed = try await tools.call("press_key", arguments: ["key": "ü"], source: "test", screenshotByDefault: false)
+        #expect(!pressed.isError, "\(pressed.text)")
+        #expect(phone.events.get() == [.text("Grüße 😀"), .key(KeyStroke(0x28)), .text("ü")])
+
+        // Over Bluetooth the layout still decides.
+        let paired = FakePhone(lines: [], layout: .us)
+        let bluetooth = PhoneTools(phone: paired, activity: ActivityLog(), settleDelay: 0)
+        let refused = try await bluetooth.call("press_key", arguments: ["key": "😀"], source: "test", screenshotByDefault: false)
+        #expect(refused.isError)
+        #expect(refused.text.contains("Unknown key"))
+        #expect(paired.events.get().isEmpty)
+    }
+
     @Test func iPhonesOnEitherRouteRefuseToLock() async throws {
         let phone = FakePhone(lines: [], bluetoothConnected: false)
         phone.route.set((.runner, .running))

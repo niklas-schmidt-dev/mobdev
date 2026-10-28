@@ -409,6 +409,12 @@ public final class PhoneTools: Sendable {
                 for _ in 0..<count { try await phone.press(button) }
                 return ToolOutput(text: "Pressed \(key.lowercased())\(times).")
             }
+            // Mobdev Runner types a character as it is, also one the keyboard layout has no key for.
+            if phone.status().input == .runner, key.count == 1, modifiers.isEmpty {
+                try requireTouch()
+                for _ in 0..<count { _ = try await phone.typeText(key) }
+                return ToolOutput(text: "Pressed \(key)\(times).")
+            }
             let stroke = try phone.status().keyboardLayout.stroke(forKey: key, modifiers: modifiers)
             try requireTouch()
             for _ in 0..<count { try await phone.press(stroke) }

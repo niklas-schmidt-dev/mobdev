@@ -14,6 +14,8 @@ class FakePhone: PhoneBackend, @unchecked Sendable {
         case key(KeyStroke)
         case button(ConsumerUsage)
         case checkPointer(NormalizedPoint)
+        /// Typed as a whole, as Mobdev Runner does.
+        case text(String)
     }
 
     let image: CGImage
@@ -124,6 +126,13 @@ class FakePhone: PhoneBackend, @unchecked Sendable {
 
     func press(_ button: ConsumerUsage) async throws {
         events.withLock { $0.append(.button(button)) }
+    }
+
+    /// Like an iPhone: whole text through Mobdev Runner, key by key over Bluetooth.
+    func typeText(_ text: String) async throws -> Bool {
+        guard route.get().input == .runner else { return false }
+        events.withLock { $0.append(.text(text)) }
+        return true
     }
 
     static func render(lines: [(String, CGFloat, CGFloat)], width: Int, height: Int) -> CGImage {
