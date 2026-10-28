@@ -301,7 +301,8 @@ public final class PhoneTools: Sendable {
                 output.image = phone.frame().flatMap(ImageTools.screenshot)
             }
             activity.record(
-                source: source, tool: name, summary: summary(name, args, output), failed: false, collapsing: collapsing)
+                source: source, tool: name, summary: summary(name, args, output), failed: output.isError,
+                collapsing: collapsing)
             if !output.isError {
                 for steps in [recorder, history] {
                     if name == "tap_mark" {

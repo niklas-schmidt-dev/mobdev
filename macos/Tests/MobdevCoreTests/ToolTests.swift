@@ -22,6 +22,18 @@ extension Trait where Self == ConditionTrait {
         return (PhoneTools(phone: phone ?? self.phone, activity: log, settleDelay: 0), log)
     }
 
+    @Test func failuresReturnedAsResultsAreLoggedAsFailures() async throws {
+        let (tools, log) = tools()
+        let failed = try await tools.call(
+            "run_flow", arguments: ["steps": [["tap": ["x": 5000, "y": 1]]]], source: "test", screenshotByDefault: false)
+        #expect(failed.isError)
+        // Newest first: the flow, after its own step.
+        #expect(log.all.first?.tool == "run_flow")
+        #expect(log.all.first?.failed == true)
+        _ = try await tools.call("home", arguments: ["screenshot": false], source: "test", screenshotByDefault: false)
+        #expect(log.all.first?.failed == false)
+    }
+
     @Test func screenshotSizeKeepsAspectRatio() {
         let size = ScreenGeometry.screenshotSize(forFrameWidth: 1179, height: 2556)
         #expect(size.height == 1280)
