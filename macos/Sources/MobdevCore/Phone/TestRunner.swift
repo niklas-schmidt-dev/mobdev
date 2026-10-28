@@ -444,7 +444,8 @@ extension PhoneTools {
         var overrides = options.variables
         if let language = options.language, overrides["LANGUAGE"] == nil { overrides["LANGUAGE"] = language }
         let variables = Variables(
-            project: project, overrides: overrides, environment: ProcessInfo.processInfo.environment)
+            project: project, overrides: overrides, environment: ProcessInfo.processInfo.environment,
+            stored: { TypedSecrets.value($0, source: source) })
 
         if let build = project.build(for: kind) {
             let install = Flow.Step("install_app", ["path": .string(build.path)])

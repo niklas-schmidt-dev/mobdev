@@ -176,7 +176,9 @@ extension PhoneTools {
         var output: ToolOutput
         do {
             let filled = try run.variables.substitute(.object(arguments))
-            output = try await call(step.tool, arguments: filled, source: run.source, screenshotByDefault: false)
+            output = try await Variables.$current.withValue(run.variables) {
+                try await call(step.tool, arguments: filled, source: run.source, screenshotByDefault: false)
+            }
         } catch {
             output = ToolOutput(text: String(describing: error), isError: true)
         }

@@ -151,6 +151,8 @@ only device, or the connected iPhone when simulators or Android devices run next
 | `swipe` | `from_x`, `from_y`, `to_x`, `to_y`, `duration` | |
 | `scroll` | `direction` (`up`/`down`/`left`/`right`), `amount`, `x`, `y` | Mouse wheel; `right` reveals content further right |
 | `type_text` | `text`, `submit` | Into the focused field, at most 1000 characters per call |
+| `type_secret` | `name`, `submit` | Types a stored password or code without the agent seeing it (see [Secrets](#secrets)) |
+| `list_secrets` | | The names of the stored secrets, never their values |
 | `press_key` | `key`, `modifiers`, `count` | e.g. `space` + `cmd` for Spotlight; `volume_up` and `volume_down` press the buttons (iPhones, Android) |
 | `home` | | |
 | `open_app` | `name` | Through Spotlight on an iPhone; by name or bundle ID on simulators and Android |
@@ -239,6 +241,33 @@ project that gets what the tool saves (default: the project of the current folde
 [Projects](#projects)). It exits 0 when the tool
 succeeded, 1 when it reported an error and 2 when it could not run. `start_recording`, `tap_mark`,
 network capture and other calls that build on an earlier one need the app.
+
+### Secrets
+
+Passwords and codes of test accounts go into **Settings › Secrets**, or `Mobdev secret set <name>`.
+Agents type them with `type_secret` and know only the name: the value is not in the result, the
+activity, recorded flows and tests, or `recent_steps`. They are kept in `secrets.json`, readable
+only by you (mode 0600), next to the API token. Agents through a relay may type a secret only when
+its **Relay** box is on.
+
+```sh
+M=/Applications/Mobdev.app/Contents/MacOS/Mobdev
+$M secret set test-password                                  # asks for the value without showing it
+printf '%s' "$TEST_PASSWORD" | $M secret set test-password   # in CI, from a secret variable
+$M secret list
+$M secret remove test-password
+```
+
+```json
+{"tap_element": {"id": "password"}},
+{"type_secret": {"name": "test-password", "submit": true}}
+```
+
+A test project's `secrets` in `mobdev.json` take the stored secret of the same name, such as
+`PASSWORD`, when neither the run nor the environment sets it, so an agent can run a sign-in test
+without knowing the password. `Mobdev flow` and `Mobdev test` read them from Mobdev's folder,
+also when `--artifacts` takes their logs elsewhere. A password field hides the value on screen;
+a plain text field shows what it holds in screenshots and the UI tree.
 
 ### Observe, marks and waits
 
@@ -748,8 +777,8 @@ Every key of `mobdev.json` is optional. A run installs the build for the device'
 (`iphone`, `simulator` or `android`) once, then plays `before_each` and the test's steps. A test
 passes when every step does, so end it with a `wait_for_element` or `wait_for_text` that proves the
 result; when the launched app crashes during a test, the test fails with the crash. `${NAME}` takes
-a variable from the file, the environment or the run; a secret's value comes from the environment
-or the run only and never appears in results. A test with `"platforms": ["android"]` is skipped on
+a variable from the file, the environment or the run; a secret's value comes from the run, the
+environment or a [stored secret](#secrets) of the same name and never appears in results. A test with `"platforms": ["android"]` is skipped on
 iOS, and the other way round.
 
 - A project's **Tests** in the sidebar runs its tests on a device and shows every result with its
@@ -982,8 +1011,9 @@ Mobdev's log (Console, subsystem `dev.mobdev.mac`), the install in the device's 
 
 - The API binds only to 127.0.0.1, requires the bearer token, rejects browser requests (`Origin`)
   and foreign `Host` headers.
-- The token and relay secret are files readable only by you (mode 0600) in
-  `~/Library/Application Support/dev.mobdev.mac`. `MOBDEV_HOME` moves that directory.
+- The token, the relay secret and the [secrets](#secrets) agents type are files readable only by
+  you (mode 0600) in `~/Library/Application Support/dev.mobdev.mac`. `MOBDEV_HOME` moves that
+  directory.
 - No telemetry, no account. Every agent action appears under **Activity** in the app.
 - Live view in the browser is off until **Allow live view** is turned on under Remote Access; the
   app shows while someone watches and can stop it (see [Live view](#live-view)).
