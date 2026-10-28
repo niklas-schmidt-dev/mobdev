@@ -47,7 +47,7 @@ shows, the app leaves the foreground, or `logs` reports that it exited or crashe
 After each path, check `logs` with the last `cursor` for errors and warnings. When the app crashed,
 call `crash_reports` for it and read the newest report. Relaunch and continue with the next path.
 
-On simulators, Android and iPhones with the UI tree on, act with `tap_element` (or `observe` and
+On simulators, Android and iPhones in Developer Mode, act with `tap_element` (or `observe` and
 `tap_mark`) and check with `wait_for_element` where the app has accessibility identifiers. When a path passes, offer to save
 it as a test with `save_test` into the app's project (`list_projects` says which one your calls
 use; without one, ask before `create_project` with `mobdev/` in the repository, see the `mobdev`

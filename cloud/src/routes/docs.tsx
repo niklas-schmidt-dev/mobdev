@@ -28,6 +28,7 @@ const sections = [
   ["tests", msg("Tests")],
   ["checks", msg("Checks")],
   ["crawl", msg("Explore an app")],
+  ["appstore", msg("App Store Connect")],
   ["skills", msg("Skills")],
   ["remote", msg("Remote access")],
   ["self-host", msg("Run your own relay")],
@@ -52,7 +53,7 @@ const tools = [
   ["list_secrets", "", msg("The names of the stored secrets, never their values")],
   ["press_key", "key, modifiers", msg("e.g. space + cmd for Spotlight")],
   ["home", "", msg("Go to the home screen")],
-  ["open_app", "name", msg("Open an app by name (Spotlight on an iPhone)")],
+  ["open_app", "name", msg("Open an app by name or bundle ID (through Spotlight on an iPhone without Developer Mode)")],
   ["read_screen", "", msg("All visible text with positions (on-device OCR)")],
   ["find_text", "text", msg("Where a label is")],
   ["tap_text", "text, index", msg("Tap a visible label")],
@@ -67,7 +68,7 @@ const tools = [
   ["stop_recording", "", msg("End the recording and say where it is")],
   ["recent_steps", "count, clear", msg("The newest actions that worked, as steps for a test")],
   ["run_shortcut", "name", msg("Run a shortcut from Apple’s Shortcuts app")],
-  ["ui_tree", "contains, all", msg("Elements from the accessibility tree (simulators, Android, iPhones with the UI tree on)")],
+  ["ui_tree", "contains, all", msg("Elements from the accessibility tree (simulators, Android, iPhones in Developer Mode)")],
   ["tap_element", "id, text, regex, role, value, enabled, region, near, index, timeout", msg("Tap an element by identifier, label, role, state or the label next to it")],
   ["wait_for_element", "id, text, regex, role, value, enabled, region, near, timeout, gone", msg("Wait for an element to appear or disappear")],
   ["run_flow", "path, steps, variables, video", msg("Replay a flow (JSON or Maestro YAML); stops at the first failing step and can save a video")],
@@ -98,6 +99,27 @@ const stateTools = [
   ["reset_app", "bundle_id, keychain", msg("Delete an app’s data as if it had just been installed")],
   ["clipboard", "text", msg("Read the clipboard, or set it")],
   ["set_orientation", "orientation", msg("Portrait or landscape")],
+];
+
+/** Simulators and Android Virtual Devices, running or not. They need no device. */
+const virtualDeviceTools = [
+  ["list_virtual_devices", "", msg("Every simulator and Android Virtual Device on the Mac, running or not")],
+  ["boot_device", "id, window", msg("Start one and wait until it has booted; it then appears in list_devices")],
+  ["shutdown_device", "id", msg("Shut a simulator down or quit an emulator")],
+  ["create_simulator", "device_type, runtime, name, boot", msg("Make an iOS simulator of any type and iOS version Xcode has")],
+  ["delete_simulator", "id", msg("Delete a simulator that Mobdev made")],
+];
+
+/** App Store Connect with a key stored on the Mac. The last three change what testers and customers see. */
+const appStoreTools = [
+  ["appstore_apps", "", msg("The key’s apps: name, bundle ID, app ID")],
+  ["appstore_builds", "app, version, limit", msg("Builds, newest first, with processing and TestFlight states")],
+  ["appstore_testflight", "app", msg("TestFlight groups, their testers count, public link and builds")],
+  ["appstore_versions", "app, limit", msg("App Store versions and their review state")],
+  ["appstore_reviews", "app, rating, territory, unanswered, limit", msg("Customer reviews and your replies")],
+  ["appstore_add_build_to_group", "app, build, version, group", msg("Give a TestFlight group a build")],
+  ["appstore_set_what_to_test", "app, build, version, text, locale", msg("Set a build’s What to Test")],
+  ["appstore_reply_to_review", "review, text", msg("Reply to a customer review, or replace your reply")],
 ];
 
 /** Need Developer Mode on the iPhone and Xcode on the Mac. */
@@ -201,15 +223,17 @@ function Docs() {
             <h1 className="headline mt-1 text-[48px]">Mobdev</h1>
             <p className="mt-4 text-[21px] leading-[1.45] text-muted">
               Mobdev puts your iPhones, iOS simulators and Android devices in one Mac app, for you and your AI agent. It
-              reads the iPhone screen over USB and taps and types as a Bluetooth keyboard and pointer; simulators and
-              Android need only Xcode or adb. Agents use it through MCP or HTTP.
+              reads the iPhone screen over USB. With Developer Mode, a small UI test it keeps on the iPhone taps, types
+              and reads the UI tree over the same cable; without it, Mobdev taps and types as a Bluetooth keyboard and
+              pointer. Simulators and Android need only Xcode or adb. Agents use it through MCP or HTTP.
             </p>
           </T>
           <div className="mt-14 space-y-12">
             <Section id="install">
               <T>
                 <p>
-                  You need a Mac with Bluetooth LE and <strong>macOS 26 or later</strong>, an iPhone and a USB <strong>data</strong> cable.
+                  You need a Mac with <strong>macOS 26 or later</strong> and <strong>Xcode</strong>, an iPhone with
+                  Developer Mode and a USB <strong>data</strong> cable. Without Developer Mode the Mac needs Bluetooth LE.
                   Download the app, open the disk image and drag Mobdev into Applications. It is signed and notarized by
                   Apple and updates itself.
                 </p>
@@ -221,8 +245,8 @@ function Docs() {
               </p>
               <T>
                 <p>
-                  Allow Bluetooth and Camera when macOS asks. macOS treats the iPhone screen like a camera, which is why
-                  it asks for camera access. To build it yourself with Xcode 26 or later:
+                  Allow Camera when macOS asks, and Bluetooth on the way without Developer Mode. macOS treats the iPhone
+                  screen like a camera, which is why it asks for camera access. To build it yourself with Xcode 26 or later:
                 </p>
               </T>
               <Code>{`git clone ${GITHUB_URL}\ncd mobdev/macos\nscripts/build-app.sh\nopen build/Mobdev.app`}</Code>
@@ -230,8 +254,36 @@ function Docs() {
 
             <Section id="iphone">
               <T>
+                <p>The setup assistant checks off each step as soon as the Mac detects it.</p>
+              </T>
+              <T>
                 <ol className="list-decimal space-y-2 pl-5">
                   <li>Plug it in, unlock it and tap <strong>Trust</strong>. If the Mac asks to allow the accessory, click Allow.</li>
+                  <li>
+                    Turn on <strong>Settings › Privacy &amp; Security › Developer Mode</strong> and restart the iPhone. The
+                    switch appears once the iPhone was connected to Xcode.
+                  </li>
+                  <li>
+                    Sign in to Xcode with your Apple Account under <strong>Xcode › Settings › Apple Accounts</strong>. A free
+                    account works.
+                  </li>
+                  <li>
+                    Mobdev builds <strong>Mobdev Runner</strong>, a small UI test, and starts it on the iPhone by itself; the
+                    first build takes a minute or two. If iOS asks, turn on Settings › Developer › Enable UI Automation.
+                    With a free account, trust the developer once under Settings › General › VPN &amp; Device Management.
+                  </li>
+                  <li>Set Auto-Lock to Never while agents work. The phone must stay unlocked.</li>
+                </ol>
+              </T>
+              <T>
+                <h3 className="pt-2 text-[21px] font-semibold tracking-tight text-ink">Without Developer Mode</h3>
+                <p>
+                  Choose Without Developer Mode in the setup assistant. Mobdev then taps and types as a Bluetooth keyboard
+                  and pointer and installs nothing on the iPhone.
+                </p>
+              </T>
+              <T>
+                <ol className="list-decimal space-y-2 pl-5">
                   <li>
                     On the iPhone open <strong>Settings › Bluetooth</strong> and tap your Mac under Other Devices. iOS lists it by the Mac’s name.
                     If it is missing, wait a moment or click <strong>Show on iPhone Again</strong> in Mobdev: an iPhone on the same Apple
@@ -246,7 +298,6 @@ function Docs() {
                     In Mobdev, pick the keyboard layout that matches <strong>Settings › General › Keyboard › Hardware
                     Keyboard</strong> on the iPhone.
                   </li>
-                  <li>Set Auto-Lock to Never while agents work. The phone must stay unlocked.</li>
                 </ol>
               </T>
             </Section>
@@ -385,13 +436,22 @@ function Docs() {
                   On both, <code className={code}>ui_tree</code> lists the elements on screen with their role, label and
                   accessibility identifier, and <code className={code}>tap_element</code> and <code className={code}>wait_for_element</code> find
                   them by identifier or label: steadier than OCR, and they find buttons that show only an icon. On an
-                  iPhone they need the UI tree turned on (see Build, run and debug); until then agents
+                  iPhone they need Developer Mode (see Set up the iPhone); without it agents
                   use <code className={code}>tap_text</code>.
                 </p>
               </T>
               <T>
                 <p>Turn them off under Settings › General in the app if you only want iPhones.</p>
               </T>
+              <T>
+                <p>
+                  Simulators and AVDs that are not running are under <strong>Not Running</strong> in the sidebar: ▶
+                  starts one, without a window since Mobdev shows the screen itself. <strong>New Simulator…</strong> makes
+                  one of any type and iOS version Xcode has. Agents do the same with these tools, which need no device.
+                  Mobdev deletes only simulators it made, and does not shut down a device a flow or test run is using.
+                </p>
+              </T>
+              <ToolTable rows={virtualDeviceTools} />
             </Section>
 
             <Section id="developer">
@@ -420,13 +480,11 @@ function Docs() {
               </T>
               <T>
                 <p>
-                  <strong>UI tree on iPhones.</strong> With Developer Mode and Xcode, open the iPhone’s info in Mobdev and
-                  turn on <strong>UI Tree</strong>. Mobdev builds Mobdev Runner, a small UI test, with Xcode, signs it
-                  with your development team and keeps it running on the iPhone, as WebDriverAgent does.
-                  Then <code className={code}>ui_tree</code>, <code className={code}>tap_element</code> and <code className={code}>wait_for_element</code> work
-                  there as on simulators, and <code className={code}>type_text</code> also types emoji. The first build
-                  takes a minute or two. With a free Apple Account, trust the developer once under Settings › General ›
-                  VPN &amp; Device Management.
+                  <strong>Developer Mode Control.</strong> Mobdev Runner is built with Xcode, signed with your
+                  development team and kept running on the iPhone, as WebDriverAgent does. While it runs, every tap,
+                  swipe, key and text goes through it, <code className={code}>type_text</code> types emoji
+                  too, and <code className={code}>ui_tree</code>, <code className={code}>tap_element</code> and <code className={code}>wait_for_element</code> work
+                  as on simulators. Turn it off for one iPhone in its info in Mobdev; that iPhone then uses Bluetooth.
                 </p>
               </T>
               <T>
@@ -459,7 +517,7 @@ function Docs() {
               <T>
                 <p>
                   A flow is a list of tool calls saved as JSON. Click <strong>Record</strong> in a device’s activity and
-                  everything you or an agent do on it is collected; on simulators, Android and iPhones with the UI tree,
+                  everything you or an agent do on it is collected; on simulators, Android and iPhones in Developer Mode,
                   clicks on named elements become <code className={code}>tap_element</code>, so the flow survives layout
                   changes. Replay it
                   with <strong>Run Flow…</strong>, the <code className={code}>run_flow</code> tool or, without the
@@ -649,6 +707,40 @@ function Docs() {
                 </p>
               </T>
               <Code>{'{"crawl_app": {"bundle_id": "com.example.MyApp", "max_actions": 60}}\n{"navigate_to": {"bundle_id": "com.example.MyApp", "screen": "Settings"}}'}</Code>
+            </Section>
+
+            <Section id="appstore">
+              <T>
+                <p>
+                  With an App Store Connect API key, Mobdev lists your apps in the sidebar with their builds, TestFlight
+                  groups, App Store versions and customer reviews, and agents read the same with
+                  the <code className={code}>appstore_</code> tools. They need no device. <code className={code}>app</code> is
+                  a bundle ID or app ID; without it Mobdev takes the active project’s.
+                </p>
+              </T>
+              <T>
+                <ol className="list-decimal space-y-2 pl-5">
+                  <li>
+                    In App Store Connect open <strong>Users and Access › Integrations › App Store Connect API</strong> and
+                    create a team key with the <strong>App Manager</strong> role.
+                  </li>
+                  <li>Download its .p8 file, which Apple offers only once, and copy the issuer ID above the list of keys.</li>
+                  <li>
+                    In Mobdev open <strong>Settings › App Store Connect</strong>, enter the issuer ID, choose the .p8 file and
+                    click Save Key.
+                  </li>
+                </ol>
+              </T>
+              <T>
+                <p>
+                  The key stays on your Mac, readable only by you. No tool returns it and it never goes through a relay;
+                  Mobdev signs short-lived tokens with it and talks to Apple’s API only. Adding a build to a TestFlight
+                  group, setting What to Test and replying to reviews change what testers and customers see: agents may
+                  do that only after you turn on <strong>Agents may change App Store Connect</strong> in the same
+                  settings, and in the app each change asks first.
+                </p>
+              </T>
+              <ToolTable rows={appStoreTools} />
             </Section>
 
             <Section id="skills">
