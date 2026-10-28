@@ -343,15 +343,24 @@ extension DeviceControl: AppPerformance {
         return (app, pid)
     }
 
-    /// Attaches by pid, and by the app's executable name when xctrace cannot find the pid.
+    /// Attaches by pid. xctrace sometimes does not find a process on a simulator, the same app's
+    /// pid one minute and not the next (iOS 27, 2026-10-28), so it tries again after a pause, then
+    /// by the app's executable name.
     private func recordAttached(
         _ xctrace: Xctrace, template: String, app: InstalledApp, pid: Int, seconds: TimeInterval, output: URL
     ) async throws {
-        do {
-            try await xctrace.record(template: template, device: udid, target: .attach(String(pid)), seconds: seconds, output: output)
-        } catch let error as DeveloperError where error.description.contains("Cannot find process") {
-            guard let name = Self.executableName(app) else { throw error }
-            try await xctrace.record(template: template, device: udid, target: .attach(name), seconds: seconds, output: output)
+        let targets = [String(pid), String(pid)] + (Self.executableName(app).map { [$0] } ?? [])
+        for (index, target) in targets.enumerated() {
+            do {
+                try await xctrace.record(template: template, device: udid, target: .attach(target), seconds: seconds, output: output)
+                return
+            } catch let error as DeveloperError where error.description.contains("Cannot find process") {
+                guard index < targets.count - 1 else {
+                    throw DeveloperError(
+                        "Instruments did not find \(app.bundleID) (pid \(pid)) on the device: \(error.description) Try again in a few seconds, or record every process (no bundle_id).")
+                }
+                try await Task.sleep(nanoseconds: 2_000_000_000)
+            }
         }
     }
 
@@ -552,11 +561,12 @@ extension DeviceControl {
             }
             target = "\(bundleID) (pid \(pid ?? 0))"
         case .launch(let bundleID):
+            // xctrace starts the app by its bundle ID, on simulators too (checked on iOS 27).
             guard let app = try await app(bundleID) else { throw DeveloperError("\(bundleID) is not installed.") }
             _ = try? await stop(bundleID)
             target = "\(bundleID), launched for the recording"
             try await xctrace.record(
-                template: template, device: udid, target: .launch(launchTarget(app)), seconds: request.seconds,
+                template: template, device: udid, target: .launch(app.bundleID), seconds: request.seconds,
                 output: request.output)
         }
         let contents = try? await xctrace.contents(request.output)
@@ -564,13 +574,6 @@ extension DeviceControl {
         return TraceRecording(
             file: request.output, template: template, target: target, seconds: contents?.duration, summary: summary,
             howToOpen: "Open it in Instruments (open \(Shell.quoted(request.output.path)))")
-    }
-
-    /// What `xctrace record --launch` starts: a simulator's app by its bundle on this Mac, an
-    /// iPhone's by its bundle ID.
-    private func launchTarget(_ app: InstalledApp) -> String {
-        guard isSimulator, let location = app.location else { return app.bundleID }
-        return location.hasPrefix("file://") ? URL(string: location)?.path ?? location : location
     }
 }
 

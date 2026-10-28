@@ -13,6 +13,8 @@ final class InstrumentsRunner: CommandRunning, @unchecked Sendable {
     var exports: [String: String] = [:]
     var templates = ["Activity Monitor", "Allocations", "App Launch", "Leaks", "Time Profiler"]
     var recordFailure: String?
+    /// Printed instead of recording, as it is, by this many recordings.
+    var missingProcess: (output: String, times: Int)?
 
     func run(_ executable: URL, _ arguments: [String], timeout: TimeInterval) async throws -> CommandResult {
         calls.withLock { $0.append(arguments) }
@@ -31,6 +33,10 @@ final class InstrumentsRunner: CommandRunning, @unchecked Sendable {
         case ["xctrace", "record"]:
             guard let output = value(after: "--output") else { return CommandResult(status: 1, output: "no output") }
             try FileManager.default.createDirectory(atPath: output, withIntermediateDirectories: true)
+            if let missing = missingProcess, missing.times > 0 {
+                missingProcess = (missing.output, missing.times - 1)
+                return CommandResult(status: 1, output: missing.output)
+            }
             if let recordFailure {
                 return CommandResult(status: 1, output: "Run issues were detected (trace is still ready to be viewed):\n* [Error] \(recordFailure)\n\nRecording failed with errors. Saving output file...")
             }
@@ -188,6 +194,15 @@ final class InstrumentsRunner: CommandRunning, @unchecked Sendable {
         }
         let output = try #require(runner.records.first.flatMap { record in record.firstIndex(of: "--output").map { record[$0 + 1] } })
         #expect(!FileManager.default.fileExists(atPath: output))
+    }
+
+    @Test func aProcessXctraceDidNotFindIsTriedAgain() async throws {
+        let runner = InstrumentsRunner()
+        runner.exports["activity-monitor-process-live"] = XctraceFixtures.attachedProcess
+        runner.missingProcess = ("Cannot find process for provided pid: 40731", 1)
+        let sample = try await iPhone(runner).sample("com.example.Busy", seconds: 3)
+        #expect(sample.points.count == 3)
+        #expect(runner.records.map { $0.suffix(2) } == [["--attach", "40731"], ["--attach", "40731"]])
     }
 
     @Test func anIPhonesLoadComesFromActivityMonitorOfEveryProcess() async throws {
