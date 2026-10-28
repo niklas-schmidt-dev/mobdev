@@ -186,8 +186,8 @@ public final class HardwareDevice: PhoneBackend, @unchecked Sendable {
     }
 
     /// Parks the pointer far from `point`, then moves it there and compares the screen before and
-    /// after. Nothing is clicked. Takes about a second.
-    /// Nil through Mobdev Runner, which needs no pointer.
+    /// after. Nothing is clicked. Takes about a second. Nil through Mobdev Runner, which needs no
+    /// pointer.
     public func checkPointer(at point: NormalizedPoint) async throws -> PointerBehavior? {
         guard activeRunner == nil else { return nil }
         let input = try requireInput()

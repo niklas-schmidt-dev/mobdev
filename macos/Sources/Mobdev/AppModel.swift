@@ -201,7 +201,7 @@ final class AppModel {
         if DeviceHub.bluetoothAccessDetermined { startBluetooth() }
         showsOnboarding =
             (!screenStarted || (settings.usesBluetooth && !bluetoothStarted)) && !settings.iPhoneSetupDeferred
-        await refreshTeams()
+        Task { await refreshTeams() }
         do {
             try await server.start()
             portBox.set(server.port)
@@ -561,16 +561,13 @@ final class AppModel {
         if on { refresh() } else { UIRunners.shared.runner(for: udid)?.stop() }
     }
 
-    /// Builds and starts Mobdev Runner again, after it failed.
+    /// Builds and starts Mobdev Runner again after it failed, at once: without waiting for
+    /// Developer Mode to be read again.
     func restartRunner(_ id: String) {
-        guard let device = hardware(id), let udid = device.info?.id else { return }
-        UIRunners.shared.runner(for: udid)?.stop()
-        // A failed automatic start may have been for a Developer Mode that is off now; read it again.
-        autoStart.forget(udid)
-        if settings.runnerChoice(for: udid) == .automatic, autoStart.knownDeveloperMode(of: udid) != true {
-            // Try Again means try: start once even before Developer Mode is read again.
-            UIRunners.shared.runner(for: udid, simulator: false).start(team: settings.runnerTeam)
-        }
+        guard let udid = hardware(id)?.info?.id else { return }
+        let runner = UIRunners.shared.runner(for: udid, simulator: false)
+        runner.stop()
+        runner.start(team: settings.runnerTeam)
         refresh()
     }
 
