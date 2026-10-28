@@ -89,7 +89,8 @@ final class NativeCommands: CommandRunning, @unchecked Sendable {
     }
 }
 
-@Suite struct NativeTestTests {
+/// Serialized: runs register in one place for the whole process, and quitting stops them all.
+@Suite(.serialized) struct NativeTestTests {
     /// What `xcrun xcresulttool get test-results tests` printed for a scheme with an XCTest and a
     /// Swift Testing unit test failing and a UI test passing (Xcode 27, iPhone 17 simulator).
     static let testsJSON = #"""
@@ -705,16 +706,37 @@ final class NativeCommands: CommandRunning, @unchecked Sendable {
         #expect(result.summaryLine.contains("on this Mac: 1 passed, 1 failed"))
         #expect(!commands.started.get()[0].contains { $0.hasPrefix("ANDROID_SERIAL=") })
 
-        // Gradle ran nothing: the newest reports stand, with a note.
+        // Gradle ran nothing: the task's own newest reports stand, with a note. An instrumented
+        // run's report from after them belongs to another task.
         try FileManager.default.setAttributes(
             [.modificationDate: Date().addingTimeInterval(-60)], ofItemAtPath: reports.appendingPathComponent("TEST-com.example.app.MathTest.xml").path)
+        let other = repo.appendingPathComponent("android/app/build/outputs/androidTest-results/connected/debug/TEST-new.xml")
+        try FileManager.default.createDirectory(at: other.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data(Self.instrumentedXML.utf8).write(to: other)
+        try FileManager.default.setAttributes([.modificationDate: Date().addingTimeInterval(-30)], ofItemAtPath: other.path)
         commands.onStart = nil
         commands.status = 0
         commands.lines = ["> Task :app:testDebugUnitTest UP-TO-DATE"]
         let (again, _) = runner.start(plan, project: project, device: nil, output: try NativeTestRuns.newRunFolder(for: project), source: "test")
         let upToDate = await again.wait(timeout: 10)
-        #expect(upToDate.tests.count == 2)
+        #expect(upToDate.tests.map(\.name) == ["adds", "divides"])
         #expect(upToDate.note?.hasPrefix("Gradle found the task up to date") == true)
+    }
+
+    @Test func quittingStopsRunsGoingOn() async throws {
+        let (project, commands, runner) = try xcodeSetup()
+        commands.held = true
+        let (run, started) = runner.start(
+            try NativeTestPlan.resolve(project, platform: .ios), project: project,
+            device: TestRunResult.Device(id: "SIM", name: "iPhone 17", kind: "simulator"),
+            output: try NativeTestRuns.newRunFolder(for: project), source: "test")
+        #expect(started)
+        while commands.started.get().isEmpty { try await Task.sleep(nanoseconds: 10_000_000) }
+        NativeTestRuns.cancelAll()
+        let result = await run.wait(timeout: 10)
+        #expect(commands.stops.get() == 1)
+        #expect(result.progress == nil)
+        #expect(NativeTestRuns.running(for: project.folder) == nil)
     }
 
     @Test func theToolRunsInTheBackgroundHoldingTheDevice() async throws {

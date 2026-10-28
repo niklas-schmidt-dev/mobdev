@@ -23,11 +23,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Task { @MainActor in AppModel.shared.open(url) }
     }
 
-    /// Ends the UI tests Mobdev Runner keeps running on iPhones; xcodebuild would outlive the app.
-    /// Kills scrcpy's servers on Android devices too, and removes Mobdev's proxy from them, which
-    /// would otherwise leave them without network.
+    /// Ends the UI tests Mobdev Runner keeps running on iPhones and native test runs; xcodebuild
+    /// and Gradle would outlive the app. Kills scrcpy's servers on Android devices too, and removes
+    /// Mobdev's proxy from them, which would otherwise leave them without network.
     func applicationWillTerminate(_ notification: Notification) {
         UIRunners.shared.stopAll()
+        NativeTestRuns.cancelAll()
         ScrcpySession.closeAll()
         AndroidNetworkCapture.stopAll()
     }

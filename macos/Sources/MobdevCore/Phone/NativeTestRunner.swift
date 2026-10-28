@@ -78,6 +78,12 @@ public enum NativeTestRuns {
 
     static func key(_ folder: URL) -> String { ProjectList.normalized(folder).path }
 
+    /// Stops every run going on, as the app quits: xcodebuild and Gradle would outlive it, still
+    /// holding the device's XCTest session.
+    public static func cancelAll() {
+        for run in active.get().values where !run.isFinished { run.cancel() }
+    }
+
     /// The run going on for a project, if one is.
     public static func running(for project: URL) -> NativeTestRun? {
         active.withLock { runs in runs[key(project)].flatMap { $0.isFinished ? nil : $0 } }
@@ -263,8 +269,8 @@ public struct NativeTestRunner: Sendable {
         switch plan.suite {
         case .xcode:
             return await readXcode(run: run, status: status, log: logText)
-        case .gradle(let root, _, let module):
-            return readGradle(run: run, status: status, log: logText, root: root, module: module, since: started)
+        case .gradle(let root, let task, let module):
+            return readGradle(run: run, status: status, log: logText, root: root, module: module, task: task, since: started)
         }
     }
 
@@ -444,17 +450,18 @@ public struct NativeTestRunner: Sendable {
     }
 
     private func readGradle(
-        run: NativeTestRun, status: Int32, log: String, root: URL, module: String?, since started: Date
+        run: NativeTestRun, status: Int32, log: String, root: URL, module: String?, task: String, since started: Date
     ) -> NativeTestResult {
         let reports = Self.junitReports(root: root, module: module)
         // Gradle leaves the reports of earlier runs; a run reads what it wrote. A unit-test task
-        // Gradle found up to date wrote nothing, and its previous results still hold.
+        // Gradle found up to date wrote nothing, and its previous results still hold: those in its
+        // own folder, never another task's.
         let fresh = reports.filter { $0.modified >= started.addingTimeInterval(-2) }
         var note: String?
         var chosen = fresh
-        if fresh.isEmpty, status == 0, !reports.isEmpty, !run.isStopped {
-            let newest = reports.map(\.modified).max()!
-            chosen = reports.filter { newest.timeIntervalSince($0.modified) < 600 }
+        let previous = Self.cachedReports(reports, task: task)
+        if fresh.isEmpty, status == 0, let newest = previous.map(\.modified).max(), !run.isStopped {
+            chosen = previous
             note = "Gradle found the task up to date and ran nothing; these are its results from \(newest.formatted(date: .abbreviated, time: .shortened))."
         }
         var tests: [NativeTestResult.Test] = []
@@ -473,6 +480,14 @@ public struct NativeTestRunner: Sendable {
                 result.error = "Gradle wrote no test results\(failures.map { ": \($0)" } ?? "."). Its output is in \(result.log)."
             }
         }
+    }
+
+    /// The reports a unit-test task wrote last time, in its own build/test-results/<task> folder.
+    /// Instrumented tasks are never up to date, so they have none.
+    static func cachedReports(_ reports: [(url: URL, modified: Date)], task: String) -> [(url: URL, modified: Date)] {
+        let name = task.split(separator: ":").last.map(String.init) ?? task
+        guard !NativeTestPlan.isInstrumented(name), !name.isEmpty else { return [] }
+        return reports.filter { $0.url.path.contains("/build/test-results/\(name)/") }
     }
 
     /// The JUnit reports under a Gradle root, or a module's: build/outputs/androidTest-results for
