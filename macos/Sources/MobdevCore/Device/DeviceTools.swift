@@ -93,7 +93,9 @@ public struct DeviceSummary: Sendable, Equatable, Codable {
 /// an Android device.
 public final class DeviceTools: ToolCalling {
     private let hub: DeviceHub
-    private let emulators: EmulatorHub?
+    let emulators: EmulatorHub?
+    /// Every simulator and AVD on this Mac, running or not, for the virtual device tools.
+    public let virtualDevices: VirtualDevices
     private let settleDelay: TimeInterval
     private let uploads: UploadStore
     /// The projects every device's tools save into; the app fills it from its settings.
@@ -104,10 +106,11 @@ public final class DeviceTools: ToolCalling {
     /// `uploads` is where `install_app` finds an `upload`: the store the API router receives them in.
     public init(
         hub: DeviceHub, emulators: EmulatorHub? = nil, settleDelay: TimeInterval = 0.6, uploads: UploadStore = .shared,
-        projects: ProjectList = ProjectList()
+        projects: ProjectList = ProjectList(), virtualDevices: VirtualDevices = VirtualDevices()
     ) {
         self.hub = hub
         self.emulators = emulators
+        self.virtualDevices = virtualDevices
         self.settleDelay = settleDelay
         self.uploads = uploads
         self.projects = projects
@@ -124,7 +127,7 @@ public final class DeviceTools: ToolCalling {
             description:
                 "The iPhones and iPads on this Mac, booted iOS simulators and Android emulators and phones, with id, name, model, system version and whether each is ready. Pass `device` to the other tools to pick one.",
             inputSchema: ["type": "object", "properties": [:]], readOnly: true)
-        return [listDevices] + ProjectTools.definitions + SecretTools.definitions
+        return [listDevices] + VirtualDeviceTools.definitions + ProjectTools.definitions + SecretTools.definitions
             + PhoneTools.definitions.map { definition in
                 guard case .object(var schema) = definition.inputSchema,
                     case .object(var properties)? = schema["properties"]
@@ -149,6 +152,8 @@ public final class DeviceTools: ToolCalling {
             if ProjectTools.isProjectTool(name) { return try ProjectTools.call(name, Arguments(arguments ?? [:]), projects: projects) }
             // Nor do the secrets' names.
             if SecretTools.isSecretTool(name) { return SecretTools.call(name) }
+            // Nor simulators and AVDs that are not running.
+            if VirtualDeviceTools.isTool(name) { return try await callVirtualDeviceTool(name, Arguments(arguments ?? [:])) }
             // Only a missing (or null) `device` means "pick for me". A number, an empty string or
             // anything else is a mistake, and guessing could act on the wrong phone.
             let query: String?
@@ -201,7 +206,7 @@ public final class DeviceTools: ToolCalling {
     /// iPhones first, then simulators, then Android devices.
     public var allDevices: [any Device] { hub.devices + (emulators?.devices ?? []) }
 
-    private func tools(for device: any Device) -> PhoneTools {
+    func tools(for device: any Device) -> PhoneTools {
         let current = Set(allDevices.map(\.id))
         return tools.withLock { cache in
             cache = cache.filter { current.contains($0.key) }  // Forgotten or shut down devices.
