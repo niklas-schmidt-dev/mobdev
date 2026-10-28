@@ -1,19 +1,32 @@
 import XCTest
 
 /// Mobdev Runner: a UI test that does not end. Like WebDriverAgent, it serves what XCTest can read
-/// and do on the device: the elements of the app in front, taps and typing. Mobdev builds it on the
-/// Mac with Xcode, keeps `xcodebuild test-without-building` running, and reaches the port through
-/// usbmuxd (on a simulator, on 127.0.0.1). `MOBDEV_RUNNER_PORT` and `MOBDEV_RUNNER_TOKEN` arrive as
-/// `TEST_RUNNER_…` variables of xcodebuild.
+/// and do on the device: the elements of the app in front, touches, typing, keys, the hardware
+/// buttons and switching apps. On an iPhone in Developer Mode, Mobdev sends all its input this way.
+/// Mobdev builds it on the Mac with Xcode, keeps `xcodebuild test-without-building` running, and
+/// reaches the port through usbmuxd (on a simulator, on 127.0.0.1). `MOBDEV_RUNNER_PORT` and
+/// `MOBDEV_RUNNER_TOKEN` arrive as `TEST_RUNNER_…` variables of xcodebuild. Points are fractions of
+/// the screen, from the top-left corner.
 ///
-///     GET  /health               {"ok": true, "version": 1}
+///     GET  /health               {"ok": true, "version": 2}
 ///     GET  /tree[?bundle=<id>]   {"screen": {"width", "height"}, "apps": [names], "elements": [...]}
 ///                                each element: type, label, identifier, value, placeholder,
 ///                                frame [x, y, width, height] in points, enabled, selected
-///     POST /tap   {"x", "y"}     fractions of the screen
-///     POST /type  {"text"}       into the focused element; any characters, emoji included
+///     POST /tap      {"x", "y", "hold"?, "count"?}
+///                                hold: seconds to press, a long press from 0.2; count 2: a double tap
+///     POST /drag     {"from": [x, y], "to": [x, y], "duration", "press"?, "hold"?}
+///                                a swipe or drag: press seconds before it moves (default 0.05), move
+///                                in duration seconds, hold seconds at the end before lifting
+///     POST /type     {"text"}    into the focused element; any characters, emoji included
+///     POST /key      {"key", "modifiers"?}
+///                                one key: a name (return, escape, backspace, tab, space, up, down,
+///                                left, right, home, end, pageup, pagedown, forwarddelete, f1-f12) or
+///                                one character; modifiers: cmd, shift, option, ctrl. XCTest on iOS
+///                                ignores escape and forwarddelete.
+///     POST /button   {"name"}    home, volume_up or volume_down (the last two on iPhones only)
+///     POST /activate {"bundle"}  brings an app to the front, launching it when it is not running
 final class RunnerTests: XCTestCase {
-    static let protocolVersion = 1
+    static let protocolVersion = 2
     /// Failures XCTest records during a request, such as typing with no field focused.
     private var issues: [String] = []
 
@@ -44,10 +57,30 @@ final class RunnerTests: XCTestCase {
                 return .json(try tree(bundle: request.query["bundle"]))
             case ("POST", "/tap"):
                 let body = try request.json()
-                guard let x = (body["x"] as? NSNumber)?.doubleValue, let y = (body["y"] as? NSNumber)?.doubleValue,
-                    (0...1).contains(x), (0...1).contains(y)
-                else { return .error("Pass x and y as fractions of the screen, from 0 to 1.", status: 400) }
-                frontmost()[0].coordinate(withNormalizedOffset: CGVector(dx: x, dy: y)).tap()
+                let point = try Self.point(body["x"], body["y"])
+                let hold = (body["hold"] as? NSNumber)?.doubleValue ?? 0
+                let coordinate = coordinate(at: point)
+                if hold >= 0.2 {
+                    coordinate.press(forDuration: min(hold, 10))
+                } else if (body["count"] as? NSNumber)?.intValue == 2 {
+                    coordinate.doubleTap()
+                } else {
+                    coordinate.tap()
+                }
+                return outcome()
+            case ("POST", "/drag"):
+                let body = try request.json()
+                let from = try Self.point(body["from"]), to = try Self.point(body["to"])
+                let duration = min(max((body["duration"] as? NSNumber)?.doubleValue ?? 0.3, 0.05), 10)
+                let press = min(max((body["press"] as? NSNumber)?.doubleValue ?? 0.05, 0), 10)
+                let hold = min(max((body["hold"] as? NSNumber)?.doubleValue ?? 0, 0), 10)
+                // XCTest moves the finger at a speed, not in a time: the distance in points over the
+                // duration.
+                let size = frontmost()[0].frame.size
+                let distance = hypot((to.dx - from.dx) * size.width, (to.dy - from.dy) * size.height)
+                coordinate(at: from).press(
+                    forDuration: press, thenDragTo: coordinate(at: to),
+                    withVelocity: XCUIGestureVelocity(rawValue: max(distance / duration, 1)), thenHoldForDuration: hold)
                 return outcome()
             case ("POST", "/type"):
                 guard let text = try request.json()["text"] as? String, !text.isEmpty else {
@@ -55,6 +88,52 @@ final class RunnerTests: XCTestCase {
                 }
                 frontmost()[0].typeText(text)
                 return outcome()
+            case ("POST", "/key"):
+                let body = try request.json()
+                guard let name = body["key"] as? String, !name.isEmpty else { return .error("Pass key.", status: 400) }
+                var flags: XCUIElement.KeyModifierFlags = []
+                for modifier in body["modifiers"] as? [String] ?? [] {
+                    guard let flag = Self.modifiers[modifier.lowercased()] else {
+                        return .error("Unknown modifier \(modifier). Use cmd, shift, option or ctrl.", status: 400)
+                    }
+                    flags.insert(flag)
+                }
+                let key = Self.keys[name.lowercased()]?.rawValue ?? name
+                guard Self.keys[name.lowercased()] != nil || key.count == 1 else {
+                    return .error("Unknown key \(name).", status: 400)
+                }
+                // On iOS, typeKey presses neither Return nor Backspace: nothing happens (an iOS 27
+                // simulator, 2026-10-28). Typed as text they work, as in WebDriverAgent. Without a
+                // focused field typing fails, and the key goes to the app as a key after all.
+                if flags.isEmpty, let text = Self.typedKeys[name.lowercased()] {
+                    frontmost()[0].typeText(text)
+                    if issues.isEmpty { return outcome() }
+                    issues.removeAll()
+                }
+                frontmost()[0].typeKey(key, modifierFlags: flags)
+                return outcome()
+            case ("POST", "/button"):
+                guard let name = try request.json()["name"] as? String else { return .error("Pass name.", status: 400) }
+                switch name {
+                case "home": XCUIDevice.shared.press(.home)
+                case "volume_up", "volume_down":
+                    #if targetEnvironment(simulator)
+                        return .error("A simulator has no volume buttons.", status: 400)
+                    #else
+                        XCUIDevice.shared.press(name == "volume_up" ? .volumeUp : .volumeDown)
+                    #endif
+                default: return .error("Unknown button \(name). Use home, volume_up or volume_down.", status: 400)
+                }
+                return outcome()
+            case ("POST", "/activate"):
+                guard let bundle = try request.json()["bundle"] as? String, !bundle.isEmpty else {
+                    return .error("Pass bundle.", status: 400)
+                }
+                let app = XCUIApplication(bundleIdentifier: bundle)
+                app.activate()
+                guard issues.isEmpty else { return outcome() }
+                return app.state == .runningForeground
+                    ? .json(["ok": true]) : .error("\(bundle) did not come to the front.", status: 500)
             default:
                 return .error("No such endpoint: \(request.method) \(request.path).", status: 404)
             }
@@ -69,6 +148,43 @@ final class RunnerTests: XCTestCase {
     private func outcome() -> RunnerServer.Response {
         issues.isEmpty ? .json(["ok": true]) : .error(issues.joined(separator: " "), status: 500)
     }
+
+    // MARK: Input
+
+    /// A point of the app in front, which covers the screen.
+    private func coordinate(at point: CGVector) -> XCUICoordinate {
+        frontmost()[0].coordinate(withNormalizedOffset: point)
+    }
+
+    /// x and y as fractions of the screen, from two numbers or one [x, y] array.
+    private static func point(_ x: Any?, _ y: Any? = nil) throws -> CGVector {
+        let pair = (x as? [NSNumber]).map { $0.map(\.doubleValue) } ?? [x, y].compactMap { ($0 as? NSNumber)?.doubleValue }
+        guard pair.count == 2, (0...1).contains(pair[0]), (0...1).contains(pair[1]) else {
+            throw RunnerError("Pass points as fractions of the screen, from 0 to 1.")
+        }
+        return CGVector(dx: pair[0], dy: pair[1])
+    }
+
+    /// The keys `/key` knows by name, as `press_key` names them on the Mac.
+    private static let keys: [String: XCUIKeyboardKey] = {
+        var keys: [String: XCUIKeyboardKey] = [
+            "enter": .return, "return": .return, "escape": .escape, "esc": .escape, "backspace": .delete,
+            "delete": .delete, "tab": .tab, "space": .space, "up": .upArrow, "down": .downArrow, "left": .leftArrow,
+            "right": .rightArrow, "home": .home, "end": .end, "pageup": .pageUp, "pagedown": .pageDown,
+            "forwarddelete": .forwardDelete,
+        ]
+        let functionKeys: [XCUIKeyboardKey] = [.F1, .F2, .F3, .F4, .F5, .F6, .F7, .F8, .F9, .F10, .F11, .F12]
+        for (index, key) in functionKeys.enumerated() { keys["f\(index + 1)"] = key }
+        return keys
+    }()
+
+    /// Keys that `/key` types as text without modifiers.
+    private static let typedKeys = ["return": "\n", "enter": "\n", "backspace": "\u{8}", "delete": "\u{8}"]
+
+    private static let modifiers: [String: XCUIElement.KeyModifierFlags] = [
+        "cmd": .command, "command": .command, "shift": .shift, "option": .option, "alt": .option, "ctrl": .control,
+        "control": .control,
+    ]
 
     // MARK: Elements
 

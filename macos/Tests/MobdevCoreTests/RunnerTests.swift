@@ -7,6 +7,20 @@ import Testing
 @Suite struct RunnerTests {
     // MARK: usbmuxd
 
+    @Test func nativeTestRunsPauseTheRunnerUntilTheLastOneEnds() {
+        let udid = "00000000-PAUSE-\(UUID().uuidString)"
+        #expect(!UIRunners.shared.isPaused(udid))
+        UIRunners.shared.pause(udid)
+        UIRunners.shared.pause(udid)
+        UIRunners.shared.resume(udid)
+        #expect(UIRunners.shared.isPaused(udid))
+        UIRunners.shared.resume(udid)
+        #expect(!UIRunners.shared.isPaused(udid))
+        // A resume without a pause changes nothing.
+        UIRunners.shared.resume(udid)
+        #expect(!UIRunners.shared.isPaused(udid))
+    }
+
     @Test func usbmuxPacketsCarryTheirHeader() throws {
         let packet = try USBMux.packet(USBMux.message("ListDevices"), tag: 7)
         func word(_ index: Int) -> UInt32 {
@@ -307,14 +321,85 @@ import Testing
 
     @Test func settingsKeepTheRunnerChoices() throws {
         var settings = AppSettings()
-        #expect(settings.runnerTeam.isEmpty && settings.runnerDevices.isEmpty)
+        #expect(settings.runnerTeam.isEmpty && settings.runnerDevices.isEmpty && settings.runnerOffDevices.isEmpty)
+        #expect(!settings.usesBluetooth)
+        // Every iPhone starts by itself unless it was turned off.
+        #expect(settings.runnerChoice(for: "00008110-00AB12CD34EF5678") == .automatic)
         settings.runnerTeam = "Q1W2E3R4T5"
-        settings.runnerDevices = ["00008110-00AB12CD34EF5678"]
+        settings.setRunnerChoice(.on, for: "00008110-00AB12CD34EF5678")
+        settings.setRunnerChoice(.off, for: "00008030-0000000000000000")
+        settings.usesBluetooth = true
         let decoded = try JSONDecoder().decode(AppSettings.self, from: JSONEncoder().encode(settings))
         #expect(decoded.runnerTeam == "Q1W2E3R4T5")
-        #expect(decoded.runnerDevices == ["00008110-00AB12CD34EF5678"])
-        let old = try JSONDecoder().decode(AppSettings.self, from: Data(#"{"port": 4686}"#.utf8))
-        #expect(old.runnerTeam.isEmpty && old.runnerDevices.isEmpty)
+        #expect(decoded.runnerChoice(for: "00008110-00AB12CD34EF5678") == .on)
+        #expect(decoded.runnerChoice(for: "00008030-0000000000000000") == .off)
+        #expect(decoded.usesBluetooth)
+        settings.setRunnerChoice(.automatic, for: "00008030-0000000000000000")
+        #expect(settings.runnerOffDevices.isEmpty)
+        // Settings from before: an iPhone with the UI tree turned on stays on, the others start by themselves.
+        let old = try JSONDecoder().decode(AppSettings.self, from: Data(#"{"port": 4686, "runnerDevices": ["A"]}"#.utf8))
+        #expect(old.runnerChoice(for: "A") == .on)
+        #expect(old.runnerChoice(for: "B") == .automatic)
+        #expect(!old.usesBluetooth)
+    }
+
+    // MARK: Starting by itself
+
+    @Test func theRunnerStartsByItselfWithDeveloperModeAndATeam() {
+        let team = "Q1W2E3R4T5"
+        #expect(RunnerAutoStart.shouldStart(choice: .automatic, developerMode: true, team: team))
+        #expect(!RunnerAutoStart.shouldStart(choice: .automatic, developerMode: false, team: team))
+        // Unknown, as without Xcode: it waits.
+        #expect(!RunnerAutoStart.shouldStart(choice: .automatic, developerMode: nil, team: team))
+        #expect(!RunnerAutoStart.shouldStart(choice: .automatic, developerMode: true, team: ""))
+        #expect(!RunnerAutoStart.shouldStart(choice: .off, developerMode: true, team: team))
+        // Turned on by hand, it starts anyway and says what is missing if it cannot.
+        #expect(RunnerAutoStart.shouldStart(choice: .on, developerMode: nil, team: ""))
+    }
+
+    @Test func developerModeIsReadInTheBackgroundAndAgainWhileOff() async throws {
+        // Each answer differs from the one before, so every finished reading shows as a change.
+        let answers = Locked<[Bool?]>([false, nil, true])
+        let reads = Locked(0)
+        let changes = Locked(0)
+        let autoStart = RunnerAutoStart(recheck: 1) { udid in
+            #expect(udid == "U")
+            reads.withLock { $0 += 1 }
+            return answers.withLock { $0.isEmpty ? true : $0.removeFirst() }
+        }
+        func ask() -> Bool? { autoStart.developerMode(of: "U") { changes.withLock { $0 += 1 } } }
+        func waitForChanges(_ count: Int) async {
+            let deadline = Date().addingTimeInterval(10)
+            while changes.get() < count, Date() < deadline { try? await Task.sleep(for: .milliseconds(20)) }
+        }
+
+        // Unknown at first, while it is read.
+        #expect(ask() == nil)
+        await waitForChanges(1)
+        #expect(autoStart.knownDeveloperMode(of: "U") == false)
+        // Not again before `recheck`.
+        #expect(ask() == false)
+        #expect(reads.get() == 1)
+        // Off: read again after `recheck`.
+        try await Task.sleep(for: .seconds(1.1))
+        #expect(ask() == false)
+        await waitForChanges(2)
+        #expect(reads.get() == 2)
+        try await Task.sleep(for: .seconds(1.1))
+        #expect(ask() == nil)
+        await waitForChanges(3)
+        #expect(autoStart.knownDeveloperMode(of: "U") == true)
+        // Once on, it stays without reading again until the iPhone leaves.
+        try await Task.sleep(for: .seconds(1.1))
+        #expect(ask() == true)
+        #expect(reads.get() == 3)
+        autoStart.forget("U")
+        #expect(autoStart.knownDeveloperMode(of: "U") == nil)
+        #expect(ask() == nil)
+        #expect(reads.get() >= 3)
+        let deadline = Date().addingTimeInterval(10)
+        while reads.get() < 4, Date() < deadline { try await Task.sleep(for: .milliseconds(20)) }
+        #expect(reads.get() == 4)
     }
 
     // MARK: Helpers

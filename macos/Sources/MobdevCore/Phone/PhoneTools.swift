@@ -105,19 +105,22 @@ public final class PhoneTools: Sendable {
     static let maxTypedCharacters = 1000
 
     public static let instructions = """
-        Mobdev controls a real iPhone connected to this Mac: it reads the screen over USB and taps and \
-        types as a Bluetooth keyboard and pointer. Coordinates are pixels of the image returned by \
-        `screenshot` (origin top-left); the size never changes while the phone keeps its orientation. \
-        Prefer `tap_text` and `find_text` for visible labels, and `open_app` to launch an app by name. \
-        Actions return a fresh screenshot unless `screenshot` is false. The phone must stay unlocked. \
-        Swipes need AssistiveTouch with Snap to Item off and Perform Touch Gestures on; `status` shows \
-        what the pointer does once it has been checked, and `swipe` refuses when the pointer snaps. \
-        With Developer Mode on the iPhone and Xcode on the Mac, `install_app`, `launch_app`, `logs` and \
-        `crash_reports` close the loop for apps you build: install a build, run it, read its output. \
+        Mobdev controls a real iPhone connected to this Mac: it reads the screen over USB. With Developer \
+        Mode on the iPhone and Xcode on the Mac, Mobdev Runner, a UI test Mobdev keeps running on the \
+        iPhone, taps, swipes, types any text and presses keys and buttons; `status` says "Input: Mobdev \
+        Runner (Developer Mode)". Without Developer Mode, Mobdev taps and types as a Bluetooth keyboard \
+        and pointer: swipes then need AssistiveTouch with Snap to Item off and Perform Touch Gestures on, \
+        `status` shows what the pointer does once it has been checked, and `swipe` refuses when it snaps. \
+        Coordinates are pixels of the image returned by `screenshot` (origin top-left); the size never \
+        changes while the phone keeps its orientation. Prefer `tap_text` and `find_text` for visible \
+        labels, and `open_app` to launch an app by name. Actions return a fresh screenshot unless \
+        `screenshot` is false. The phone must stay unlocked. \
+        With Developer Mode, `install_app`, `launch_app`, `logs` and `crash_reports` close the loop for \
+        apps you build: install a build, run it, read its output. \
         Booted iOS simulators and Android emulators and phones (through adb) take the same tools with \
         nothing to set up; `list_devices` shows every device and `device` picks one. On Android, \
         `press_key` escape is Back and `open_app` matches package names such as com.android.settings. \
-        On simulators, Android and iPhones with Mobdev Runner turned on, `ui_tree` lists the elements on \
+        On simulators, Android and iPhones with Mobdev Runner, `ui_tree` lists the elements on \
         screen, and `tap_element` and `wait_for_element` find them by accessibility identifier or label: \
         prefer them to OCR there. \
         `observe` lists what is on screen as numbered marks, cheaper than a screenshot; `tap_mark` taps one. \
@@ -187,7 +190,8 @@ public final class PhoneTools: Sendable {
         return [
             ToolDefinition(
                 name: "status", title: "Phone status",
-                description: "Whether the iPhone screen (USB) and input (Bluetooth) are ready, and the screenshot size.",
+                description:
+                    "Whether the screen and input are ready, how input reaches the device (on an iPhone: Mobdev Runner with Developer Mode, or Bluetooth), and the screenshot size.",
                 inputSchema: schema([:], screenshot: false), readOnly: true),
             ToolDefinition(
                 name: "screenshot", title: "Screenshot",
@@ -206,7 +210,7 @@ public final class PhoneTools: Sendable {
             ToolDefinition(
                 name: "swipe", title: "Swipe",
                 description:
-                    "Drag from one point to another. To scroll a list down, swipe up: from a larger y to a smaller y. The first swipe checks the pointer without clicking; if it snaps to items (AssistiveTouch Snap to Item on), the swipe fails instead of tapping.",
+                    "Drag from one point to another. To scroll a list down, swipe up: from a larger y to a smaller y. On an iPhone over Bluetooth the first swipe checks the pointer without clicking; if it snaps to items (AssistiveTouch Snap to Item on), the swipe fails instead of tapping.",
                 inputSchema: schema(
                     [
                         "from_x": coordinate, "from_y": coordinate, "to_x": coordinate, "to_y": coordinate,
@@ -224,7 +228,7 @@ public final class PhoneTools: Sendable {
             ToolDefinition(
                 name: "type_text", title: "Type text",
                 description:
-                    "Type text into the focused field with the hardware keyboard. Tap the field first. Set submit to press Return afterwards. At most 1000 characters per call; send longer text in several calls.",
+                    "Type text into the focused field. Tap the field first. Set submit to press Return afterwards. At most 1000 characters per call; send longer text in several calls.",
                 inputSchema: schema(
                     ["text": ["type": "string"], "submit": ["type": "boolean", "description": "Press Return after typing"]],
                     required: ["text"]), readOnly: false),
@@ -247,7 +251,8 @@ public final class PhoneTools: Sendable {
                 inputSchema: schema([:]), readOnly: false),
             ToolDefinition(
                 name: "open_app", title: "Open app",
-                description: "Open an installed app by name through Spotlight search.",
+                description:
+                    "Open an installed app by name or bundle ID: directly on simulators, Android and iPhones with Mobdev Runner, through Spotlight on an iPhone over Bluetooth.",
                 inputSchema: schema(["name": ["type": "string"]], required: ["name"]), readOnly: false),
             ToolDefinition(
                 name: "read_screen", title: "Read screen",
@@ -370,8 +375,10 @@ public final class PhoneTools: Sendable {
             let end = try self.point(args, "to_x", "to_y")
             let duration = try args.number("duration", default: 0.3, range: 0.05...5)
             try requireTouch()
-            // With Snap to Item on, iOS would tap the nearest item instead of swiping.
-            if phone.status().pointer != .follows, try await phone.checkPointer(at: start) == .snaps {
+            // With Snap to Item on, iOS would tap the nearest item instead of swiping. Mobdev Runner
+            // and simulators touch the screen without a pointer.
+            let status = phone.status()
+            if status.input == .bluetooth, status.pointer != .follows, try await phone.checkPointer(at: start) == .snaps {
                 throw ToolFailure(
                     "Did not swipe: the pointer snaps to items, so iOS would tap the nearest item instead. \(PointerBehavior.snapAdvice) Then try again."
                 )
@@ -413,6 +420,12 @@ public final class PhoneTools: Sendable {
                 try requireTouch()
                 for _ in 0..<count { try await phone.press(button) }
                 return ToolOutput(text: "Pressed \(key.lowercased())\(times).")
+            }
+            // Mobdev Runner types a character as it is, also one the keyboard layout has no key for.
+            if phone.status().input == .runner, key.count == 1, modifiers.isEmpty {
+                try requireTouch()
+                for _ in 0..<count { _ = try await phone.typeText(key) }
+                return ToolOutput(text: "Pressed \(key)\(times).")
             }
             let stroke = try phone.status().keyboardLayout.stroke(forKey: key, modifiers: modifiers)
             try requireTouch()
@@ -545,6 +558,11 @@ public final class PhoneTools: Sendable {
         switch status.input {
         case .bluetooth:
             lines = ["Screen (USB): \(status.screen.summary)", "Input (Bluetooth): \(status.bluetooth.summary)"]
+            if let runner = status.runner, runner != .off {
+                lines.append("Mobdev Runner (Developer Mode): \(runner.summary)")
+            }
+        case .runner:
+            lines = ["Screen (USB): \(status.screen.summary)", "Input: \(status.inputSummary)"]
         case .direct:
             lines = ["Screen: \(status.screen.summary)", "Input: \(status.inputSummary)"]
         }
@@ -553,13 +571,18 @@ public final class PhoneTools: Sendable {
             screenshot = ["width": .number(Double(shot.width)), "height": .number(Double(shot.height))]
             lines.append("Screenshot coordinates: \(shot.width)×\(shot.height) px")
         }
-        if status.input == .bluetooth { lines.append("Keyboard layout: \(status.keyboardLayout.displayName)") }
-        if let pointer = status.pointer { lines.append("Pointer: \(pointer.summary)") }
+        // Mobdev Runner types characters and needs no pointer.
+        if status.input == .bluetooth {
+            lines.append("Keyboard layout: \(status.keyboardLayout.displayName)")
+            if let pointer = status.pointer { lines.append("Pointer: \(pointer.summary)") }
+        }
         let ready = status.isReady
         lines.insert(ready ? "Ready." : "Not ready.", at: 0)
         var input: JSONValue = .null
-        if case .direct(let route) = status.input {
-            input = ["route": .string(route), "ready": .bool(status.inputReady)]
+        switch status.input {
+        case .direct(let route): input = ["route": .string(route), "ready": .bool(status.inputReady)]
+        case .runner: input = ["route": "Mobdev Runner", "ready": .bool(status.inputReady)]
+        case .bluetooth: break
         }
         return ToolOutput(
             text: lines.joined(separator: "\n"),
@@ -570,6 +593,7 @@ public final class PhoneTools: Sendable {
                     "connected": .bool(status.bluetooth.isConnected), "summary": .string(status.bluetooth.summary),
                 ],
                 "input": input,
+                "runner": status.runner.map { .string($0.summary) } ?? .null,
                 "screenshot": screenshot,
                 "keyboard_layout": .string(status.keyboardLayout.rawValue),
                 "pointer": status.pointer.map { .string($0.rawValue) } ?? .null,
@@ -607,8 +631,7 @@ public final class PhoneTools: Sendable {
             try await phone.tap(at: point, hold: 0.08)
             return "Tapped"
         }
-        try await phone.tap(at: point, hold: 0.05)
-        try await phone.tap(at: point, hold: 0.05)
+        try await phone.doubleTap(at: point)
         return "Double-tapped"
     }
 
@@ -637,8 +660,20 @@ public final class PhoneTools: Sendable {
     func requireTouch() throws {
         let status = phone.status()
         guard status.inputReady else {
-            if status.input == .bluetooth { throw HIDError.notConnected }
-            throw ToolFailure("The device does not accept input right now: \(status.screen.summary).")
+            guard status.input == .bluetooth else {
+                throw ToolFailure("The device does not accept input right now: \(status.screen.summary).")
+            }
+            // On the way to Mobdev Runner, Bluetooth stands in only when it is paired.
+            switch status.runner {
+            case .building?, .starting?:
+                throw ToolFailure(
+                    "Mobdev Runner, which taps and types on this iPhone, is still starting: \(status.runner?.summary ?? ""). The first build takes a minute or two; try again then.")
+            case .failed(let reason)?:
+                throw ToolFailure(
+                    "Mobdev Runner could not start on this iPhone: \(reason) Then click Try Again under Developer Mode Control in the iPhone's info in Mobdev. Without Developer Mode, pair the iPhone over Bluetooth instead.")
+            default:
+                throw HIDError.notConnected
+            }
         }
     }
 

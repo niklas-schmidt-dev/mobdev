@@ -1,7 +1,9 @@
 import MobdevCore
 import SwiftUI
 
-/// Everything that can keep an iPhone or iPad from working, checked in one place, each with its fix.
+/// Everything that can keep an iPhone or iPad from working, checked in one place, each with its fix:
+/// the cable and picture, then Developer Mode and Mobdev Runner, which control it, then Bluetooth
+/// and AssistiveTouch, the way without Developer Mode.
 struct DiagnosisView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
@@ -25,9 +27,10 @@ struct DiagnosisView: View {
                         state.onUSB ? "Connected over USB." : "Plug it in with a USB data cable, unlock it and tap Trust.")
                     picture(state)
                     usbInterface(state)
+                    developer
+                    runner(state)
                     bluetooth(state)
                     pointer(state)
-                    developer
                 }
             }
             .formStyle(.grouped)
@@ -97,7 +100,26 @@ struct DiagnosisView: View {
         }
     }
 
+    @ViewBuilder private func runner(_ state: DeviceState) -> some View {
+        let control = state.control(teamChosen: UIRunner.isTeamID(model.settings.runnerTeam))
+        row("Mobdev Runner", control.step, [control.title, control.detail].compactMap { $0 }.joined(separator: ". "))
+        if case .failed = state.runner {
+            Button("Try Again") { model.restartRunner(id) }
+        } else if state.runner ?? .off == .off, state.runnerChoice == .off || state.developerMode != true {
+            Button("Turn On") { model.setRunner(true, for: id) }
+                .disabled(!UIRunner.isTeamID(model.settings.runnerTeam))
+        }
+    }
+
     @ViewBuilder private func bluetooth(_ state: DeviceState) -> some View {
+        if state.status.input == .runner, !state.status.bluetooth.isConnected {
+            row("Bluetooth", .info, "Not needed while Mobdev Runner controls the \(noun). Only iPhones without Developer Mode use it.")
+        } else {
+            bluetoothState(state)
+        }
+    }
+
+    @ViewBuilder private func bluetoothState(_ state: DeviceState) -> some View {
         switch state.status.bluetooth {
         case .connected:
             row("Bluetooth", .done, "Paired. \(MobdevPaths.appName) can tap and type.")
@@ -110,14 +132,25 @@ struct DiagnosisView: View {
             row("Bluetooth", .attention, "Bluetooth access is not allowed.")
             Button("Open Privacy Settings") { model.openPrivacySettings("Privacy_Bluetooth") }
         case .starting where !model.bluetoothStarted:
-            row("Bluetooth", .attention, "Not started yet.")
-            Button("Turn On Bluetooth") { model.startBluetooth() }
+            row("Bluetooth", .info, "Not started. Only iPhones without Developer Mode need it.")
+            Button("Turn On Bluetooth") {
+                model.setUsesBluetooth(true)
+                model.startBluetooth()
+            }
         default:
             row("Bluetooth", .attention, state.status.bluetooth.summary)
         }
     }
 
     @ViewBuilder private func pointer(_ state: DeviceState) -> some View {
+        if state.status.input == .runner {
+            row("AssistiveTouch", .info, "Not needed while Mobdev Runner controls the \(noun).")
+        } else {
+            pointerState(state)
+        }
+    }
+
+    @ViewBuilder private func pointerState(_ state: DeviceState) -> some View {
         switch state.status.pointer {
         case .follows:
             row("AssistiveTouch", .done, "On, and the pointer lands where it is aimed, so taps and swipes work.")
@@ -134,11 +167,13 @@ struct DiagnosisView: View {
     @ViewBuilder private var developer: some View {
         switch developerMode {
         case .some(.some(true)):
-            row("Developer Mode", .done, "On: installing and debugging your own apps and the UI tree work.")
+            row("Developer Mode", .done, "On: Mobdev Runner can control the \(noun), and your own apps install and debug.")
         case .some(.some(false)):
-            row("Developer Mode", .info, "Off. Only needed for your own apps and the UI tree: Settings › Privacy & Security › Developer Mode.")
+            row(
+                "Developer Mode", .attention,
+                "Off, so \(MobdevPaths.appName) needs Bluetooth to control the \(noun). Turn it on: Settings › Privacy & Security › Developer Mode; the \(noun) restarts.")
         case .some(.none):
-            row("Developer Mode", .info, "Unknown: needs Xcode, and the \(noun) connected to Xcode once. Only needed for your own apps and the UI tree.")
+            row("Developer Mode", .info, "Unknown: needs Xcode, and the \(noun) connected to Xcode once (Window › Devices and Simulators).")
         case .none:
             row("Developer Mode", .info, "Checking…")
         }

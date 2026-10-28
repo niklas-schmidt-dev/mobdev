@@ -49,7 +49,7 @@ extension PhoneTools {
     func runNativeTestsTool(_ args: Arguments, source: String) async throws -> ToolOutput {
         let (project, _) = try ProjectTools.locate(args, projects: projects)
         let device = phone as? any Device
-        let kind = device?.kind ?? (phone.status().input == .bluetooth ? DeviceKind.iPhone : .simulator)
+        let kind = device?.kind ?? (phone.status().input.isIPhone ? DeviceKind.iPhone : .simulator)
         var platform = NativePlatform(kind)
         if args.has("platform") {
             guard let named = NativePlatform(rawValue: try args.string("platform")) else {
@@ -77,11 +77,16 @@ extension PhoneTools {
         // Xcode installs the app and drives it, so nothing else may tap meanwhile. Unit tests on
         // the Mac leave the device alone.
         let hold = plan.needsDevice ? try takeHold("a native test run", source: source) : nil
+        // Mobdev Runner is an XCTest session too, and an iPhone runs one at a time: it waits for the
+        // run, which holds the device anyway.
+        let pausedRunner = plan.needsDevice && platform == .ios ? (phone as? HardwareDevice)?.info?.id : nil
+        if let pausedRunner { UIRunners.shared.pause(pausedRunner) }
         let output: URL
         do {
             output = try NativeTestRuns.newRunFolder(for: project)
         } catch {
             if let hold { releaseHold(hold) }
+            if let pausedRunner { UIRunners.shared.resume(pausedRunner) }
             throw error
         }
         // 0 while the call waits; 1 once it returned with the run going on, so the end is logged.
@@ -93,6 +98,7 @@ extension PhoneTools {
             plan, project: project, device: target, output: output, source: source
         ) { [weak self] final in
             if let hold { self?.releaseHold(hold) }
+            if let pausedRunner { UIRunners.shared.resume(pausedRunner) }
             if delivery.get() == 1 {
                 activity.record(source: source, tool: "run_native_tests", summary: final.summaryLine, failed: !final.passed)
             }
@@ -100,6 +106,7 @@ extension PhoneTools {
         }
         guard started else {
             if let hold { releaseHold(hold) }
+            if let pausedRunner { UIRunners.shared.resume(pausedRunner) }
             return nativeOutput(run.snapshot, prefix: "\(project.name) already has native tests running, started by \(run.source).")
         }
         let result = await run.wait(timeout: wait)

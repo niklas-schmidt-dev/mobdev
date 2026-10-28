@@ -14,6 +14,8 @@ class FakePhone: PhoneBackend, @unchecked Sendable {
         case key(KeyStroke)
         case button(ConsumerUsage)
         case checkPointer(NormalizedPoint)
+        /// Typed as a whole, as Mobdev Runner does.
+        case text(String)
     }
 
     let image: CGImage
@@ -40,6 +42,8 @@ class FakePhone: PhoneBackend, @unchecked Sendable {
     private let treeReads = Locked(0)
     /// What `status()` says about the screen instead of the picture's size, e.g. `.searching`.
     let screen = Locked<ScreenState?>(nil)
+    /// How `status()` says input travels, and Mobdev Runner's state, as an iPhone reports them.
+    let route = Locked<(input: InputRoute, runner: UIRunner.State?)>((.bluetooth, nil))
     let settings: DeviceSettings?
     let networkProxy: NetworkProxyBackend?
 
@@ -78,7 +82,7 @@ class FakePhone: PhoneBackend, @unchecked Sendable {
         PhoneStatus(
             screen: screen.get() ?? .connected(name: "Fake iPhone", width: image.width, height: image.height),
             bluetooth: bluetoothConnected ? .connected(hosts: 1) : .advertising, keyboardLayout: layout,
-            pointer: pointer.get())
+            pointer: pointer.get(), input: route.get().input, runner: route.get().runner)
     }
 
     func checkPointer(at point: NormalizedPoint) async throws -> PointerBehavior? {
@@ -92,6 +96,12 @@ class FakePhone: PhoneBackend, @unchecked Sendable {
     func tap(at point: NormalizedPoint, hold: TimeInterval) async throws {
         events.withLock { $0.append(.tap(point, hold)) }
         onTap.get()?(point)
+    }
+
+    /// Two taps, like the default; a subclass can stand for a phone with its own double tap.
+    func doubleTap(at point: NormalizedPoint) async throws {
+        try await tap(at: point, hold: 0.05)
+        try await tap(at: point, hold: 0.05)
     }
 
     func swipe(from start: NormalizedPoint, to end: NormalizedPoint, duration: TimeInterval) async throws {
@@ -116,6 +126,13 @@ class FakePhone: PhoneBackend, @unchecked Sendable {
 
     func press(_ button: ConsumerUsage) async throws {
         events.withLock { $0.append(.button(button)) }
+    }
+
+    /// Like an iPhone: whole text through Mobdev Runner, key by key over Bluetooth.
+    func typeText(_ text: String) async throws -> Bool {
+        guard route.get().input == .runner else { return false }
+        events.withLock { $0.append(.text(text)) }
+        return true
     }
 
     static func render(lines: [(String, CGFloat, CGFloat)], width: Int, height: Int) -> CGImage {
@@ -158,8 +175,11 @@ final class FakeApps: AppBackend, @unchecked Sendable {
         self.mayPromptToOpenURL = mayPromptToOpenURL
     }
 
+    /// What `apps` lists; none unless a test adds some.
+    let listed = Locked<[InstalledApp]>([])
+
     func activate(_ bundleID: String) async throws {}
-    func apps(all: Bool) async throws -> [InstalledApp] { [] }
+    func apps(all: Bool) async throws -> [InstalledApp] { listed.get() }
     func app(_ bundleID: String) async throws -> InstalledApp? { nil }
     /// "Installs" an .app as its Info.plist's bundle ID, anything else under its file name.
     func install(at path: URL) async throws -> InstalledApp {

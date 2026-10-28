@@ -78,7 +78,7 @@ extension PhoneTools {
 
     private func requirePerformance() throws -> AppPerformance {
         guard let performance = phone.performance else {
-            if phone.status().input == .bluetooth {
+            if phone.status().input.isIPhone {
                 throw ToolFailure(
                     "Mobdev reads an iPhone app's CPU and memory with Instruments once it has read the iPhone's identity over USB: connect it with a cable and unlock it.")
             }

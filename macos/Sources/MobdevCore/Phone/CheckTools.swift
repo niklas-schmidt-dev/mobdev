@@ -309,7 +309,7 @@ extension PhoneTools {
     var deviceKind: DeviceKind {
         if let device = phone as? any Device { return device.kind }
         switch phone.status().input {
-        case .bluetooth: return .iPhone
+        case .bluetooth, .runner: return .iPhone
         case .direct(let route): return route == "adb" ? .android : .simulator
         }
     }

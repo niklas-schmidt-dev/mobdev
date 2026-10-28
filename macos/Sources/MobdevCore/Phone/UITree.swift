@@ -374,11 +374,11 @@ extension PhoneTools {
 
     /// Why there is no tree. An iPhone has one once Mobdev Runner runs on it.
     private var noTree: ToolFailure {
-        guard phone.status().input == .bluetooth else {
+        guard phone.status().input.isIPhone else {
             return ToolFailure("This device has no UI tree. Use read_screen and tap_text instead.")
         }
         return ToolFailure(
-            "This iPhone has no UI tree yet. It needs Mobdev Runner, a small UI test that Mobdev builds with Xcode and runs on the iPhone: turn on Developer Mode on the iPhone (Settings › Privacy & Security), then in the Mobdev app open the iPhone's info and click Turn On under UI Tree. Until then use read_screen and tap_text.")
+            "This iPhone has no UI tree yet. It comes from Mobdev Runner, a small UI test that Mobdev builds with Xcode and runs on the iPhone: turn on Developer Mode on the iPhone (Settings › Privacy & Security › Developer Mode) and sign in to Xcode with your Apple Account; Mobdev then starts it by itself. If it was turned off, click Turn On under Developer Mode Control in the iPhone's info in the Mobdev app. Until then use read_screen and tap_text.")
     }
 
     func tree() async throws -> [UIElement] {
