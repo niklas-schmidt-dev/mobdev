@@ -51,17 +51,19 @@ extension PhoneTools {
         let (project, _) = try ProjectTools.locate(args, projects: projects)
         let device = phone as? any Device
         let kind = device?.kind ?? (phone.status().input.isIPhone ? DeviceKind.iPhone : .simulator)
+        func text(_ key: String) throws -> String? { args.has(key) ? try args.string(key) : nil }
+        let overrides = NativeTestPlan.Overrides(
+            workspace: try text("workspace"), project: try text("xcode_project"), scheme: try text("scheme"),
+            testPlan: try text("test_plan"), gradleRoot: try text("gradle_root"), task: try text("task"), module: try text("module"))
         var platform = NativePlatform(kind)
         if args.has("platform") {
             guard let named = NativePlatform(rawValue: try args.string("platform")) else {
                 throw ToolFailure("platform must be ios or android.")
             }
             platform = named
+        } else if phone is ThisMac {
+            platform = NativeTestPlan.platformWithoutDevice(project, overrides: overrides)
         }
-        func text(_ key: String) throws -> String? { args.has(key) ? try args.string(key) : nil }
-        let overrides = NativeTestPlan.Overrides(
-            workspace: try text("workspace"), project: try text("xcode_project"), scheme: try text("scheme"),
-            testPlan: try text("test_plan"), gradleRoot: try text("gradle_root"), task: try text("task"), module: try text("module"))
         let plan = try NativeTestPlan.resolve(
             project, platform: platform, overrides: overrides, only: try args.stringArray("only"), build: args.bool("build") ?? true)
         var wait = try args.number("wait", default: 2 * 3600, range: 0...(2 * 3600))

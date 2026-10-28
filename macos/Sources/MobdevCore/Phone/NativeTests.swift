@@ -156,6 +156,13 @@ public struct NativeTestPlan: Sendable, Equatable {
         return ":\(path.hasPrefix(":") ? String(path.dropFirst()) : path):\(task)"
     }
 
+    /// The suite to run with no device: the Android one when its task runs on the Mac, such as
+    /// testDebugUnitTest, since nothing else can run then; else iOS, which says it needs a device.
+    public static func platformWithoutDevice(_ project: TestProject, overrides: Overrides = Overrides()) -> NativePlatform {
+        guard let android = try? resolve(project, platform: .android, overrides: overrides), !android.needsDevice else { return .ios }
+        return .android
+    }
+
     /// Whether the suite runs on a device: Xcode always (a simulator at least), Gradle for
     /// instrumented tasks only. A unit-test task such as testDebugUnitTest runs on the Mac.
     public var needsDevice: Bool {

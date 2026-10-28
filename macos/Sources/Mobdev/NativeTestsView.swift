@@ -18,7 +18,13 @@ struct NativeTestsView: View {
     @State private var plan: Result<NativeTestPlan, ToolProblem>?
 
     private var device: DeviceState? { devices.first { $0.id == deviceID } ?? devices.first }
-    private var platform: NativePlatform { device.map { NativePlatform($0.kind) } ?? .ios }
+    /// The device's platform; without a device the plan's, found with it as run_native_tests picks.
+    private var devicePlatform: NativePlatform? { device.map { NativePlatform($0.kind) } }
+    private var platform: NativePlatform {
+        if let devicePlatform { return devicePlatform }
+        if case .success(let plan)? = plan { return plan.platform }
+        return .ios
+    }
     private var result: NativeTestResult? { model.nativeResult(project.folder) }
     private var running: Bool { result?.running == true }
 
@@ -38,10 +44,12 @@ struct NativeTestsView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .task(id: "\(project.folder.path) \(model.projectRevision(project.folder))") { model.refreshNativeRun(project.folder) }
-        .task(id: "\(project.folder.path) \(model.projectRevision(project.folder)) \(platform.rawValue)") {
-            let project = self.project, platform = self.platform
+        .task(id: "\(project.folder.path) \(model.projectRevision(project.folder)) \(devicePlatform?.rawValue ?? "none")") {
+            let project = self.project, devicePlatform = self.devicePlatform
             plan = await Task.detached {
-                Result { try NativeTestPlan.resolve(project, platform: platform) }.mapError { ToolProblem(String(describing: $0)) }
+                // Without a device, the suite that runs on the Mac when there is one.
+                let platform = devicePlatform ?? NativeTestPlan.platformWithoutDevice(project)
+                return Result { try NativeTestPlan.resolve(project, platform: platform) }.mapError { ToolProblem(String(describing: $0)) }
             }.value
         }
     }

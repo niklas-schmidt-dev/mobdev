@@ -761,10 +761,13 @@ final class NativeCommands: CommandRunning, @unchecked Sendable {
         commands.onStart = { _ in try? Data(xml.utf8).write(to: reports.appendingPathComponent("TEST-com.example.app.MathTest.xml")) }
         let tools = DeviceTools(hub: DeviceHub(keyboardLayout: .us) {}, emulators: EmulatorHub(devices: []), settleDelay: 0)
         try await NativeTestRunner.$current.withValue(NativeTestRunner(commands: commands, environment: [:])) {
+            // As the app calls it: no platform, so the suite that runs on the Mac.
             let result = try await tools.call(
-                "run_native_tests", arguments: ["project": .string(project.folder.path), "platform": "android"], source: "test",
-                screenshotByDefault: false)
+                "run_native_tests", arguments: ["project": .string(project.folder.path)], source: "test", screenshotByDefault: false)
             #expect(result.text.contains("on this Mac: 1 passed, 1 failed"), "\(result.text)")
+            #expect(NativeTestPlan.platformWithoutDevice(project) == .android)
+            // Instrumented tests by default need a device, so iOS says what it needs.
+            #expect(NativeTestPlan.platformWithoutDevice(try repository().project) == .ios)
             // An iOS suite needs one.
             let ios = try await tools.call(
                 "run_native_tests", arguments: ["project": .string(project.folder.path), "platform": "ios"], source: "test",
