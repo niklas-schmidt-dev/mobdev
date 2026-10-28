@@ -78,6 +78,13 @@ final class AppModel {
     private(set) var ambient: [String: [Color]] = [:]
     /// Your other Macs and their iPhones, from the hosted relay. Empty without Remote Access.
     private(set) var otherMacs: [RemoteMac] = []
+    /// Every simulator and AVD on this Mac, running or not, while simulators and Android are shown.
+    private(set) var virtualDevices: [VirtualDevice] = []
+    /// Simulators and AVDs being started, shut down or deleted from the sidebar.
+    private(set) var virtualBusy: Set<String> = []
+    /// What went wrong with the last of them, for an alert.
+    var virtualProblem: String?
+    var showsNewSimulator = false
     /// Devices watched through the relay's live view right now, with who watches.
     private(set) var liveSessions: [LiveStreams.Session] = []
     /// The setup assistant. It opens by itself until macOS has asked for camera and Bluetooth
@@ -198,6 +205,12 @@ final class AppModel {
         if settings.relayEnabled { startRelay() }
         if settings.emulatorsEnabled { emulators.start() }
         refresh()
+        Task { [weak self] in
+            while let self {
+                await self.refreshVirtualDevices()
+                try? await Task.sleep(for: .seconds(30))
+            }
+        }
         Task.detached(priority: .utility) { TextRecognizer.warmUp() }
         // Builds agents uploaded and left unused for a day; a new upload also clears them.
         Task.detached(priority: .utility) { UploadStore.shared.removeExpired() }
@@ -263,7 +276,13 @@ final class AppModel {
                     id: device.id, name: device.name, info: device.info, status: device.status(), onUSB: true,
                     activityCount: device.activity.all.count, kind: device.kind)
             }
-        if states != devices { devices = states }
+        if states != devices {
+            // A simulator or emulator started or stopped, maybe outside Mobdev.
+            if states.filter(\.isEmulated).map(\.id) != devices.filter(\.isEmulated).map(\.id) {
+                Task { await refreshVirtualDevices() }
+            }
+            devices = states
+        }
         let all: [any Device] = hardware + emulated
         for device in all where !observedLogs.contains(ObjectIdentifier(device.activity)) {
             observedLogs.insert(ObjectIdentifier(device.activity))
@@ -365,6 +384,59 @@ final class AppModel {
         settings.emulatorsEnabled = enabled
         save()
         if enabled { emulators.start() } else { emulators.stop() }
+        Task { await refreshVirtualDevices() }
+    }
+
+    // MARK: Simulators and AVDs
+
+    func refreshVirtualDevices() async {
+        guard settings.emulatorsEnabled else {
+            virtualDevices = []
+            return
+        }
+        let list = await tools.virtualDevices.list().devices
+        if list != virtualDevices { virtualDevices = list }
+    }
+
+    /// Starts a simulator or AVD, shuts one down, or deletes a simulator Mobdev made, through the
+    /// tools agents use, so a run that holds the device is not cut short.
+    func virtualDevice(_ action: VirtualDeviceAction, _ device: VirtualDevice) {
+        guard !virtualBusy.contains(device.id) else { return }
+        virtualBusy.insert(device.id)
+        let (tool, arguments): (String, JSONValue) =
+            switch action {
+            case .start(let window): ("boot_device", ["id": .string(device.id), "window": .bool(window)])
+            case .shutDown: ("shutdown_device", ["id": .string(device.id)])
+            case .delete: ("delete_simulator", ["id": .string(device.id)])
+            }
+        Task {
+            await callVirtualTool(tool, arguments)
+            virtualBusy.remove(device.id)
+        }
+    }
+
+    /// The running simulator or emulator with this device id.
+    func virtualDevice(running id: String) -> VirtualDevice? {
+        virtualDevices.first { $0.deviceID == id }
+    }
+
+    func createSimulator(type: SimulatorCatalog.DeviceType, runtime: SimulatorCatalog.Runtime, name: String, boot: Bool) {
+        var arguments: [String: JSONValue] = [
+            "device_type": .string(type.id), "runtime": .string(runtime.id), "boot": .bool(boot),
+        ]
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty { arguments["name"] = .string(trimmed) }
+        Task { await callVirtualTool("create_simulator", .object(arguments)) }
+    }
+
+    private func callVirtualTool(_ tool: String, _ arguments: JSONValue) async {
+        do {
+            let result = try await tools.call(tool, arguments: arguments, source: "app", screenshotByDefault: false)
+            if result.isError { virtualProblem = result.text }
+        } catch {
+            virtualProblem = String(describing: error)
+        }
+        await refreshVirtualDevices()
     }
 
     /// Apps agents may not open, by name or bundle ID. Empty entries are dropped.

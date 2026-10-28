@@ -104,6 +104,18 @@ struct MainView: View {
             OnboardingView()
                 .environment(model)
         }
+        .sheet(isPresented: Bindable(model).showsNewSimulator) {
+            NewSimulatorSheet()
+                .environment(model)
+        }
+        .alert(
+            "Simulator or Emulator",
+            isPresented: Binding(get: { model.virtualProblem != nil }, set: { if !$0 { model.virtualProblem = nil } })
+        ) {
+            Button("OK") { model.virtualProblem = nil }
+        } message: {
+            Text(model.virtualProblem ?? "")
+        }
         .sheet(isPresented: Bindable(model).showsNewProject) {
             NewProjectSheet { folder in storedPane = Pane.project(folder.path, .overview).rawValue }
                 .environment(model)
@@ -117,6 +129,7 @@ struct MainView: View {
 private struct Sidebar: View {
     @Environment(AppModel.self) private var model
     @Binding var selection: Pane?
+    @AppStorage("showsNotRunning") private var showsNotRunning = false
 
     var body: some View {
         List(selection: $selection) {
@@ -160,13 +173,34 @@ private struct Sidebar: View {
                 }
             }
             let emulated = model.devices.filter(\.isEmulated)
-            if !emulated.isEmpty {
+            // Everything not listed above: shut down, starting, or running but not picked up yet.
+            let stopped = model.virtualDevices.filter { virtual in !emulated.contains { $0.id == virtual.deviceID } }
+            if model.settings.emulatorsEnabled, !emulated.isEmpty || !model.virtualDevices.isEmpty {
                 Section("Simulators and Android") {
                     ForEach(emulated) { device in
                         NavigationLink(value: Pane.device(device.id)) {
                             DeviceRow(device: device)
                         }
+                        .contextMenu {
+                            if let virtual = model.virtualDevice(running: device.id) {
+                                Button("Shut Down") { model.virtualDevice(.shutDown, virtual) }
+                                    .disabled(model.virtualBusy.contains(virtual.id))
+                            }
+                        }
                     }
+                    if !stopped.isEmpty {
+                        DisclosureGroup("Not Running", isExpanded: $showsNotRunning) {
+                            ForEach(stopped) { device in
+                                VirtualDeviceRow(device: device)
+                                    .selectionDisabled()
+                            }
+                        }
+                    }
+                    Button { model.showsNewSimulator = true } label: {
+                        Label("New Simulator…", systemImage: "plus")
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
                 }
             }
             ForEach(model.otherMacs) { mac in
@@ -201,6 +235,10 @@ private struct Sidebar: View {
                 Menu {
                     Button("New Project…") { model.showNewProject() }
                     Button("Open Project…") { ProjectActions.open(model) { selection = $0 } }
+                    if model.settings.emulatorsEnabled {
+                        Divider()
+                        Button("New Simulator…") { model.showsNewSimulator = true }
+                    }
                 } label: {
                     Label("Add Project", systemImage: "plus")
                 }

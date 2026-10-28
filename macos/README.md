@@ -144,6 +144,11 @@ only device, or the connected iPhone when simulators or Android devices run next
 | Tool | Arguments | |
 |---|---|---|
 | `list_devices` | | iPhones, booted simulators and Android devices: id, name, model, system version, ready |
+| `list_virtual_devices` | | Every iOS simulator and Android Virtual Device on the Mac, running or not (see [Simulators and Android](#simulators-and-android)) |
+| `boot_device` | `id`, `window` | Starts a simulator or AVD and waits until it has booted; it then appears in `list_devices` |
+| `shutdown_device` | `id` | Shuts a simulator down or quits an emulator, unless a flow, test run or crawl holds it |
+| `create_simulator` | `device_type`, `runtime`, `name`, `boot` | Makes an iOS simulator, such as `"iPhone 17 Pro"` on `"27.0"` (default the newest iOS), and boots it |
+| `delete_simulator` | `id` | Deletes a simulator that `create_simulator` made; others are refused |
 | `status` | | Screen and input readiness, screenshot size |
 | `screenshot` | | JPEG of the screen |
 | `tap` | `x`, `y`, `double` | `x` and `y` may also be shares of the screen such as `"50%"`, as in every tool with coordinates |
@@ -426,6 +431,22 @@ on the device, and HTTPS is never decrypted, so each platform shows what it can:
 Booted iOS simulators and Android emulators and phones appear next to your iPhones, in the app and
 in `list_devices`, and take the same tools. Nothing needs to be set up on them: no cable, no
 Bluetooth, no Developer Mode. Turn them off in Settings › General if you only want iPhones.
+
+The ones that are not running are under **Not Running** in the sidebar: ▶ starts one, its menu
+also starts it with Simulator's or the emulator's window, and a running one's menu has Shut Down.
+**New Simulator…** (also under + below the sidebar) makes an iOS simulator of any type and iOS
+version Xcode has. Agents do the same with `list_virtual_devices`, `boot_device`,
+`shutdown_device`, `create_simulator` and `delete_simulator`, which need no device; `Mobdev
+boot_device id=Pixel_9_Pro` works from the terminal without the app too.
+
+- Mobdev shows the screen itself, so it starts simulators and emulators without a window unless
+  you ask for one. An AVD starts as Android Studio starts it and keeps what happens on it (only
+  `Mobdev test --emulator` runs read-only copies). AVDs come from `~/.android/avd`
+  (`ANDROID_AVD_HOME` and `ANDROID_USER_HOME` move it); create them in Android Studio's Device
+  Manager.
+- Mobdev deletes only simulators it made itself, which it remembers in its data folder
+  (`created-simulators.json`). Delete others in Xcode. Shutting down or deleting a device that a
+  flow, test run or crawl holds fails with "Busy".
 
 - **iOS Simulator** (needs Xcode): Mobdev reads the screen from the simulator's framebuffer and
   sends touches, keys and the Home button through Xcode's SimulatorKit, the way Simulator.app and
