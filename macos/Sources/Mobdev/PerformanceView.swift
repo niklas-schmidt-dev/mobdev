@@ -21,6 +21,17 @@ struct PerformanceSection: View {
 
     private var isAndroid: Bool { state.kind == .android }
 
+    @ViewBuilder private var actions: some View {
+        Button("Sample") { Task { await run("performance", ["bundle_id": .string(bundleID), "seconds": 5]) } }
+            .disabled(bundleID.isEmpty || busy != nil)
+            .help("Reads the app's CPU and memory for 5 seconds; it must be running")
+        Button("Record Trace…") { recording = true }
+            .disabled(busy != nil)
+        Button("Device Load") { Task { await run("device_load", ["count": 5]) } }
+            .disabled(busy != nil)
+            .help("The busiest processes, memory in use and the thermal state right now")
+    }
+
     var body: some View {
         Section {
             Picker("App", selection: $bundleID) {
@@ -28,17 +39,13 @@ struct PerformanceSection: View {
                 ForEach(apps, id: \.bundleID) { app in Text(app.title).tag(app.bundleID) }
             }
             .disabled(apps.isEmpty)
-            HStack {
-                Button("Sample") { Task { await run("performance", ["bundle_id": .string(bundleID), "seconds": 5]) } }
-                    .disabled(bundleID.isEmpty || busy != nil)
-                    .help("Reads the app's CPU and memory for 5 seconds; it must be running")
-                Button("Record Trace…") { recording = true }
-                    .disabled(busy != nil)
-                Button("Device Load") { Task { await run("device_load", ["count": 5]) } }
-                    .disabled(busy != nil)
-                    .help("The busiest processes, memory in use and the thermal state right now")
-                if let busy {
-                    Spacer()
+            // One row where the inspector is wide enough, else one button under the other.
+            ViewThatFits(in: .horizontal) {
+                HStack { actions }.fixedSize()
+                VStack(alignment: .leading) { actions }
+            }
+            if let busy {
+                HStack {
                     ProgressView().controlSize(.small)
                     Text(busy).foregroundStyle(.secondary)
                 }

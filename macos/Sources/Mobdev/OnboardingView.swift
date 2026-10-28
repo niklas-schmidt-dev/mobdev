@@ -538,7 +538,7 @@ private struct WelcomePage: View {
             VStack(alignment: .leading, spacing: 18) {
                 Feature(
                     symbol: "iphone.gen3", title: "Your iPhone",
-                    detail: "Screen over the USB cable. With Developer Mode, taps and typing through Xcode's UI testing; without it, over Bluetooth.")
+                    detail: "Screen and taps over the USB cable in Developer Mode, else Bluetooth.")
                 Feature(
                     symbol: "macbook.and.iphone", title: "Simulators and Android",
                     detail: "Appear by themselves, with nothing to set up.")
@@ -566,6 +566,7 @@ private struct WelcomePage: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title).font(.headline)
                     Text(detail).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
         }

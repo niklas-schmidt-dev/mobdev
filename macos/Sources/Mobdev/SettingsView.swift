@@ -26,7 +26,7 @@ private struct GeneralSettings: View {
             ) {
                 ForEach(KeyboardLayout.allCases) { Text($0.displayName).tag($0) }
             }
-            Text("Must match Settings › General › Keyboard › Hardware Keyboard on the iPhone.")
+            Text("For iPhones over Bluetooth: must match Settings › General › Keyboard › Hardware Keyboard on the iPhone. Mobdev Runner types any text without it.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
 
