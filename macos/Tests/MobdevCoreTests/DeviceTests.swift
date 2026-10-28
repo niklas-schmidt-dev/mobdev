@@ -229,11 +229,12 @@ import Testing
             Set(projectTools) == [
                 "list_projects", "create_project", "open_project", "list_tests", "save_test", "save_flow", "test_result",
             ])
-        #expect(Set(names) == Set(PhoneTools.definitions.map(\.name) + ["list_devices"] + projectTools))
+        let macTools = projectTools + ["list_secrets"]
+        #expect(Set(names) == Set(PhoneTools.definitions.map(\.name) + ["list_devices"] + macTools))
         for definition in DeviceTools.definitions where definition.name != "list_devices" {
-            // A project's files need no device; everything else acts on one.
+            // A project's files and the secrets' names need no device; everything else acts on one.
             let takesDevice = definition.inputSchema["properties"]?["device"]?["type"] == "string"
-            #expect(takesDevice == !projectTools.contains(definition.name), "\(definition.name)")
+            #expect(takesDevice == !macTools.contains(definition.name), "\(definition.name)")
         }
     }
 

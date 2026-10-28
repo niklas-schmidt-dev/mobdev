@@ -16,7 +16,7 @@ extension PhoneTools {
                     ],
                     "variables": [
                         "type": "object", "additionalProperties": ["type": "string"],
-                        "description": "Values for ${NAME} in the steps, over the project's variables; secrets go here",
+                        "description": "Values for ${NAME} in the steps, over the project's variables. Leave out the secrets mobdev.json names: they come from Mobdev's stored secrets (list_secrets) without you seeing them",
                     ],
                     "video": ["type": "boolean", "description": "Record each test, default true"],
                     "language": [

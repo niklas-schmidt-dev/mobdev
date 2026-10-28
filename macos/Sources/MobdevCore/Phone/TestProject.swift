@@ -415,8 +415,9 @@ public struct TestCase: Sendable, Equatable {
 }
 
 /// `${NAME}` in a step's strings. In tests, values come from the run, then the environment, then
-/// the project file; secrets are the names whose values stay out of every result. A flow's set and
-/// extract steps add values while it runs.
+/// the project file; secrets are the names whose values stay out of every result, and one that
+/// neither the run nor the environment sets comes from the secrets stored in Mobdev's settings.
+/// A flow's set and extract steps add values while it runs.
 struct Variables: Sendable {
     private(set) var values: [String: String]
     let secrets: Set<String>
@@ -432,10 +433,16 @@ struct Variables: Sendable {
         self.hint = hint
     }
 
-    init(project: TestProject, overrides: [String: String], environment: [String: String]) {
+    init(
+        project: TestProject, overrides: [String: String], environment: [String: String],
+        stored: (String) -> String? = { _ in nil }
+    ) {
         var values = project.variables
         for name in Set(project.variables.keys).union(project.secrets) {
             if let value = environment[name] { values[name] = value }
+        }
+        for name in project.secrets where values[name] == nil && overrides[name] == nil {
+            values[name] = stored(name)
         }
         for (name, value) in overrides { values[name] = value }
         self.init(
@@ -477,7 +484,7 @@ struct Variables: Sendable {
     /// The error for a variable that is not set, saying where to set it.
     func unset(_ name: String) -> ToolFailure {
         let hint = secrets.contains(name)
-            ? "Pass it in variables when running the tests, or export it before Mobdev test."
+            ? "Store it in Mobdev's Settings › Secrets or with `Mobdev secret set \(name)`, export it before Mobdev test, or pass it in variables when running the tests."
             : self.hint
         return ToolFailure("Variable \(name) is not set. \(hint)")
     }
@@ -511,6 +518,20 @@ struct Variables: Sendable {
             rest = after[after.index(after: end)...]
         }
         return result + rest
+    }
+
+    /// The variables of the flow whose step runs, so that recorded steps and `recent_steps` keep a
+    /// secret's name instead of its value.
+    @TaskLocal static var current: Variables?
+
+    /// Every string in it with each secret's value replaced by its name.
+    func redact(_ value: JSONValue) -> JSONValue {
+        switch value {
+        case .string(let text): return .string(redact(text))
+        case .array(let items): return .array(items.map(redact))
+        case .object(let object): return .object(object.mapValues(redact))
+        default: return value
+        }
     }
 
     /// Text with every secret's value replaced by its name.

@@ -124,7 +124,7 @@ public final class DeviceTools: ToolCalling {
             description:
                 "The iPhones and iPads on this Mac, booted iOS simulators and Android emulators and phones, with id, name, model, system version and whether each is ready. Pass `device` to the other tools to pick one.",
             inputSchema: ["type": "object", "properties": [:]], readOnly: true)
-        return [listDevices] + ProjectTools.definitions
+        return [listDevices] + ProjectTools.definitions + SecretTools.definitions
             + PhoneTools.definitions.map { definition in
                 guard case .object(var schema) = definition.inputSchema,
                     case .object(var properties)? = schema["properties"]
@@ -147,6 +147,8 @@ public final class DeviceTools: ToolCalling {
         do {
             // A project's files need no device.
             if ProjectTools.isProjectTool(name) { return try ProjectTools.call(name, Arguments(arguments ?? [:]), projects: projects) }
+            // Nor do the secrets' names.
+            if SecretTools.isSecretTool(name) { return SecretTools.call(name) }
             // Only a missing (or null) `device` means "pick for me". A number, an empty string or
             // anything else is a mistake, and guessing could act on the wrong phone.
             let query: String?

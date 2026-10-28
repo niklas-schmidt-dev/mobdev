@@ -62,6 +62,11 @@ if CommandLine.arguments.dropFirst().first == "upload" {
     UploadCommand.run(Array(CommandLine.arguments.dropFirst(2)))
 }
 
+// `Mobdev secret set|list|remove` manages the secrets agents type with type_secret.
+if CommandLine.arguments.dropFirst().first == "secret" {
+    SecretCommand.run(Array(CommandLine.arguments.dropFirst(2)))
+}
+
 // `Mobdev call <tool> …` runs one tool, through the app when it runs; `Mobdev tools` lists them.
 if CommandLine.arguments.dropFirst().first == "call" {
     CallCommand.run(Array(CommandLine.arguments.dropFirst(2)))

@@ -32,7 +32,7 @@ public enum TestCommand {
                        screenshot, the activity log and crash reports
           --test       run only this test (file name without .json or .yaml, or its name); repeatable
           --var        a value for ${NAME} in the steps, e.g. --var EMAIL=me@example.com; repeatable.
-                       Secrets can also come from the environment.
+                       Secrets can also come from the environment or `Mobdev secret set`.
           --no-video   do not record the tests
           --wait       how long to wait for the device to appear, default 120
         """
@@ -461,6 +461,9 @@ enum CommandSupport {
             ?? FileManager.default.temporaryDirectory.appendingPathComponent(
                 "mobdev-\(ProcessInfo.processInfo.processIdentifier)", isDirectory: true)
         try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        // Secrets stay where the user keeps them, so type_secret types what `Mobdev secret set` stored.
+        let data = MobdevPaths.home
+        TypedSecrets.folderOverride.withLock { $0 = $0 ?? data }
         setenv("MOBDEV_HOME", url.path, 1)
         return (url, artifacts == nil)
     }

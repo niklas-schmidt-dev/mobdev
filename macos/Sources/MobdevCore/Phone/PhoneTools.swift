@@ -268,7 +268,7 @@ public final class PhoneTools: Sendable {
                         "timeout": ["type": "number", "description": "Seconds, default 10, at most 60"],
                         "gone": ["type": "boolean"],
                     ], required: ["text"]), readOnly: true),
-        ] + observeDefinitions + treeDefinitions + appDefinitions + settingsDefinitions + recordingDefinitions
+        ] + secretDefinitions + observeDefinitions + treeDefinitions + appDefinitions + settingsDefinitions + recordingDefinitions
             + sessionDefinitions + crawlDefinitions + checkDefinitions + flowDefinitions + testDefinitions
             + devLoopDefinitions + networkDefinitions
     }()
@@ -290,6 +290,7 @@ public final class PhoneTools: Sendable {
             var output: ToolOutput
             switch name {
             case "run_flow": output = try await runFlowTool(args, source: source)
+            case "type_secret": output = try await typeSecret(args, source: source)
             case "run_tests": output = try await runTestsTool(args, source: source)
             case "crawl_app", "navigate_to": output = try await runCrawlTool(name, args, source: source)!
             default: output = try await run(name, args)
@@ -308,7 +309,9 @@ public final class PhoneTools: Sendable {
                     if name == "tap_mark" {
                         recordMarkTap(args, into: steps)
                     } else {
-                        steps.record(name, arguments?.objectValue ?? [:])
+                        // A test's step keeps a secret's name, not the value it was filled in with.
+                        let recorded = Variables.current.map { $0.redact(arguments ?? [:]) } ?? arguments
+                        steps.record(name, recorded?.objectValue ?? [:])
                     }
                 }
             }
@@ -645,6 +648,7 @@ public final class PhoneTools: Sendable {
     private func summary(_ name: String, _ args: Arguments, _ output: ToolOutput) -> String {
         switch name {
         case "type_text": "typed \((args.value["text"]?.stringValue ?? "").count) characters"
+        case "type_secret": "typed the secret \(args.value["name"]?.stringValue ?? "")"
         default: output.text.split(separator: "\n").first.map(String.init) ?? name
         }
     }
