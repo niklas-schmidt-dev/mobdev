@@ -56,8 +56,14 @@ public struct AppStoreCredentials: Codable, Equatable, Sendable, CustomStringCon
     private static func pem(_ text: String) -> String {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, !trimmed.hasPrefix("-----BEGIN") else { return trimmed }
-        let body = trimmed.filter { !$0.isWhitespace }
-        return "-----BEGIN PRIVATE KEY-----\n\(body)\n-----END PRIVATE KEY-----"
+        // PEM lines hold 64 characters; CryptoKit reads no longer ones.
+        var body = Substring(trimmed.filter { !$0.isWhitespace })
+        var lines: [Substring] = []
+        while !body.isEmpty {
+            lines.append(body.prefix(64))
+            body = body.dropFirst(64)
+        }
+        return "-----BEGIN PRIVATE KEY-----\n\(lines.joined(separator: "\n"))\n-----END PRIVATE KEY-----"
     }
 }
 

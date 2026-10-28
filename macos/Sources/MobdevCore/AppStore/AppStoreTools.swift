@@ -174,7 +174,7 @@ enum AppStoreTools {
                 return ToolOutput(text: "No reviews of \(app.name) match.", data: ["app": app.json, "reviews": []])
             }
             return ToolOutput(
-                text: (["\(app.name) (\(app.bundleID)), reviews newest first:"] + reviews.map(describe)).joined(separator: "\n\n"),
+                text: "\(app.name) (\(app.bundleID)), reviews newest first:\n" + reviews.map(describe).joined(separator: "\n\n"),
                 data: ["app": app.json, "reviews": .array(reviews.map(\.json))])
         case "appstore_add_build_to_group":
             let app = try await resolveApp(args, connect: connect, projects: projects)
