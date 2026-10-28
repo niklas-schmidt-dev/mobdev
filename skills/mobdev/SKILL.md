@@ -47,6 +47,7 @@ Use the cheapest view that answers your question:
 | Press an icon without text | `observe` (it lists icon buttons from the UI tree), or `screenshot` and `tap` its center |
 | Open an app | `open_app` with its name (Spotlight). For your own builds, `launch_app` |
 | Enter text | `tap` the field, then `type_text`; `submit: true` presses Return |
+| Enter a password or code | `type_secret` with a name from `list_secrets`: you never see the value. Never ask the user for a password to type with `type_text`; ask them to store it in Mobdev's Settings › Secrets |
 | Find a row further down | `scroll_until_visible` with its `text` or `id`; it stops at the end of the list |
 | Scroll a list down | `swipe` from a larger y to a smaller y, or `scroll` with `direction: "down"` |
 | Scroll sideways | `scroll` with `direction: "right"` or `"left"`, or `swipe` horizontally |
@@ -76,6 +77,8 @@ keyboard may be in the way, or the tap hit a neighbour. Do not repeat the same t
   scrolling: Snap to Item is on in AssistiveTouch. Ask the user to turn it off, then swipe again.
 - `wait_for_idle` says the screen kept changing: a video, an animation or a spinner never stops.
   Wait for the element or text you need instead.
+- An action says "Busy": a flow, a test run or a crawl holds the device until it ends. Wait for it
+  instead of retrying at once; tools that only look, such as `screenshot` and `ui_tree`, still work.
 
 ## Simulators and Android
 
@@ -91,6 +94,9 @@ setup, and the same tools work, with these differences:
 - `ui_tree` lists the elements on screen with role, label, accessibility identifier and position.
   Prefer `observe` and `tap_mark`, or `tap_element` (by `id` or `text`) and `wait_for_element`, to
   OCR here: they find icon-only buttons and fields, and `tap_element` waits up to 5 s for its element.
+  For a field without a label, use `role` and `near`: `{"role": "textfield", "near": {"text":
+  "Email", "direction": "below"}}` works on iOS and Android alike. `value` and `enabled` check a
+  state, such as a switch that is on or a button that can be tapped. Prefer them to `index`.
 - On an iPhone they need the UI tree turned on in Mobdev (Developer Mode on the iPhone, Xcode on the
   Mac): Mobdev then runs a small UI test there, Mobdev Runner. Without it `ui_tree` says how to turn
   it on, and `observe` lists recognized text instead; do not ask the user to set it up unless the
@@ -189,7 +195,9 @@ returns the newest results again. Each takes `project`, by default the project y
 
 To add a test, drive the app with the tools above until the path works, then save the calls that
 mattered: `tap_element` and `wait_for_element` over coordinates, `${NAME}` for data such as an
-account from `mobdev.json`, and a final wait that proves the result. When a test fails, read the
+account from `mobdev.json`, and a final wait that proves the result. A password is a name under
+`secrets` in `mobdev.json`, typed with `type_text` and `${PASSWORD}`; it comes from the secret the
+user stored under that name, so leave it out of `variables`. When a test fails, read the
 failing step and the screen, then fix the test or report the bug. `Mobdev test <folder> --device
 <id> --artifacts <dir>` runs a project in CI and writes `junit.xml` and `summary.md`; the GitHub
 Action `niklas-schmidt-dev/mobdev/actions/test` does that on a simulator and puts the results in

@@ -48,6 +48,8 @@ const tools = [
   ["swipe", "from_x, from_y, to_x, to_y, duration", msg("Drag, e.g. to scroll")],
   ["scroll", "direction, amount, x, y", msg("Mouse wheel")],
   ["type_text", "text, submit", msg("Type into the focused field (up to 1000 characters per call)")],
+  ["type_secret", "name, submit", msg("Type a stored password or code without the agent seeing it")],
+  ["list_secrets", "", msg("The names of the stored secrets, never their values")],
   ["press_key", "key, modifiers", msg("e.g. space + cmd for Spotlight")],
   ["home", "", msg("Go to the home screen")],
   ["open_app", "name", msg("Open an app by name (Spotlight on an iPhone)")],
@@ -66,8 +68,8 @@ const tools = [
   ["recent_steps", "count, clear", msg("The newest actions that worked, as steps for a test")],
   ["run_shortcut", "name", msg("Run a shortcut from Apple’s Shortcuts app")],
   ["ui_tree", "contains, all", msg("Elements from the accessibility tree (simulators, Android, iPhones with the UI tree on)")],
-  ["tap_element", "id, text, index, timeout", msg("Tap an element by identifier or label")],
-  ["wait_for_element", "id, text, timeout, gone", msg("Wait for an element to appear or disappear")],
+  ["tap_element", "id, text, regex, role, value, enabled, region, near, index, timeout", msg("Tap an element by identifier, label, role, state or the label next to it")],
+  ["wait_for_element", "id, text, regex, role, value, enabled, region, near, timeout, gone", msg("Wait for an element to appear or disappear")],
   ["run_flow", "path, steps, variables, video", msg("Replay a flow (JSON or Maestro YAML); stops at the first failing step and can save a video")],
   ["assert_screenshot", "name, threshold, mask, update", msg("Compare the screen with a baseline picture; fails with a diff image")],
   ["accessibility_audit", "image, fail_on, ignore", msg("Missing labels, small tap targets, low contrast and unclear labels")],
@@ -311,6 +313,21 @@ function Docs() {
               </T>
               <T>
                 <p>
+                  <code className={code}>tap_element</code> and <code className={code}>wait_for_element</code> combine an
+                  identifier, a label or a regex with a role, a value, the enabled state, a part of the screen and the
+                  label next to it. <code className={code}>{'{"role": "textfield", "near": {"text": "Email", "direction": "below"}}'}</code> is
+                  the field under Email on iOS and Android alike. When nothing matches, the error lists what is on screen.
+                </p>
+              </T>
+              <T>
+                <p>
+                  Passwords and codes of test accounts go into <strong>Settings › Secrets</strong> or <code className={code}>Mobdev secret set</code>.
+                  Agents type them with <code className={code}>type_secret</code> and only ever see the name, also in
+                  recorded flows and the activity. A test project’s secrets take the stored secret of the same name.
+                </p>
+              </T>
+              <T>
+                <p>
                   <strong>Inspect</strong> in a device’s toolbar shows the identifier and label of the element under the
                   pointer, and a click copies the step that taps it, ready for a flow or test.
                 </p>
@@ -448,7 +465,8 @@ function Docs() {
                   with <strong>Run Flow…</strong>, the <code className={code}>run_flow</code> tool or, without the
                   app, <code className={code}>Mobdev flow</code>. Every run stops at the first failing step and says
                   which. Run Flow… keeps a video of each run; <code className={code}>run_flow</code> saves one where
-                  its <code className={code}>video</code> argument says.
+                  its <code className={code}>video</code> argument says. While a flow, a test run or a crawl runs, it
+                  holds its device: other agents get “Busy” until it ends, so nothing taps into the middle of it.
                 </p>
               </T>
               <Code>
@@ -550,7 +568,8 @@ function Docs() {
                   every test starts with. Each file is one test, a flow with
                   a name, a description and the platforms it runs on. A test passes when every step does, so it ends
                   with a wait that proves the result. <code className={code}>{"${NAME}"}</code> takes a variable from the
-                  project, the environment or the run, and a secret’s value never appears in results.
+                  project, the environment or the run. A secret’s value comes from the run, the environment or a secret
+                  stored under Settings › Secrets, and never appears in results.
                 </p>
               </T>
               <Code>
@@ -757,6 +776,10 @@ function Docs() {
                   <li>
                     Under Settings › Agents, list apps agents may never open, such as your bank. It prevents mistakes; it
                     is not a sandbox.
+                  </li>
+                  <li>
+                    Secrets that agents type are kept in a file only you can read. Agents see their names, never their
+                    values, and through a relay only the ones you allow.
                   </li>
                 </ul>
               </T>
