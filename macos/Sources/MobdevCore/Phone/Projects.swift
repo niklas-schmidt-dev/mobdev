@@ -1,11 +1,12 @@
 import Foundation
 
 /// What a project produces that is not versioned with it, each in its own folder under
-/// `output/`: test runs, screen recordings, crawls, the files of failed screenshot checks and the
-/// videos of flows run from the app.
+/// `output/`: test runs, screen recordings, crawls, the files of failed screenshot checks, the
+/// videos of flows run from the app and runs of the app's own test suites.
 public enum ProjectOutput: String, Sendable, CaseIterable {
     case runs, recordings, crawls, checks
     case flowVideos = "flow-videos"
+    case nativeRuns = "native-runs"
 }
 
 /// A project is a folder in the app's repository with a mobdev.json:
