@@ -149,6 +149,9 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var agentConnected = false
     /// Apps agents may not open or launch, by name or bundle ID, such as a banking app.
     public var blockedApps: [String] = []
+    /// Lets agents change App Store Connect: add builds to TestFlight groups, set What to Test and
+    /// reply to reviews. Off until turned on: these change real data that testers and customers see.
+    public var appStoreAgentChanges = false
 
     public init() {}
 
@@ -184,6 +187,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         projectIcons = (try? container.decodeIfPresent([String: String].self, forKey: .projectIcons)) ?? [:]
         agentConnected = (try? container.decodeIfPresent(Bool.self, forKey: .agentConnected)) ?? false
         blockedApps = (try? container.decodeIfPresent([String].self, forKey: .blockedApps)) ?? []
+        appStoreAgentChanges = (try? container.decodeIfPresent(Bool.self, forKey: .appStoreAgentChanges)) ?? false
     }
 
     private enum LegacyKeys: String, CodingKey {

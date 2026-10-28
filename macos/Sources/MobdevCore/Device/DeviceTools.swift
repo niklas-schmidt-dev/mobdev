@@ -98,19 +98,22 @@ public final class DeviceTools: ToolCalling {
     private let uploads: UploadStore
     /// The projects every device's tools save into; the app fills it from its settings.
     public let projects: ProjectList
+    /// App Store Connect with the key stored on this Mac, for the appstore_ tools and the app's pages.
+    public let appStore: AppStoreConnect
     /// Per device, with the object it was made for: a rescan can replace a device under the same id.
     private let tools = Locked<[String: (device: any Device, tools: PhoneTools)]>([:])
 
     /// `uploads` is where `install_app` finds an `upload`: the store the API router receives them in.
     public init(
         hub: DeviceHub, emulators: EmulatorHub? = nil, settleDelay: TimeInterval = 0.6, uploads: UploadStore = .shared,
-        projects: ProjectList = ProjectList()
+        projects: ProjectList = ProjectList(), appStore: AppStoreConnect = AppStoreConnect()
     ) {
         self.hub = hub
         self.emulators = emulators
         self.settleDelay = settleDelay
         self.uploads = uploads
         self.projects = projects
+        self.appStore = appStore
     }
 
     public static let definitions: [ToolDefinition] = {
@@ -124,7 +127,7 @@ public final class DeviceTools: ToolCalling {
             description:
                 "The iPhones and iPads on this Mac, booted iOS simulators and Android emulators and phones, with id, name, model, system version and whether each is ready. Pass `device` to the other tools to pick one.",
             inputSchema: ["type": "object", "properties": [:]], readOnly: true)
-        return [listDevices] + ProjectTools.definitions + SecretTools.definitions
+        return [listDevices] + ProjectTools.definitions + SecretTools.definitions + AppStoreTools.definitions
             + PhoneTools.definitions.map { definition in
                 guard case .object(var schema) = definition.inputSchema,
                     case .object(var properties)? = schema["properties"]
@@ -149,6 +152,11 @@ public final class DeviceTools: ToolCalling {
             if ProjectTools.isProjectTool(name) { return try ProjectTools.call(name, Arguments(arguments ?? [:]), projects: projects) }
             // Nor do the secrets' names.
             if SecretTools.isSecretTool(name) { return SecretTools.call(name) }
+            // Nor App Store Connect.
+            if AppStoreTools.isAppStoreTool(name) {
+                return await AppStoreTools.call(
+                    name, Arguments(arguments ?? [:]), connect: appStore, projects: projects, source: source)
+            }
             // Only a missing (or null) `device` means "pick for me". A number, an empty string or
             // anything else is a mistake, and guessing could act on the wrong phone.
             let query: String?
