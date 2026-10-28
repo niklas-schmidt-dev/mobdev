@@ -350,8 +350,9 @@ public final class AndroidDevice: Device, @unchecked Sendable {
     /// uiautomator's dump of the window hierarchy, in about two seconds. Its bounds are pixels of
     /// the current orientation, like the screenshot.
     public func uiTree() async throws -> [UIElement]? {
-        let output = try await adb.shell(
-            id, "uiautomator dump /sdcard/mobdev-ui.xml >/dev/null && cat /sdcard/mobdev-ui.xml", timeout: 30)
+        // A file per read, so two reads at once (an agent and the recorder) do not share one.
+        let file = "/sdcard/mobdev-ui-\(UUID().uuidString.prefix(8).lowercased()).xml"
+        let output = try await adb.shell(id, "uiautomator dump \(file) >/dev/null && cat \(file); rm -f \(file)", timeout: 30)
         guard let start = output.range(of: "<?xml") ?? output.range(of: "<hierarchy"), let size = size() else {
             let reason = output.trimmingCharacters(in: .whitespacesAndNewlines)
             throw DeveloperError(
@@ -584,6 +585,11 @@ final class AndroidApps: AppBackend, @unchecked Sendable {
         -> LaunchOutcome
     {
         let package = try ADB.checkPackage(bundleID)
+        // Silently dropping them would start the app in another state than the caller asked for.
+        guard arguments.isEmpty, environment.isEmpty else {
+            throw DeveloperError(
+                "Android apps take no launch arguments or environment from Mobdev. Leave them out, or use open_url with a deep link that selects the state.")
+        }
         if !restart, sessions.get()[package] != nil, await pid(package) != nil {
             try await activate(package)
             return .broughtToFront

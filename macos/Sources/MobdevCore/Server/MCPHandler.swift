@@ -136,7 +136,14 @@ public final class MCPHandler: Sendable {
                         "mimeType": .string(image.mimeType),
                     ])
                 }
-                return result(id: id, ["content": .array(content), "isError": .bool(output.isError)], modern: modern)
+                var value: [String: JSONValue] = ["content": .array(content), "isError": .bool(output.isError)]
+                // Structured content is an object; lists such as read_screen's lines come as items.
+                switch output.data {
+                case .object?: value["structuredContent"] = output.data
+                case .some(let data): value["structuredContent"] = ["items": data]
+                case nil: break
+                }
+                return result(id: id, value, modern: modern)
             } catch {
                 return rpcError(id: id, code: -32602, message: String(describing: error), status: 200)
             }

@@ -333,6 +333,23 @@ final class TestServer: Sendable {
         #expect(unknown?["error"]?["code"] == -32602)
     }
 
+    @Test func resultsCarryStructuredContent() async throws {
+        let button = UIElement(
+            role: "Button", label: "Settings", identifier: "", value: "", frame: CGRect(x: 0.3, y: 0.1, width: 0.4, height: 0.05),
+            enabled: true, tappable: true)
+        let server = try await TestServer(phone: FakePhone(lines: [], tree: [button]))
+        defer { server.server.stop() }
+        func call(_ name: String) async throws -> JSONValue? {
+            try await self.call(
+                server, ["jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": ["name": .string(name), "arguments": [:]]]
+            ).1
+        }
+        #expect(try await call("status")?["result"]?["structuredContent"]?["ready"] == true)
+        // A list, such as ui_tree's elements, comes as items of an object.
+        let elements = try await call("ui_tree")?["result"]?["structuredContent"]?["items"]
+        #expect(elements?.arrayValue?.first?["label"] == "Settings")
+    }
+
     @Test func headerValueEncoding() {
         #expect(MCPHandler.decodeHeaderValue("tap") == "tap")
         #expect(MCPHandler.decodeHeaderValue("=?base64?SGVsbG8sIOS4lueVjA==?=") == "Hello, 世界")

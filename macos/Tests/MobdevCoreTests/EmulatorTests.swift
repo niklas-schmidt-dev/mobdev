@@ -309,3 +309,37 @@ final class FakeDevice: Device, @unchecked Sendable {
         #expect(info.modelName == "Pixel 9")
     }
 }
+
+@Suite struct AndroidAdbTests {
+    func device(_ runner: ScriptedRunner) -> AndroidDevice {
+        AndroidDevice(
+            serial: "emulator-5554",
+            details: .init(name: "Pixel", model: "sdk", modelName: "Android Emulator", osVersion: "16", width: 1280, height: 2856),
+            adb: ADB(executable: URL(fileURLWithPath: "/fake/adb"), runner: runner),
+            reportsFolder: FileManager.default.temporaryDirectory, scrcpyServer: nil)
+    }
+
+    @Test func launchArgumentsAreRefusedNotDropped() async throws {
+        let runner = ScriptedRunner()
+        let apps = try #require(device(runner).apps)
+        await #expect(throws: DeveloperError.self) {
+            _ = try await apps.launch("com.example.app", arguments: ["-UITesting"], environment: [:], restart: true)
+        }
+        await #expect(throws: DeveloperError.self) {
+            _ = try await apps.launch("com.example.app", arguments: [], environment: ["MODE": "demo"], restart: true)
+        }
+        #expect(runner.calls.get().isEmpty)
+    }
+
+    @Test func eachTreeReadUsesItsOwnFile() async throws {
+        let runner = ScriptedRunner()
+        runner.rules = [("uiautomator dump", UITreeTests.settingsXML)]
+        let device = device(runner)
+        _ = try await device.uiTree()
+        _ = try await device.uiTree()
+        let dumps = runner.calls.get().filter { $0.contains("uiautomator dump") }
+        #expect(dumps.count == 2)
+        #expect(dumps[0] != dumps[1])
+        #expect(dumps.allSatisfy { $0.contains("uiautomator dump /sdcard/mobdev-ui-") && $0.hasSuffix(".xml") })
+    }
+}
