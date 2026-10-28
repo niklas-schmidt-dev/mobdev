@@ -100,7 +100,9 @@ import Testing
         let missing = try await tools.call(
             "tap_element", arguments: ["text": "Battery", "timeout": 0], source: "test", screenshotByDefault: false)
         #expect(missing.isError)
-        #expect(missing.text.contains("ui_tree"))
+        // The error lists what is there, so the agent can fix the query without another call.
+        #expect(missing.text.hasPrefix("No element with label \"Battery\". On screen:\n"), "\(missing.text)")
+        #expect(missing.text.contains("\"Network & internet\" id=android:id/title"))
     }
 
     @Test func waitForElementChecksPresenceAndAbsence() async throws {
@@ -117,7 +119,7 @@ import Testing
         #expect(timedOut.isError)
         #expect(timedOut.text.contains("Timed out after 0.6 s"))
         let noQuery = try await tools.call("wait_for_element", arguments: [:], source: "test", screenshotByDefault: false)
-        #expect(noQuery.text == "Pass id or text.")
+        #expect(noQuery.text == "Pass id, text, regex, role or value.")
     }
 
     /// A tree that cannot be read yet is waited for past the timeout; a missing element is not.
