@@ -393,14 +393,7 @@ public final class DeviceControl: AppBackend, @unchecked Sendable {
     public func stop(_ bundleID: String) async throws -> Bool {
         guard let app = try await app(bundleID) else { throw DeveloperError("\(bundleID) is not installed.") }
         if isSimulator { return try await stopOnSimulator(bundleID) }
-        let processes = try await call(["device", "info", "processes"])
-        let pids = (processes["runningProcesses"]?.arrayValue ?? []).compactMap { process -> Int? in
-            // The app's own executable, not its extensions in PlugIns/.
-            guard let location = app.location, let executable = process["executable"]?.stringValue,
-                executable.hasPrefix(location), !executable.dropFirst(location.count).contains("/")
-            else { return nil }
-            return process["processIdentifier"]?.doubleValue.map(Int.init)
-        }
+        let pids = try await runningPids(of: app)
         let captured = detach(bundleID)
         var stopped = false
         var failure: Error?
@@ -415,6 +408,22 @@ public final class DeviceControl: AppBackend, @unchecked Sendable {
         if !stopped, let failure { throw failure }
         if stopped || captured { logs.setStatus("stopped", for: bundleID) }
         return stopped
+    }
+
+    /// The pids of an app's own executable on an iPhone, not its extensions in PlugIns/, from
+    /// devicectl's process list.
+    func runningPids(of app: InstalledApp) async throws -> [Int] {
+        let processes = try await call(["device", "info", "processes"])
+        return Self.pids(of: app, inProcesses: processes)
+    }
+
+    static func pids(of app: InstalledApp, inProcesses processes: JSONValue) -> [Int] {
+        (processes["runningProcesses"]?.arrayValue ?? []).compactMap { process -> Int? in
+            guard let location = app.location, let executable = process["executable"]?.stringValue,
+                executable.hasPrefix(location), !executable.dropFirst(location.count).contains("/")
+            else { return nil }
+            return process["processIdentifier"]?.doubleValue.map(Int.init)
+        }
     }
 
     /// Simulator crash reports land on the Mac. A report belongs to this simulator when its header

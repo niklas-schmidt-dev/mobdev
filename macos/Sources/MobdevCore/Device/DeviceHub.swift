@@ -224,6 +224,9 @@ public final class HardwareDevice: PhoneBackend, @unchecked Sendable {
 
     /// Location, appearance, the status bar and the like through devicectl, with Developer Mode.
     public var settings: DeviceSettings? { apps as? DeviceControl }
+
+    /// CPU, memory, the device's load and traces through Instruments' `xctrace`, with Developer Mode.
+    public var performance: AppPerformance? { apps as? DeviceControl }
 }
 
 /// A device remembered in devices.json.

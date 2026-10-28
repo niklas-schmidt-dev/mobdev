@@ -48,8 +48,22 @@ final class ScriptedRunner: CommandRunning, @unchecked Sendable {
 final class FakePerformance: AppPerformance, @unchecked Sendable {
     var sampleResult = PerformanceSample(pid: 1, points: [], averageCPU: 0, memoryKind: "physical footprint")
     var launches: [Double] = []
+    var timesLaunches = true
+    var load = DeviceLoad(processes: [], memoryKind: "physical footprint", seconds: 1, source: "a fake")
+    let traces = Locked<[TraceRequest]>([])
     let calls = Locked<[String]>([])
     var launchMethod: String { "a fake clock" }
+
+    func deviceLoad() async throws -> DeviceLoad { load }
+
+    /// Writes an empty file where the trace goes.
+    func recordTrace(_ request: TraceRequest) async throws -> TraceRecording {
+        traces.withLock { $0.append(request) }
+        try Data().write(to: request.output)
+        return TraceRecording(
+            file: request.output, template: request.template, target: "a fake app", seconds: request.seconds,
+            summary: ["1 potential hang"], howToOpen: "Open it in Instruments")
+    }
 
     func sample(_ bundleID: String, seconds: TimeInterval) async throws -> PerformanceSample {
         calls.withLock { $0.append("sample \(bundleID) \(seconds)") }
@@ -68,7 +82,8 @@ final class FakePerformance: AppPerformance, @unchecked Sendable {
 /// Notes when the app is activated, so `DevLoopPhone`'s screen can play a launch from then on.
 final class TimedApps: AppBackend, @unchecked Sendable {
     let logs = AppLogs()
-    let platform = AppPlatform.iPhone
+    let platform: AppPlatform
+    init(platform: AppPlatform = .iPhone) { self.platform = platform }
     let activated = Locked<Date?>(nil)
     /// When set, activating fails with it, as for an app that is not installed.
     var failure: String?
@@ -306,13 +321,14 @@ func closedPort() throws -> Int {
         #expect(calls.last == "simctl launch SIM-1 dev.mobdev.perffixture")
     }
 
-    @Test func iPhonesSayHowToMeasureWithInstruments() async throws {
+    @Test func iPhonesTimeLaunchesOnTheScreen() async throws {
         let control = DeviceControl(udid: "PHONE", runner: ScriptedRunner(), reportsFolder: FileManager.default.temporaryDirectory)
-        await #expect(throws: DeveloperError.self) { try await control.sample("com.example", seconds: 1) }
+        #expect(!control.timesLaunches)
         do {
-            _ = try await control.sample("com.example", seconds: 1)
+            _ = try await control.coldLaunch("com.example")
+            Issue.record("Expected a failure")
         } catch {
-            #expect(String(describing: error).contains("xctrace record --template 'Activity Monitor'"))
+            #expect(String(describing: error).contains("record the App Launch template with record_trace"))
         }
     }
 
@@ -475,11 +491,11 @@ func closedPort() throws -> Int {
         #expect(try await call(tools, "performance", ["bundle_id": "com.example.app", "seconds": 61]).isError)
     }
 
-    @Test func performanceOnAnIPhoneSaysHowToRecordWithInstruments() async throws {
+    @Test func performanceOnAnIPhoneWithoutItsIdentityAsksForTheCable() async throws {
         let output = try await call(
             tools(DevLoopPhone(performance: nil, menu: nil, input: .bluetooth)), "performance", ["bundle_id": "com.example.app"])
         #expect(output.isError)
-        #expect(output.text.contains("xctrace record"))
+        #expect(output.text.contains("connect it with a cable"))
     }
 
     @Test func measureLaunchGivesMinMedianMaxAndFailsOverBudget() async throws {
@@ -537,6 +553,16 @@ func closedPort() throws -> Int {
         #expect(throws: ToolFailure.self) {
             try AppBlocklist.check("measure_launch", Arguments(["bundle_id": "de.sparkasse.app"]), list: ["Sparkasse"])
         }
+        // A trace that starts the app opens it; one attached to it running does not.
+        #expect(throws: ToolFailure.self) {
+            try AppBlocklist.check(
+                "record_trace", Arguments(["bundle_id": "de.sparkasse.app", "launch": true]), list: ["Sparkasse"])
+        }
+        #expect(throws: ToolFailure.self) {
+            try AppBlocklist.check(
+                "record_trace", Arguments(["bundle_id": "de.sparkasse.app", "template": "app launch"]), list: ["Sparkasse"])
+        }
+        try AppBlocklist.check("record_trace", Arguments(["bundle_id": "de.sparkasse.app"]), list: ["Sparkasse"])
     }
 
     @Test func devMenuShakesOrPressesMenuWhereTheDeviceCan() async throws {

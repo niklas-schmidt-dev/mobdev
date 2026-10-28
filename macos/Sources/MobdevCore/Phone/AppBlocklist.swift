@@ -50,6 +50,11 @@ public enum AppBlocklist {
         switch tool {
         case "open_app": app = args.value["name"]?.stringValue
         case "launch_app", "measure_launch", "start_network_capture": app = args.value["bundle_id"]?.stringValue
+        case "record_trace":
+            // Only a recording that starts the app opens it.
+            let launches = args.bool("launch") == true
+                || args.value["template"]?.stringValue?.caseInsensitiveCompare("App Launch") == .orderedSame
+            app = launches ? args.value["bundle_id"]?.stringValue : nil
         default: return
         }
         guard let app else { return }
