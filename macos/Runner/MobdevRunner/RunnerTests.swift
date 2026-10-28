@@ -21,7 +21,8 @@ import XCTest
 ///     POST /key      {"key", "modifiers"?}
 ///                                one key: a name (return, escape, backspace, tab, space, up, down,
 ///                                left, right, home, end, pageup, pagedown, forwarddelete, f1-f12) or
-///                                one character; modifiers: cmd, shift, option, ctrl
+///                                one character; modifiers: cmd, shift, option, ctrl. XCTest on iOS
+///                                ignores escape and forwarddelete.
 ///     POST /button   {"name"}    home, volume_up or volume_down (the last two on iPhones only)
 ///     POST /activate {"bundle"}  brings an app to the front, launching it when it is not running
 final class RunnerTests: XCTestCase {
@@ -101,6 +102,14 @@ final class RunnerTests: XCTestCase {
                 guard Self.keys[name.lowercased()] != nil || key.count == 1 else {
                     return .error("Unknown key \(name).", status: 400)
                 }
+                // On iOS, typeKey presses neither Return nor Backspace: nothing happens (an iOS 27
+                // simulator, 2026-10-28). Typed as text they work, as in WebDriverAgent. Without a
+                // focused field typing fails, and the key goes to the app as a key after all.
+                if flags.isEmpty, let text = Self.typedKeys[name.lowercased()] {
+                    frontmost()[0].typeText(text)
+                    if issues.isEmpty { return outcome() }
+                    issues.removeAll()
+                }
                 frontmost()[0].typeKey(key, modifierFlags: flags)
                 return outcome()
             case ("POST", "/button"):
@@ -168,6 +177,9 @@ final class RunnerTests: XCTestCase {
         for (index, key) in functionKeys.enumerated() { keys["f\(index + 1)"] = key }
         return keys
     }()
+
+    /// Keys that `/key` types as text without modifiers.
+    private static let typedKeys = ["return": "\n", "enter": "\n", "backspace": "\u{8}", "delete": "\u{8}"]
 
     private static let modifiers: [String: XCUIElement.KeyModifierFlags] = [
         "cmd": .command, "command": .command, "shift": .shift, "option": .option, "alt": .option, "ctrl": .control,
