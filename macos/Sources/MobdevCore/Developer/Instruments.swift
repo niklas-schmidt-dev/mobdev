@@ -258,9 +258,9 @@ enum ActivityMonitor {
         table.rows.compactMap { row -> ProcessRow? in
             guard let process = table.value(row, "process") else { return nil }
             let pid = table.value(row, "pid")?.number ?? process.child("pid")?.number
-            guard let pid, let start = table.value(row, "start")?.number else { return nil }
+            guard let pid = pid.flatMap({ Int(exactly: $0) }), let start = table.value(row, "start")?.number else { return nil }
             return ProcessRow(
-                name: processName(process.fmt ?? process.text), pid: Int(pid), time: start / 1e9,
+                name: processName(process.fmt ?? process.text), pid: pid, time: start / 1e9,
                 cpuPercent: table.value(row, "cpu-percent")?.number,
                 cpuSeconds: table.value(row, "cpu-total")?.number.map { $0 / 1e9 },
                 footprintMB: table.value(row, "memory-physical-footprint")?.number.map { $0 / 1_048_576 })
@@ -377,7 +377,7 @@ enum TraceSummary {
     static func count(_ table: XctraceTable, pid: Int?, one: String, many: String, threshold: String?) -> [String] {
         let rows = table.rows.filter { row in
             guard let pid, let process = table.value(row, "process") else { return true }
-            return (process.child("pid")?.number).map { Int($0) == pid } ?? true
+            return (process.child("pid")?.number).map { $0 == Double(pid) } ?? true
         }
         let words = rows.count == 1 ? one : many
         return ["\(rows.count) \(threshold.map { "\($0) " } ?? "")\(words)"]

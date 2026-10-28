@@ -97,7 +97,7 @@ struct JSONAPIResource: Sendable {
                     guard let type = item["type"]?.stringValue, let id = item["id"]?.stringValue else { return nil }
                     return Identifier(type: type, id: id)
                 },
-                total: value["meta"]?["paging"]?["total"]?.doubleValue.map { Int($0) })
+                total: value["meta"]?["paging"]?["total"]?.doubleValue.flatMap { Int(exactly: $0) })
         }
         self.relationships = relationships
     }
@@ -108,7 +108,7 @@ struct JSONAPIResource: Sendable {
     }
 
     func bool(_ key: String) -> Bool? { attributes[key]?.boolValue }
-    func int(_ key: String) -> Int? { attributes[key]?.doubleValue.map { Int($0) } }
+    func int(_ key: String) -> Int? { attributes[key]?.doubleValue.flatMap { Int(exactly: $0) } }
     func date(_ key: String) -> Date? { string(key).flatMap(AppStoreFormat.parseDate) }
 }
 
@@ -135,7 +135,7 @@ struct JSONAPIDocument: Sendable {
             if let resource = JSONAPIResource(item) { included[.init(type: resource.type, id: resource.id)] = resource }
         }
         next = json["links"]?["next"]?.stringValue.flatMap(URL.init(string:))
-        total = json["meta"]?["paging"]?["total"]?.doubleValue.map { Int($0) }
+        total = json["meta"]?["paging"]?["total"]?.doubleValue.flatMap { Int(exactly: $0) }
     }
 
     /// The included resources a relationship of `resource` points at, in its order.
@@ -236,7 +236,10 @@ public final class AppStoreConnect: Sendable {
             } catch {
                 throw AppStoreError.invalidResponse("not JSON")
             }
-        case 401: throw AppStoreError.unauthorized(Self.message(data))
+        case 401:
+            // A new token next time: this one may have been made by a clock that was off.
+            token.set(nil)
+            throw AppStoreError.unauthorized(Self.message(data))
         case 403: throw AppStoreError.forbidden(Self.message(data))
         case 404: throw AppStoreError.notFound(Self.message(data))
         case 429:

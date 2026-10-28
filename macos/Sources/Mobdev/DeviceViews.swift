@@ -446,6 +446,8 @@ struct DeviceInfoView: View {
                 }
                 DeveloperModeControl(state: state)
                 PerformanceSection(state: state)
+                    // Its results and runs belong to one device.
+                    .id(state.id)
                 Section {
                     Picker(
                         "Keyboard Layout",
@@ -526,6 +528,8 @@ private struct EmulatorInfo: View {
                 if let size = state.status.frameSize { LabeledContent("Screen", value: "\(size.width) × \(size.height)") }
             }
             PerformanceSection(state: state)
+                // Its results and runs belong to one device.
+                .id(state.id)
             Section {
                 LabeledContent("Device ID") {
                     HStack {

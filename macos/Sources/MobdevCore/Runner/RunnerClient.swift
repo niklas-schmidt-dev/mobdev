@@ -25,7 +25,7 @@ struct RunnerClient: Sendable {
 
     /// Throws when a /health answer names another version than this Mac's.
     static func checkVersion(_ reply: JSONValue) throws {
-        let version = reply["version"]?.doubleValue.map { Int($0) }
+        let version = reply["version"]?.doubleValue.flatMap { Int(exactly: $0) }
         guard version == protocolVersion else { throw VersionMismatch(version: version) }
     }
 

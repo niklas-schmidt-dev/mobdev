@@ -534,6 +534,19 @@ final class FakeAppStoreTransport: AppStoreTransport {
         #expect(transport.requests.get().filter { $0.method == "POST" }.count == 1)
     }
 
+    @Test func aGroupNameSeveralGroupsShareNeedsTheId() async throws {
+        let store = try keyStore()
+        defer { try? FileManager.default.removeItem(at: store.file.deletingLastPathComponent()) }
+        let twice = Self.groups.replacingOccurrences(of: #""name":"Team""#, with: #""name":"Friends""#)
+        let (connect, transport) = connect(store, allowChanges: true) { request in
+            request.path == "/v1/betaGroups" ? Self.ok(twice) : Self.garden(request)
+        }
+        let output = try await call(tools(connect), "appstore_add_build_to_group", ["app": "1234567890", "build": .string(Self.build45), "group": "Friends"])
+        #expect(output.isError)
+        #expect(output.text.contains("several TestFlight groups named \"Friends\": internal grp-team, external grp-friends. Pass the group's id."), "\(output.text)")
+        #expect(!transport.requests.get().contains { $0.method != "GET" })
+    }
+
     @Test func aBuildNumberInSeveralVersionsNeedsTheVersion() async throws {
         let store = try keyStore()
         defer { try? FileManager.default.removeItem(at: store.file.deletingLastPathComponent()) }

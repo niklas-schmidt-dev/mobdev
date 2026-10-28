@@ -141,10 +141,16 @@ public enum NativeTestRuns {
                     .appendingPathComponent(ProjectOutput.nativeRuns.rawValue, isDirectory: true), at: 0)
         }
         let all = parents.flatMap { parent in
-            ((try? FileManager.default.contentsOfDirectory(atPath: parent.path)) ?? []).filter { !$0.hasPrefix(".") }
+            // Only folders named like a run, "2026-10-28 18.04.12" or "… (2)": pruning must not
+            // take anything else someone put there.
+            ((try? FileManager.default.contentsOfDirectory(atPath: parent.path)) ?? []).filter(isRunName)
                 .map { parent.appendingPathComponent($0, isDirectory: true) }
         }
         return all.sorted { $0.lastPathComponent > $1.lastPathComponent }
+    }
+
+    static func isRunName(_ name: String) -> Bool {
+        name.wholeMatch(of: /\d{4}-\d{2}-\d{2} \d{2}\.\d{2}\.\d{2}( \(\d+\))?/) != nil
     }
 
     /// The newest finished run, or the one in the named folder.

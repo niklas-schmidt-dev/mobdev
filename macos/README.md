@@ -80,8 +80,8 @@ Bluetooth access until you set one up.
 
 Choose **Without Developer Mode** in the setup assistant. Mobdev then taps and types through
 Bluetooth, posing as a keyboard and pointer, and installs nothing on the iPhone. The same way serves
-an iPhone whose Developer Mode Control is turned off, and stands in while Mobdev Runner is still
-starting.
+an iPhone whose Developer Mode Control is turned off, and, when the iPhone is paired, stands in while
+Mobdev Runner is still starting.
 
 1. On the iPhone open **Settings > Bluetooth** and tap this Mac under **Other Devices** to pair. iOS lists
    it by the Mac's name (System Settings › General › Sharing), not as “Mobdev”. An iPhone on the
@@ -520,7 +520,9 @@ boot_device id=Pixel_9_Pro` works from the terminal without the app too.
   you ask for one. An AVD starts as Android Studio starts it and keeps what happens on it (only
   `Mobdev test --emulator` runs read-only copies). AVDs come from `~/.android/avd`
   (`ANDROID_AVD_HOME` and `ANDROID_USER_HOME` move it); create them in Android Studio's Device
-  Manager.
+  Manager. Through a relay, `boot_device` answers after 75 seconds at the latest, as the relay
+  waits 90; an emulator that is still booting goes on, and `list_virtual_devices` shows when it
+  runs.
 - Mobdev deletes only simulators it made itself, which it remembers in its data folder
   (`created-simulators.json`). Delete others in Xcode. Shutting down or deleting a device that a
   flow, test run or crawl holds fails with "Busy".
@@ -977,7 +979,8 @@ relative to the project folder, like `app.builds`:
 
 `ios` takes `workspace` or `project` (an .xcodeproj), `scheme` and `test_plan`; `android` takes
 `gradle_root`, `task` (default `connectedDebugAndroidTest`) and `module`, which qualifies the task
-(`:app:connectedDebugAndroidTest`) and limits where results are read.
+(`:app:connectedDebugAndroidTest`) and limits where results are read. Only test tasks run, whose
+name contains "test": an agent cannot start `publish` or `clean` this way.
 
 - **iOS** runs `xcodebuild test -scheme … -destination id=<udid> -resultBundlePath …`
   (`test-without-building` with `build: false`), and on an iPhone with `-allowProvisioningUpdates`
@@ -1296,7 +1299,8 @@ Mobdev's log (Console, subsystem `dev.mobdev.mac`), the install in the device's 
   Emoji and other characters without a key need Mobdev Runner, which types any text.
 - Through Mobdev Runner, XCTest waits for the app to settle after each action, so on a simulator a
   tap takes one to two seconds and a swipe about as long; the mirror reacts more slowly than over
-  Bluetooth. `press_key` with `escape` or `forwarddelete` does nothing through XCTest.
+  Bluetooth. XCTest cannot press `escape` or `forwarddelete`, nor Return and Backspace with
+  modifiers: `press_key` says so instead of reporting them pressed.
 - Portrait orientation is the tested case. Coordinates follow the current screenshot size.
 - The phone must stay unlocked. Mobdev cannot enter the passcode.
 - Simulator input uses Xcode's private SimulatorKit; tested with Xcode 27 and 26.6. A later Xcode

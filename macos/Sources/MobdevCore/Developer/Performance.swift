@@ -569,11 +569,39 @@ extension DeviceControl {
                 template: template, device: udid, target: .launch(app.bundleID), seconds: request.seconds,
                 output: request.output)
         }
-        let contents = try? await xctrace.contents(request.output)
-        let summary = await TraceSummary.read(request.output, template: template, contents: contents, pid: pid, xctrace: xctrace)
+        // The trace is saved; its summary may take only so long, so the answer still fits a relay's
+        // call. A summary that runs over is left out and its exports stopped.
+        let output = request.output
+        let attached = pid
+        let read = await TraceSummary.within(TraceSummary.deadline) { () -> (TraceContents?, [String]) in
+            let contents = try? await xctrace.contents(output)
+            return (contents, await TraceSummary.read(output, template: template, contents: contents, pid: attached, xctrace: xctrace))
+        }
+        let contents = read?.0
+        let summary = read?.1 ?? ["The summary took too long; the trace has it all."]
         return TraceRecording(
             file: request.output, template: template, target: target, seconds: contents?.duration, summary: summary,
             howToOpen: "Open it in Instruments (open \(Shell.quoted(request.output.path)))")
+    }
+}
+
+extension TraceSummary {
+    /// How long the summary of a recorded trace may take: Instruments' 10 to 20 seconds and a
+    /// minute of recording leave this much of a relay's 90.
+    static let deadline: TimeInterval = 15
+
+    /// What `work` returns within `seconds`, or nil, after cancelling it, when it takes longer.
+    static func within<T: Sendable>(_ seconds: TimeInterval, _ work: @escaping @Sendable () async -> T) async -> T? {
+        await withTaskGroup(of: T?.self) { group in
+            group.addTask { await work() }
+            group.addTask {
+                try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+                return nil
+            }
+            let first = await group.next() ?? nil
+            group.cancelAll()
+            return first
+        }
     }
 }
 

@@ -131,9 +131,9 @@ final class FakeCommands: CommandRunning, @unchecked Sendable {
         let small = list.devices[5]
         #expect(small.state == .shutdown && small.deviceID == nil && small.system == "Android 14 (API 34)")
 
-        // A serial's AVD is asked once.
+        // Asked every time: the port may run another AVD by now.
         _ = await devices.list()
-        #expect(commands.calls.get().filter { $0.contains("emu avd name") }.count == 1)
+        #expect(commands.calls.get().filter { $0.contains("emu avd name") }.count == 2)
     }
 
     @Test func withoutXcodeTheListSaysWhy() async throws {
@@ -261,6 +261,7 @@ final class FakeCommands: CommandRunning, @unchecked Sendable {
     @Test func startsAndStopsAVDs() async throws {
         defer { try? FileManager.default.removeItem(at: folder) }
         let commands = simctlCommands()
+        commands.rules.append(("-s emulator-5556 emu avd name", 0, "Pixel_9_Pro\r\nOK\r\n"))
         let running = Locked<[String]>([])
         let started = Locked<[String]>([])
         let devices = try makeDevices(commands, running: running) { avd, window in
@@ -274,9 +275,7 @@ final class FakeCommands: CommandRunning, @unchecked Sendable {
         let booted = try await devices.boot(avd)
         #expect(booted.serial == "emulator-5556" && booted.deviceID == "emulator-5556")
         #expect(started.get() == ["Pixel_9_Pro window: false"])
-        // The serial is known without asking the emulator.
         #expect(try await devices.device("Pixel_9_Pro").state == .booted)
-        #expect(!commands.calls.get().contains { $0.contains("emu avd name") })
 
         // emu kill, then waiting until adb no longer lists it.
         let quits = Task {
@@ -297,6 +296,22 @@ final class FakeCommands: CommandRunning, @unchecked Sendable {
         #expect(AndroidEmulators.arguments(avd: "Pixel_9_Pro", port: 5554, readOnly: true, window: true) == [
             "-avd", "Pixel_9_Pro", "-read-only", "-no-snapshot-save", "-no-boot-anim", "-port", "5554",
         ])
+    }
+
+    @Test func anEmptySimulatorTypeIsAMistakeNotACrash() async {
+        for spec in ["", ",", " , iOS-27"] {
+            await #expect(throws: ToolFailure.self) { try await Simulators.create(spec) }
+        }
+    }
+
+    @Test func aCancelledCommandEndsItsProcess() async throws {
+        let started = Date()
+        let task = Task { try await ProcessRunner().run(URL(fileURLWithPath: "/bin/sleep"), ["30"], timeout: 60) }
+        try await Task.sleep(nanoseconds: 300_000_000)
+        task.cancel()
+        let result = try await task.value
+        #expect(result.status != 0)
+        #expect(Date().timeIntervalSince(started) < 10)
     }
 
     @Test func avdHomeFollowsTheSDKsVariables() {

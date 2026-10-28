@@ -10,7 +10,7 @@ any MCP client get the same 87 tools on every device, and scripts get them on th
 |---|---|
 | AI control | Screenshots, taps, swipes, typing, opening apps, tapping visible text (on-device OCR); the UI tree and tapping by accessibility identifier on simulators, Android and Developer Mode iPhones. `observe` lists the screen as numbered marks to tap; agents scroll until something shows and wait until the screen settles instead of guessing |
 | Device state | Location and routes, permissions, push notifications, dark mode and text size, language, a clean status bar, Face ID, an app's data, the clipboard and orientation, set by a tool instead of in Settings (simulators and Android, some on iPhones) |
-| Simulators and emulators | Start, shut down and create iOS simulators and Android emulators from the sidebar or by agent |
+| Simulators and emulators | Start and shut down iOS simulators and Android emulators, and create simulators, from the sidebar or by agent |
 | Build and run | Install builds, launch apps with arguments and environment, open deep links, by agent or in the app's Apps area |
 | App Store Connect | Builds, TestFlight groups, review states and customer reviews in the app and for agents; changes only after you allow them |
 | Debug | Logs and crash reports of the apps you launch, screen recordings on demand; Diagnose checks and fixes an iPhone's connection |

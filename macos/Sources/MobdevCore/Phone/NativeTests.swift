@@ -253,6 +253,11 @@ public struct NativeTestPlan: Sendable, Equatable {
             guard !task.isEmpty, !task.hasPrefix("-"), !task.contains(where: \.isWhitespace) else {
                 throw ToolFailure("task must be one Gradle task, like connectedDebugAndroidTest or testDebugUnitTest.")
             }
+            // A test task only: an agent's call must not publish, deploy or clean with the user's setup.
+            let taskName = task.split(separator: ":").last.map(String.init) ?? task
+            guard taskName.lowercased().contains("test") else {
+                throw ToolFailure("\(task) is not a test task. Native tests run tasks such as connectedDebugAndroidTest or testDebugUnitTest.")
+            }
             let module = overrides.module ?? config.module
             if let module, module.isEmpty || module.contains(where: \.isWhitespace) {
                 throw ToolFailure("module must be a Gradle module such as app.")

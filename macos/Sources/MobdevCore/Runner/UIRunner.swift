@@ -62,16 +62,23 @@ public final class UIRunner: @unchecked Sendable {
 
     public var state: State { current.get().state }
 
-    /// Builds and starts the runner. Nothing happens while it already builds or runs for this team.
+    /// Builds and starts the runner. Nothing happens while it already builds or runs for this team,
+    /// nor while a native test run has the device's XCTest session (`UIRunners.pause`).
     public func start(team: String?) {
+        if UIRunners.shared.isPaused(udid) {
+            Log.info("runner for \(udid): not starting while native tests run")
+            return
+        }
         let old = current.withLock { current -> RunningCommand?? in
             if current.team == team, [.building, .starting, .running].contains(current.state) { return nil }
             current.generation += 1
             current.team = team
             current.state = .building
             let generation = current.generation
-            // A run that was replaced may still be building into the same folder; this one waits.
+            // A run that was replaced may still be building into the same folder; this one stops
+            // it and waits.
             let previous = current.run
+            previous?.cancel()
             current.run = Task.detached {
                 await previous?.value
                 await self.run(generation, team: team)
@@ -85,11 +92,12 @@ public final class UIRunner: @unchecked Sendable {
         Log.info("runner for \(udid): building")
     }
 
-    /// Ends the test on the device.
+    /// Ends the test on the device, or the build before it.
     public func stop() {
         let process = current.withLock { current -> RunningCommand? in
             current.generation += 1
             current.state = .off
+            current.run?.cancel()
             defer { current.process = nil }
             return current.process
         }
@@ -413,7 +421,8 @@ public final class UIRunners: Sendable {
     /// It stays off until every pause is resumed; the app does not start it meanwhile.
     public func pause(_ udid: String) {
         paused.withLock { $0[udid, default: 0] += 1 }
-        if let runner = runner(for: udid), runner.state != .off { runner.stop() }
+        // One that failed stays failed until Try Again, as it would without the run.
+        if let runner = runner(for: udid), [.building, .starting, .running].contains(runner.state) { runner.stop() }
     }
 
     /// Ends a pause. The app then starts the runner again as it would anyway.

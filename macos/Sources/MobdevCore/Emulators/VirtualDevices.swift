@@ -153,8 +153,6 @@ public final class VirtualDevices: Sendable {
     /// Starts an AVD and returns its serial once Android has booted.
     private let startEmulator: @Sendable (_ avd: String, _ window: Bool) async throws -> String
     private let pollInterval: TimeInterval
-    /// Each running emulator's AVD by serial: a serial keeps its AVD until that emulator quits.
-    private let avdNames = Locked<[String: String]>([:])
     /// AVDs starting now, which the list shows as booting.
     private let starting = Locked<Set<String>>([])
     /// Serializes changes to the records file.
@@ -329,11 +327,12 @@ public final class VirtualDevices: Sendable {
             })
     }
 
-    /// AVD name → serial for every running emulator, asking each new serial which AVD it runs.
+    /// AVD name → serial for every running emulator, asking each which AVD it runs. Asked every
+    /// time: a port another emulator used before may run a different AVD now.
     private func runningAVDs() async -> [String: String] {
         guard let serials = runningEmulators(), let adb = adb() else { return [:] }
-        var known = avdNames.get().filter { serials.contains($0.key) }
-        for serial in serials where known[serial] == nil {
+        var known: [String: String] = [:]
+        for serial in serials {
             guard let result = try? await adb.run(serial, ["emu", "avd", "name"], timeout: 10), result.status == 0 else {
                 continue
             }
@@ -342,7 +341,6 @@ public final class VirtualDevices: Sendable {
                 .first { !$0.isEmpty && $0 != "OK" }
             if let name { known[serial] = name }
         }
-        avdNames.set(known)
         return Dictionary(known.map { ($0.value, $0.key) }, uniquingKeysWith: { first, _ in first })
     }
 
@@ -452,7 +450,6 @@ public final class VirtualDevices: Sendable {
             guard inserted else { throw ToolFailure("\(device.name) is starting already.") }
             defer { starting.withLock { _ = $0.remove(device.id) } }
             let serial = try await startEmulator(device.id, window)
-            avdNames.withLock { $0[serial] = device.id }
             booted.serial = serial
         }
         booted.state = .booted
@@ -480,7 +477,6 @@ public final class VirtualDevices: Sendable {
                 guard Date() < deadline else { throw ToolFailure("\(device.name) did not quit within a minute.") }
                 try await Task.sleep(nanoseconds: UInt64(pollInterval * 1_000_000_000))
             }
-            avdNames.withLock { $0[serial] = nil }
             stopped.serial = nil
         }
         stopped.state = .shutdown
@@ -498,6 +494,8 @@ public final class VirtualDevices: Sendable {
         let type = try catalog.deviceType(query)
         let runtime = try catalog.runtime(runtime, for: type)
         let name = name?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? type.name
+        // simctl would read a name starting with a dash as an option.
+        guard !name.hasPrefix("-") else { throw ToolFailure("A simulator's name cannot start with \"-\".") }
         let udid = try await Simulators.create(name: name, type: type.id, runtime: runtime.id, runner: runner, xcrun: xcrun)
         recordsLock.withLock { _ in
             var records = readRecords()
@@ -593,9 +591,12 @@ enum Simulators {
     /// "iPhone 17" or "iPhone 17,<runtime identifier>": creates, boots and waits until booted.
     static func create(_ spec: String) async throws -> String {
         let parts = spec.split(separator: ",", maxSplits: 1).map { $0.trimmingCharacters(in: .whitespaces) }
+        guard let type = parts.first, !type.isEmpty else {
+            throw ToolFailure("--simulator needs a simulator type, such as \"iPhone 17\" or \"iPhone 17,<runtime identifier>\".")
+        }
         let runner = ProcessRunner()
         let xcrun = URL(fileURLWithPath: "/usr/bin/xcrun")
-        let udid = try await create(name: "Mobdev \(parts[0])", type: parts[0], runtime: parts.count > 1 ? parts[1] : nil, runner: runner, xcrun: xcrun)
+        let udid = try await create(name: "Mobdev \(type)", type: type, runtime: parts.count > 1 ? parts[1] : nil, runner: runner, xcrun: xcrun)
         let booted = try await runner.run(xcrun, ["simctl", "bootstatus", udid, "-b"], timeout: 600)
         guard booted.status == 0 else {
             delete(udid)
@@ -723,7 +724,13 @@ enum AndroidEmulators {
 
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
-            try await Task.sleep(nanoseconds: 2_000_000_000)
+            // A caller that stops waiting, such as a relay after 90 s, ends the emulator too.
+            do {
+                try await Task.sleep(nanoseconds: 2_000_000_000)
+            } catch {
+                stop(started)
+                throw error
+            }
             guard process.isRunning else {
                 let tail = (try? String(contentsOf: log, encoding: .utf8))?.split(whereSeparator: \.isNewline).suffix(3)
                     .joined(separator: " ") ?? ""

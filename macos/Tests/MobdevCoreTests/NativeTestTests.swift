@@ -723,6 +723,18 @@ final class NativeCommands: CommandRunning, @unchecked Sendable {
         #expect(upToDate.note?.hasPrefix("Gradle found the task up to date") == true)
     }
 
+    @Test func onlyTestTasksRunAndOnlyRunFoldersArePruned() throws {
+        let (_, project) = try repository(native: #"{"android": {"gradle_root": "../android", "task": "publish"}}"#)
+        #expect(throws: ToolFailure.self) { try NativeTestPlan.resolve(project, platform: .android) }
+        var overrides = NativeTestPlan.Overrides()
+        overrides.task = ":app:testDebugUnitTest"
+        #expect(try NativeTestPlan.resolve(project, platform: .android, overrides: overrides).gradleTask == ":app:testDebugUnitTest")
+        #expect(NativeTestRuns.isRunName("2026-10-28 18.04.12"))
+        #expect(NativeTestRuns.isRunName("2026-10-28 18.04.12 (2)"))
+        #expect(!NativeTestRuns.isRunName("baseline"))
+        #expect(!NativeTestRuns.isRunName("2026-10-28 notes"))
+    }
+
     @Test func quittingStopsRunsGoingOn() async throws {
         let (project, commands, runner) = try xcodeSetup()
         commands.held = true

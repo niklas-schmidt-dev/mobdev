@@ -424,8 +424,11 @@ public final class PhoneTools: Sendable {
             // Mobdev Runner types a character as it is, also one the keyboard layout has no key for.
             if phone.status().input == .runner, key.count == 1, modifiers.isEmpty {
                 try requireTouch()
-                for _ in 0..<count { _ = try await phone.typeText(key) }
-                return ToolOutput(text: "Pressed \(key)\(times).")
+                // False when the runner ended meanwhile: then the key goes the keyboard's way below.
+                var typed = 0
+                while typed < count, try await phone.typeText(key) { typed += 1 }
+                if typed == count { return ToolOutput(text: "Pressed \(key)\(times).") }
+                if typed > 0 { throw ToolFailure("Pressed \(key) \(typed) of \(count) times; then Mobdev Runner stopped.") }
             }
             let stroke = try phone.status().keyboardLayout.stroke(forKey: key, modifiers: modifiers)
             try requireTouch()

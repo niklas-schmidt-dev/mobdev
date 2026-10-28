@@ -39,7 +39,12 @@ final class RunnerTests: XCTestCase {
         continueAfterFailure = true
         let environment = ProcessInfo.processInfo.environment
         let port = environment["MOBDEV_RUNNER_PORT"].flatMap { UInt16($0) } ?? 47270
-        let server = try RunnerServer(port: port, token: environment["MOBDEV_RUNNER_TOKEN"] ?? "") { [unowned self] in
+        // Without its token anything that reaches the port could tap and type; Mobdev always sets one.
+        guard let token = environment["MOBDEV_RUNNER_TOKEN"], !token.isEmpty else {
+            XCTFail("MOBDEV_RUNNER_TOKEN is missing; start Mobdev Runner from Mobdev.")
+            return
+        }
+        let server = try RunnerServer(port: port, token: token) { [unowned self] in
             self.handle($0)
         }
         server.start()
@@ -102,10 +107,16 @@ final class RunnerTests: XCTestCase {
                 guard Self.keys[name.lowercased()] != nil || key.count == 1 else {
                     return .error("Unknown key \(name).", status: 400)
                 }
-                // On iOS, typeKey presses neither Return nor Backspace: nothing happens (an iOS 27
-                // simulator, 2026-10-28). Typed as text they work, as in WebDriverAgent. Without a
-                // focused field typing fails, and the key goes to the app as a key after all.
-                if flags.isEmpty, let text = Self.typedKeys[name.lowercased()] {
+                // On iOS, typeKey presses neither Return nor Backspace, nor Escape and forward delete:
+                // nothing happens (an iOS 27 simulator, 2026-10-28). Return and Backspace typed as
+                // text work, as in WebDriverAgent; the others, and those with modifiers, are refused
+                // rather than reported as pressed.
+                let lowered = name.lowercased()
+                if ["escape", "esc", "forwarddelete"].contains(lowered) || (!flags.isEmpty && Self.typedKeys[lowered] != nil) {
+                    return .error("Mobdev Runner cannot press \(name)\(flags.isEmpty ? "" : " with modifiers") on iOS.", status: 400)
+                }
+                // Without a focused field typing fails, and the key goes to the app as a key after all.
+                if flags.isEmpty, let text = Self.typedKeys[lowered] {
                     frontmost()[0].typeText(text)
                     if issues.isEmpty { return outcome() }
                     issues.removeAll()

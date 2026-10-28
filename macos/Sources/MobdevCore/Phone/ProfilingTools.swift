@@ -87,11 +87,29 @@ extension PhoneTools {
         let output = try args.has("path")
             ? Self.tracePath(try args.string("path"), fileExtension: fileExtension)
             : Self.newTraceURL(template: template, fileExtension: fileExtension, in: project)
-        if FileManager.default.fileExists(atPath: output.path) { try? FileManager.default.removeItem(at: output) }
+        // xctrace writes no file that exists. A trace already there makes room, and comes back
+        // when the recording fails, such as for a mistyped bundle ID.
+        let files = FileManager.default
+        var aside: URL?
+        if files.fileExists(atPath: output.path) {
+            let moved = output.deletingLastPathComponent().appendingPathComponent(".\(output.lastPathComponent)-\(UUID().uuidString)")
+            try files.moveItem(at: output, to: moved)
+            aside = moved
+        }
         let target: TraceRequest.Target =
             bundleID.map { launch ? .launch(bundleID: $0) : .attach(bundleID: $0) } ?? .allProcesses
-        let recording = try await performance.recordTrace(
-            TraceRequest(template: template, target: target, seconds: seconds, output: output))
+        let recording: TraceRecording
+        do {
+            recording = try await performance.recordTrace(
+                TraceRequest(template: template, target: target, seconds: seconds, output: output))
+        } catch {
+            if let aside {
+                try? files.removeItem(at: output)
+                try? files.moveItem(at: aside, to: output)
+            }
+            throw error
+        }
+        if let aside { try? files.removeItem(at: aside) }
         if let project { projects.notifyOutput(project, .traces) }
         var lines = [
             "Recorded \(recording.template) of \(recording.target)"

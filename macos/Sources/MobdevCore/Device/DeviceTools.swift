@@ -159,7 +159,7 @@ public final class DeviceTools: ToolCalling {
             // Nor do the secrets' names.
             if SecretTools.isSecretTool(name) { return SecretTools.call(name) }
             // Nor simulators and AVDs that are not running.
-            if VirtualDeviceTools.isTool(name) { return try await callVirtualDeviceTool(name, Arguments(arguments ?? [:])) }
+            if VirtualDeviceTools.isTool(name) { return try await callVirtualDeviceTool(name, Arguments(arguments ?? [:]), source: source) }
             // Nor App Store Connect.
             if AppStoreTools.isAppStoreTool(name) {
                 return await AppStoreTools.call(

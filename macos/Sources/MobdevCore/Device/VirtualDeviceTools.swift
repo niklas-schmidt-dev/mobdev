@@ -66,7 +66,10 @@ enum VirtualDeviceTools {
 }
 
 extension DeviceTools {
-    func callVirtualDeviceTool(_ name: String, _ args: Arguments) async throws -> ToolOutput {
+    /// How long a call through a relay waits for a boot; the relay gives up after 90 seconds.
+    static let relayBootWait: TimeInterval = 75
+
+    func callVirtualDeviceTool(_ name: String, _ args: Arguments, source: String) async throws -> ToolOutput {
         switch name {
         case "list_virtual_devices":
             let list = await virtualDevices.list()
@@ -74,7 +77,9 @@ extension DeviceTools {
         case "boot_device":
             let device = try await virtualDevices.device(try args.string("id"))
             if device.state == .booted { return output("\(device.name) is running already", device) }
-            let booted = try await virtualDevices.boot(device, window: args.bool("window") ?? false)
+            guard let booted = try await boot(device, window: args.bool("window") ?? false, source: source) else {
+                return output("\(device.name) is still booting; list_virtual_devices shows when it runs", device)
+            }
             return output("\(booted.name) has booted", booted, note: await waitUntilListed(booted))
         case "shutdown_device":
             let device = try await virtualDevices.device(try args.string("id"))
@@ -89,7 +94,9 @@ extension DeviceTools {
                 type: try args.string("device_type"), runtime: args.has("runtime") ? try args.string("runtime") : nil,
                 name: args.has("name") ? try args.string("name") : nil)
             guard args.bool("boot") ?? true else { return output("Created \(created.name)", created) }
-            let booted = try await virtualDevices.boot(created)
+            guard let booted = try await boot(created, window: false, source: source) else {
+                return output("Created \(created.name); it is still booting, list_virtual_devices shows when it runs", created)
+            }
             return output("Created \(created.name) and booted it", booted, note: await waitUntilListed(booted))
         case "delete_simulator":
             let device = try await virtualDevices.device(try args.string("id"))
@@ -101,6 +108,25 @@ extension DeviceTools {
         default:
             throw UnknownToolError(name: name)
         }
+    }
+
+    /// Boots in a task of its own, so a caller that stops waiting does not end the boot. Through a
+    /// relay the answer comes after `relayBootWait` at most: nil while it still boots.
+    private func boot(_ device: VirtualDevice, window: Bool, source: String) async throws -> VirtualDevice? {
+        let devices = virtualDevices
+        let outcome = Locked<Result<VirtualDevice, Error>?>(nil)
+        Task.detached {
+            do {
+                outcome.set(.success(try await devices.boot(device, window: window)))
+            } catch {
+                outcome.set(.failure(error))
+            }
+        }
+        let deadline = Date().addingTimeInterval(source == "relay" ? Self.relayBootWait : 24 * 3600)
+        while outcome.get() == nil, Date() < deadline, !Task.isCancelled {
+            try? await Task.sleep(nanoseconds: 250_000_000)
+        }
+        return try outcome.get()?.get()
     }
 
     private func output(_ sentence: String, _ device: VirtualDevice, note: String = "") -> ToolOutput {

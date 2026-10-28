@@ -181,10 +181,15 @@ enum AppStoreTools {
             let groupQuery = try args.string("group")
             let build = try await resolveBuild(args, app: app, connect: connect)
             let groups = try await connect.betaGroups(app: app.id)
-            guard
-                let group = groups.first(where: { $0.id == groupQuery })
-                    ?? groups.first(where: { $0.name.caseInsensitiveCompare(groupQuery) == .orderedSame })
-            else {
+            let named = groups.filter { $0.name.caseInsensitiveCompare(groupQuery) == .orderedSame }
+            // A change that testers see goes to exactly the group meant.
+            if !groups.contains(where: { $0.id == groupQuery }), named.count > 1 {
+                throw ToolFailure(
+                    "\(app.name) has several TestFlight groups named \"\(groupQuery)\": "
+                        + named.map { "\($0.isInternal ? "internal" : "external") \($0.id)" }.joined(separator: ", ")
+                        + ". Pass the group's id.")
+            }
+            guard let group = groups.first(where: { $0.id == groupQuery }) ?? named.first else {
                 throw ToolFailure(
                     "\(app.name) has no TestFlight group \"\(groupQuery)\". Groups: \(groups.isEmpty ? "none" : groups.map(\.name).joined(separator: ", ")).")
             }

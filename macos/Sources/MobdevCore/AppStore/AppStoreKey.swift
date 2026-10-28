@@ -101,6 +101,7 @@ public final class AppStoreKeyStore: Sendable {
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
             // Written next to the file and moved over it, so it never exists with wider permissions.
             let temporary = folder.appendingPathComponent(".app-store-connect-\(UUID().uuidString).json")
+            defer { try? FileManager.default.removeItem(at: temporary) }
             guard FileManager.default.createFile(atPath: temporary.path, contents: data, attributes: [.posixPermissions: 0o600])
             else { throw CocoaError(.fileWriteUnknown) }
             if FileManager.default.fileExists(atPath: file.path) {
@@ -112,8 +113,14 @@ public final class AppStoreKeyStore: Sendable {
         }
     }
 
+    /// Deletes the key, and any copy a save that was cut short left next to it.
     public func remove() throws {
         try lock.withLock {
+            let folder = file.deletingLastPathComponent()
+            let names = (try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? []
+            for name in names where name.hasPrefix(".app-store-connect-") && name.hasSuffix(".json") {
+                try? FileManager.default.removeItem(at: folder.appendingPathComponent(name))
+            }
             guard FileManager.default.fileExists(atPath: file.path) else { return }
             try FileManager.default.removeItem(at: file)
         }
