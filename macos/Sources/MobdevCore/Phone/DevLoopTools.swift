@@ -137,7 +137,7 @@ extension PhoneTools {
             if !percentiles.isEmpty { line += "; frame times " + percentiles.joined(separator: ", ") }
             lines.append(line)
         } else if sample.memoryKind == "physical footprint" {
-            lines.append("Frames: iOS reports no frame times here; record_trace with template Animation Hitches records them.")
+            lines.append("Frames: not measured on iOS; on an iPhone, record_trace with template Animation Hitches records hitches.")
         }
         if let ended = sample.ended { lines.append(ended) }
         return lines.joined(separator: "\n")

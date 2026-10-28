@@ -314,8 +314,10 @@ enum ActivityMonitor {
 // MARK: - Summaries
 
 /// A few lines about a trace that its export gives away cheaply: the heaviest functions of a Time
-/// Profiler recording, hangs, hitches and leaks, an Activity Monitor recording's CPU and memory.
-/// Anything that cannot be read is left out; the trace itself is what to look at.
+/// Profiler recording, its potential hangs, hitches where the trace has a table of them, an
+/// Activity Monitor recording's CPU and memory. Leaks' findings are in no table `xctrace export`
+/// offers (Xcode 27), so a Leaks trace has no summary. Anything that cannot be read is left
+/// out; the trace itself is what to look at.
 enum TraceSummary {
     static func read(_ trace: URL, template: String, contents: TraceContents?, pid: Int?, xctrace: Xctrace) async -> [String] {
         let schemas = contents?.schemas ?? []
@@ -330,7 +332,6 @@ enum TraceSummary {
             if let hitches = await table(schema) { lines += count(hitches, pid: pid, one: "hitch", many: "hitches", threshold: nil) }
             break
         }
-        if let leaks = await table("leaks") { lines += count(leaks, pid: pid, one: "leaked allocation", many: "leaked allocations", threshold: nil) }
         if let live = await table("activity-monitor-process-live") {
             let rows = ActivityMonitor.processRows(live)
             if let pid, let sample = ActivityMonitor.sample(rows, pid: pid) {
