@@ -137,7 +137,7 @@ struct ElementInspector: View {
                     tree = elements
                     problem = nil
                 } else {
-                    problem = "This iPhone has no UI tree yet: turn it on under Info › UI Tree."
+                    problem = "This iPhone has no UI tree yet: it needs Developer Mode, see Info › Developer Mode Control."
                 }
             } catch {
                 // A tree that cannot be read for a moment, as while an app launches, keeps the last one.
