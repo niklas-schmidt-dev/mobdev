@@ -47,7 +47,7 @@ import Testing
 
         // Tap the search field and type accents and emoji, which the Bluetooth keyboard cannot.
         let search = try #require(elements.first { $0.role == "SearchField" })
-        try await runner.tap(at: search.center)
+        try await runner.tap(at: search.center, hold: 0)
         try await Task.sleep(for: .seconds(1))
         let text = "Grüße 😀 ñ"
         try await runner.type(text)
@@ -109,6 +109,166 @@ import Testing
         #expect(try await runner.elements().contains { $0.identifier.hasPrefix("com.apple.settings.") })
     }
 
+    /// Every input endpoint of protocol 2 on a simulator, straight and through the tools, the way an
+    /// iPhone in Developer Mode is driven without Bluetooth. Screenshots of the steps go to
+    /// $TMPDIR/mobdev-runner-input when MOBDEV_TEST_RUNNER_SHOTS is set.
+    ///
+    ///     MOBDEV_TEST_RUNNER_SIMULATOR=<udid> swift test --filter runnerDrivesAllInput
+    @Test(.enabled(if: simulator != nil, "Set MOBDEV_TEST_RUNNER_SIMULATOR"), .timeLimit(.minutes(15)))
+    func runnerDrivesAllInput() async throws {
+        let udid = Self.simulator!
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("mobdev-runner-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let runner = UIRunner(udid: udid, simulator: true, folder: folder, port: 47292)
+        defer { runner.stop() }
+        runner.start(team: nil)
+        let started = Date()
+        while runner.state != .running, Date().timeIntervalSince(started) < 600 {
+            if case .failed(let reason) = runner.state {
+                Issue.record("Mobdev Runner failed: \(reason)")
+                return
+            }
+            try await Task.sleep(for: .seconds(1))
+        }
+        try #require(runner.state == .running)
+        print("── runner running after \(Int(Date().timeIntervalSince(started))) s")
+
+        // /activate brings Settings to the front without simctl.
+        _ = try await ProcessRunner().run(URL(fileURLWithPath: "/usr/bin/xcrun"), ["simctl", "terminate", udid, Self.settings], timeout: 30)
+        var clock = Date()
+        try await runner.activate(Self.settings)
+        print("── activate: \(milliseconds(since: clock)) ms")
+        var elements = try await read(runner) { $0.contains { $0.identifier == "com.apple.settings.general" } }
+        try await shot(udid, "1-activated")
+        let general = try #require(elements.first { $0.identifier == "com.apple.settings.general" })
+
+        // /drag: swiping up scrolls the list, so General moves up.
+        clock = Date()
+        try await runner.drag(from: NormalizedPoint(x: 0.5, y: 0.75), to: NormalizedPoint(x: 0.5, y: 0.35), duration: 0.3)
+        print("── drag: \(milliseconds(since: clock)) ms")
+        clock = Date()
+        elements = try await read(runner) { elements in
+            elements.first { $0.identifier == "com.apple.settings.general" }.map { $0.frame.minY < general.frame.minY - 0.05 } ?? true
+        }
+        print("── tree after the drag: \(milliseconds(since: clock)) ms")
+        try await shot(udid, "2-scrolled")
+        let moved = elements.first { $0.identifier == "com.apple.settings.general" }
+        #expect(moved.map { $0.frame.minY < general.frame.minY - 0.05 } ?? true, "General did not move up: \(String(describing: moved))")
+
+        // /tap, /type and /key: type into the search field, select all with ⌘A and delete it.
+        clock = Date()
+        try await runner.activate(Self.settings)
+        print("── activate in front: \(milliseconds(since: clock)) ms")
+        try await runner.drag(from: NormalizedPoint(x: 0.5, y: 0.35), to: NormalizedPoint(x: 0.5, y: 0.8), duration: 0.3)
+        elements = try await read(runner) { $0.contains { $0.role == "SearchField" } }
+        let search = try #require(elements.first { $0.role == "SearchField" })
+        clock = Date()
+        try await runner.tap(at: search.center, hold: 0)
+        print("── tap: \(milliseconds(since: clock)) ms")
+        try await Task.sleep(for: .seconds(1))
+        clock = Date()
+        try await runner.type("abc 😀")
+        print("── type 5 characters: \(milliseconds(since: clock)) ms")
+        elements = try await read(runner) { $0.contains { $0.role == "SearchField" && $0.value == "abc 😀" } }
+        #expect(elements.contains { $0.role == "SearchField" && $0.value == "abc 😀" })
+        clock = Date()
+        try await runner.press(key: "backspace", modifiers: [])
+        print("── key: \(milliseconds(since: clock)) ms")
+        elements = try await read(runner) { $0.contains { $0.role == "SearchField" && $0.value == "abc " } }
+        #expect(elements.contains { $0.role == "SearchField" && $0.value == "abc " }, "backspace: \(elements.filter { $0.role == "SearchField" })")
+        // An arrow key moves the cursor: X lands before the space.
+        try await runner.press(key: "left", modifiers: [])
+        try await runner.press(key: "x", modifiers: ["shift"])
+        elements = try await read(runner) { $0.contains { $0.role == "SearchField" && $0.value == "abcX " } }
+        #expect(elements.contains { $0.role == "SearchField" && $0.value == "abcX " }, "left, X: \(elements.filter { $0.role == "SearchField" })")
+        // Backspaces typed as text clear the field. (⌘A is checked through press_key below: right
+        // after typing, iOS's correction bubble can take the shortcut.)
+        try await runner.press(key: "right", modifiers: [])
+        try await runner.type(String(repeating: "\u{8}", count: 8))
+        elements = try await read(runner) { $0.contains { $0.role == "SearchField" && ($0.value.isEmpty || $0.value == $0.label) } }
+        try await shot(udid, "3-typed-and-cleared")
+        #expect(
+            elements.contains { $0.role == "SearchField" && ($0.value.isEmpty || $0.value == $0.label) },
+            "cleared: \(elements.filter { $0.role == "SearchField" })")
+
+        // /tap with count 2 is one gesture: a double tap on a word selects it, which shows its menu.
+        try await runner.type("hello")
+        try await Task.sleep(for: .milliseconds(500))
+        elements = try await read(runner) { $0.contains { $0.role == "SearchField" && $0.value == "hello" } }
+        if let field = elements.first(where: { $0.role == "SearchField" }) {
+            try await runner.doubleTap(at: NormalizedPoint(x: field.frame.minX + field.frame.width * 0.25, y: field.center.y))
+            try await Task.sleep(for: .seconds(1))
+            try await shot(udid, "4-double-tapped")
+            let menu = try await runner.elements().filter { $0.role == "MenuItem" || $0.label == "Copy" || $0.label == "Cut" }
+            print("── after a double tap: \(menu.map(\.label))")
+        }
+
+        // /button home: the home screen is in front, which only lists SpringBoard's icons.
+        try await runner.press(button: "home")
+        elements = try await read(runner) { $0.contains { $0.role == "Icon" } }
+        try await shot(udid, "5-home")
+        #expect(elements.contains { $0.role == "Icon" })
+        do {
+            try await runner.press(button: "volume_up")
+            Issue.record("A simulator pressed a volume button")
+        } catch {
+            #expect("\(error)".contains("no volume buttons"))
+        }
+
+        // /tap with hold: a long press on an icon opens its menu.
+        if let icon = elements.first(where: { $0.role == "Icon" }) {
+            try await runner.tap(at: icon.center, hold: 1.5)
+            try await Task.sleep(for: .seconds(1))
+            try await shot(udid, "6-long-press")
+            let after = try await runner.elements()
+            print("── after a long press on \(icon.label): \(after.filter { $0.role == "Button" }.prefix(8).map(\.label))")
+            #expect(after.count != elements.count || after != elements, "Nothing changed after a long press")
+            try await runner.press(button: "home")
+        }
+
+        // The tools on top, as on an iPhone in Developer Mode without Bluetooth.
+        let tools = PhoneTools(phone: RunnerPhone(runner: runner), activity: ActivityLog(), settleDelay: 0)
+        func call(_ name: String, _ arguments: JSONValue) async throws -> ToolOutput {
+            let output = try await tools.call(name, arguments: arguments, source: "test", screenshotByDefault: false)
+            #expect(!output.isError, "\(name): \(output.text)")
+            print("── \(name): \(output.text.components(separatedBy: "\n").first ?? "")")
+            return output
+        }
+        let status = try await call("status", [:])
+        #expect(status.text.contains("Input: Mobdev Runner (Developer Mode)"))
+        _ = try await call("open_app", ["name": "Settings"])
+        _ = try await read(runner) { $0.contains { $0.identifier == "com.apple.settings.general" } }
+        _ = try await call("scroll", ["direction": "down", "amount": 5])
+        _ = try await call("swipe", ["from_x": 300, "from_y": 500, "to_x": 300, "to_y": 1000])
+        _ = try await call("tap_element", ["role": "searchfield"])
+        try await Task.sleep(for: .seconds(1))
+        // The field may still hold the earlier text: select it and delete it.
+        _ = try await call("press_key", ["key": "a", "modifiers": ["cmd"]])
+        _ = try await call("press_key", ["key": "backspace"])
+        _ = try await call("type_text", ["text": "Grüße 😀"])
+        elements = try await read(runner) { $0.contains { $0.role == "SearchField" && $0.value == "Grüße 😀" } }
+        #expect(elements.contains { $0.role == "SearchField" && $0.value == "Grüße 😀" })
+        _ = try await call("press_key", ["key": "backspace", "count": 3])
+        elements = try await read(runner) { $0.contains { $0.role == "SearchField" && $0.value == "Grüß" } }
+        #expect(elements.contains { $0.role == "SearchField" && $0.value == "Grüß" }, "\(elements.filter { $0.role == "SearchField" })")
+        _ = try await call("type_text", ["text": "e", "submit": true])
+        _ = try await call("home", [:])
+        _ = try await read(runner) { $0.contains { $0.role == "Icon" } }
+        try await shot(udid, "7-tools")
+    }
+
+    private func milliseconds(since date: Date) -> Int { Int(Date().timeIntervalSince(date) * 1000) }
+
+    /// A screenshot of the simulator for a person to look at, when MOBDEV_TEST_RUNNER_SHOTS is set.
+    private func shot(_ udid: String, _ name: String) async throws {
+        guard ProcessInfo.processInfo.environment["MOBDEV_TEST_RUNNER_SHOTS"] != nil else { return }
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("mobdev-runner-input")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        _ = try await ProcessRunner().run(
+            URL(fileURLWithPath: "/usr/bin/xcrun"),
+            ["simctl", "io", udid, "screenshot", folder.appendingPathComponent("\(name).png").path], timeout: 30)
+    }
+
     /// Reads the tree from a runner already running on an iPhone, through usbmuxd. Read-only: it
     /// sends no taps or text. Start the runner with `TEST_RUNNER_MOBDEV_RUNNER_TOKEN=<token>`.
     ///
@@ -160,29 +320,40 @@ import Testing
     }
 }
 
-/// A phone whose tree, taps and typing go through Mobdev Runner, as HardwareDevice's do with
-/// the runner on. The screen size is an iPhone 17's in pixels.
+/// A phone whose input and tree go through Mobdev Runner the way HardwareDevice's do while the
+/// runner runs on an iPhone, with no Bluetooth to fall back on. Apps come from the simulator. The
+/// screen size is an iPhone 17's in pixels.
 private final class RunnerPhone: PhoneBackend, @unchecked Sendable {
     let runner: UIRunner
-    init(runner: UIRunner) { self.runner = runner }
+    let control: DeviceControl
+    init(runner: UIRunner) {
+        self.runner = runner
+        control = DeviceControl(udid: runner.udid, reportsFolder: FileManager.default.temporaryDirectory, simulator: true)
+    }
+
+    private var routes: IPhoneInput {
+        IPhoneInput(runner: runner.state == .running ? runner : nil, bluetooth: { throw HIDError.notConnected }, layout: .us)
+    }
 
     func status() -> PhoneStatus {
         PhoneStatus(
-            screen: .connected(name: "Simulator", width: 1206, height: 2622), bluetooth: .connected(hosts: 1),
-            keyboardLayout: .us)
+            screen: .connected(name: "Simulator", width: 1206, height: 2622), bluetooth: .advertising,
+            keyboardLayout: .us, input: runner.state == .running ? .runner : .bluetooth, runner: runner.state)
     }
 
     func frame() -> CGImage? { nil }
-    func tap(at point: NormalizedPoint, hold: TimeInterval) async throws { try await runner.tap(at: point) }
-    func swipe(from start: NormalizedPoint, to end: NormalizedPoint, duration: TimeInterval) async throws {}
-    func scroll(at point: NormalizedPoint, ticks: Int) async throws {}
-    func pan(at point: NormalizedPoint, ticks: Int) async throws {}
-    func type(_ strokes: [KeyStroke]) async throws {}
-    func press(_ stroke: KeyStroke) async throws {}
-    func press(_ button: ConsumerUsage) async throws {}
-    func typeText(_ text: String) async throws -> Bool {
-        try await runner.type(text)
-        return true
+    var apps: AppBackend? { control }
+    func tap(at point: NormalizedPoint, hold: TimeInterval) async throws { try await routes.tap(at: point, hold: hold) }
+    func doubleTap(at point: NormalizedPoint) async throws { try await routes.doubleTap(at: point) }
+    func swipe(from start: NormalizedPoint, to end: NormalizedPoint, duration: TimeInterval) async throws {
+        try await routes.swipe(from: start, to: end, duration: duration)
     }
+    func scroll(at point: NormalizedPoint, ticks: Int) async throws { try await routes.scroll(at: point, ticks: ticks) }
+    func pan(at point: NormalizedPoint, ticks: Int) async throws { try await routes.pan(at: point, ticks: ticks) }
+    func type(_ strokes: [KeyStroke]) async throws { try await routes.type(strokes) }
+    func press(_ stroke: KeyStroke) async throws { try await routes.press(stroke) }
+    func press(_ button: ConsumerUsage) async throws { try await routes.press(button) }
+    func typeText(_ text: String) async throws -> Bool { try await routes.typeText(text) }
+    func openApp(named name: String) async throws -> String? { try await routes.openApp(named: name, apps: control) }
     func uiTree() async throws -> [UIElement]? { try await runner.elements() }
 }

@@ -54,9 +54,9 @@ export const Route = createFileRoute("/")({
 const toolkit = [
   { icon: "sparkle", title: msg("AI control"), body: msg("Agents see, tap and type on any phone."), href: "#agents" },
   { icon: "devices", title: msg("Every device"), body: msg("iPhone, Simulator and Android in one list."), href: "#devices" },
-  { icon: "terminal", title: msg("Build and run"), body: msg("Install builds, launch apps, open deep links."), href: "#build" },
-  { icon: "bug", title: msg("Debug"), body: msg("Logs and crash reports, straight to your agent."), href: "#build" },
-  { icon: "check", title: msg("Test"), body: msg("Recorded flows, CI runs and smoke tests."), href: "#test" },
+  { icon: "terminal", title: msg("Build and ship"), body: msg("Install builds, then TestFlight and reviews."), href: "#build" },
+  { icon: "bug", title: msg("Debug"), body: msg("Logs, crash reports and performance traces."), href: "#build" },
+  { icon: "check", title: msg("Test"), body: msg("Your test suites, recorded flows and CI runs."), href: "#test" },
   { icon: "search", title: msg("Research"), body: msg("Competing apps and their paywalls, on a real iPhone."), href: "#test" },
   { icon: "pointer", title: msg("Live mirror"), body: msg("Click, swipe and type from your Mac."), href: "#desk" },
   { icon: "globe", title: msg("Remote"), body: msg("Every Mac and its phones, from anywhere."), href: "#desk" },
@@ -67,7 +67,7 @@ const devices = [
     icon: "phone",
     title: "iPhone.",
     body: msg(
-      "The screen comes over the USB cable, taps and typing over Bluetooth. No developer mode and no app on the phone, so every app works: the App Store, Messages, Wallet.",
+      "The screen comes over the USB cable. With Developer Mode, a small UI test taps, types and reads the UI tree over the same cable; without it, Mobdev is a Bluetooth keyboard and pointer. Every app works: the App Store, Messages, Wallet.",
     ),
     needs: msg("a USB data cable"),
   },
@@ -148,9 +148,9 @@ const faqs = [
     ),
   ],
   [
-    msg("Does the iPhone need developer mode or an app?"),
+    msg("Does the iPhone need Developer Mode?"),
     msg(
-      "No. Mobdev only uses the USB screen feed and a Bluetooth keyboard and pointer, which every iPhone supports. You turn on AssistiveTouch once. Only the optional tools for your own apps, such as installing builds and reading their logs, and the UI tree need Developer Mode and Xcode.",
+      "It is the best way. With Developer Mode on and Xcode signed in, Mobdev builds Mobdev Runner, a small UI test, and keeps it running on the iPhone: it taps, types any text and reads the UI tree over the USB cable. Installing your builds, logs, Instruments and device settings need it too. Without Developer Mode, Mobdev drives the iPhone as a Bluetooth keyboard and pointer, which every iPhone supports once AssistiveTouch is on.",
     ),
   ],
   [
@@ -264,7 +264,7 @@ function Home() {
             </h2>
             <p className="text-balance mt-6 max-w-2xl text-[19px] leading-[1.45] text-muted">
               Plug in an iPhone, boot a simulator or start an emulator, and it shows up in Mobdev. Every device takes the
-              same 70 tools, so one agent can test on all of them in one session.
+              same 87 tools, so one agent can test on all of them in one session.
             </p>
           </T>
           <div className="mt-14 grid grid-cols-1 gap-5 md:grid-cols-3">

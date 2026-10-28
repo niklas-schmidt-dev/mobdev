@@ -1,11 +1,13 @@
 import Foundation
 
 /// What a project produces that is not versioned with it, each in its own folder under
-/// `output/`: test runs, screen recordings, crawls, the files of failed screenshot checks and the
-/// videos of flows run from the app.
+/// `output/`: test runs, screen recordings, crawls, Instruments and Perfetto traces, the files of
+/// failed screenshot checks, the videos of flows run from the app and runs of the app's own test
+/// suites.
 public enum ProjectOutput: String, Sendable, CaseIterable {
-    case runs, recordings, crawls, checks
+    case runs, recordings, crawls, checks, traces
     case flowVideos = "flow-videos"
+    case nativeRuns = "native-runs"
 }
 
 /// A project is a folder in the app's repository with a mobdev.json:
@@ -17,7 +19,7 @@ public enum ProjectOutput: String, Sendable, CaseIterable {
 ///       baselines/       assert_screenshot's reference pictures, versioned
 ///       screenshots/     save_screenshot's pictures, such as store screenshots, versioned
 ///       maps/            crawl_app's map of each app, versioned
-///       output/          runs, recordings, crawls and check files; ignored by its own .gitignore
+///       output/          runs, recordings, crawls, traces and check files; ignored by its own .gitignore
 ///
 /// Only mobdev.json makes a folder a project; every other folder appears when something is
 /// saved there, and `output/` only when the first output is written, never by reading.

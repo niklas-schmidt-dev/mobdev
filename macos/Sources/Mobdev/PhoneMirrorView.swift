@@ -4,12 +4,16 @@ import MobdevCore
 import SwiftUI
 
 /// The live iPhone screen. Click to tap, drag to swipe, scroll to scroll, and type while it
-/// has focus. ⌘V types the Mac clipboard. After a drag, `onDrag` gets where it started, so the
-/// app can check whether the pointer snapped and turned it into a tap.
+/// has focus. ⌘V types the Mac clipboard. Over Bluetooth the pointer follows the mouse live, and
+/// after a drag `onDrag` gets where it started, so the app can check whether the pointer snapped
+/// and turned it into a tap. Through Mobdev Runner (`actions`) each gesture goes out whole when it
+/// ends, as for simulators.
 struct PhoneMirrorView: NSViewRepresentable {
     let id: String
     let session: AVCaptureSession?
     let input: HIDInput?
+    /// Set while Mobdev Runner takes the iPhone's input; then `input` is not used.
+    var actions: MirrorActions?
     let layout: KeyboardLayout
     @Binding var focused: Bool
     var onDrag: ((NormalizedPoint) -> Void)?
@@ -24,6 +28,7 @@ struct PhoneMirrorView: NSViewRepresentable {
 
     func updateNSView(_ view: MirrorNSView, context: Context) {
         view.input = input
+        view.actions = actions
         view.keyboardLayout = layout
         view.onDrag = onDrag
         view.onInput = onInput
@@ -31,6 +36,17 @@ struct PhoneMirrorView: NSViewRepresentable {
             view.previewLayer.session = session
         }
     }
+}
+
+/// Whole gestures for an iPhone whose input goes through Mobdev Runner, which cannot follow the
+/// mouse live. The app records them for a flow itself.
+struct MirrorActions {
+    var tap: (NormalizedPoint) -> Void
+    var swipe: (_ from: NormalizedPoint, _ to: NormalizedPoint, _ duration: TimeInterval) -> Void
+    /// Wheel steps at a point; positive ones reveal content further down, or right when sideways.
+    var scroll: (_ at: NormalizedPoint, _ ticks: Int, _ sideways: Bool) -> Void
+    var text: (String) -> Void
+    var key: (KeyStroke) -> Void
 }
 
 enum MirrorInput {
@@ -55,6 +71,7 @@ final class MirrorNSView: NSView {
 
     let previewLayer = AVCaptureVideoPreviewLayer()
     var input: HIDInput?
+    var actions: MirrorActions?
     var keyboardLayout: KeyboardLayout = .us
     var onFocusChange: ((Bool) -> Void)?
     var onDrag: ((NormalizedPoint) -> Void)?
@@ -69,6 +86,13 @@ final class MirrorNSView: NSView {
     private var scrollTouch: (start: NormalizedPoint, current: NormalizedPoint, started: Date)?
     /// Whether that touch is down on the iPhone yet.
     private var touchDown = false
+    /// Wheel steps not sent to Mobdev Runner yet: each becomes one swipe once the wheel rests.
+    private var pendingWheel: (point: NormalizedPoint, ticks: Int, pan: Int)?
+    private var wheelFlush: DispatchWorkItem?
+    /// Characters typed for Mobdev Runner and not sent yet: they go as one text after a short pause,
+    /// since each request takes a moment, and before any other input so the order holds.
+    private var pendingText = ""
+    private var textFlush: DispatchWorkItem?
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -100,6 +124,7 @@ final class MirrorNSView: NSView {
     }
 
     override func mouseEntered(with event: NSEvent) {
+        guard actions == nil else { return }
         input?.stayAwake()
         awake?.invalidate()
         awake = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
@@ -155,7 +180,7 @@ final class MirrorNSView: NSView {
         dragStart = point
         dragStarted = Date()
         dragged = false
-        input?.pointerDown(at: point)
+        if actions == nil { input?.pointerDown(at: point) }
     }
 
     override func mouseDragged(with event: NSEvent) {
@@ -164,11 +189,22 @@ final class MirrorNSView: NSView {
         lastMove = Date()
         let point = normalized(event)
         if let start = dragStart, hypot(point.x - start.x, point.y - start.y) > 0.02 { dragged = true }
-        input?.pointerMove(to: point)
+        if actions == nil { input?.pointerMove(to: point) }
     }
 
     override func mouseUp(with event: NSEvent) {
         let point = normalized(event)
+        if let actions {
+            sendPendingText()
+            if dragged, let start = dragStart {
+                actions.swipe(start, point, min(max(Date().timeIntervalSince(dragStarted), 0.1), 2))
+            } else if let start = dragStart {
+                actions.tap(start)
+            }
+            dragStart = nil
+            dragged = false
+            return
+        }
         input?.pointerUp(at: point)
         if dragged, let start = dragStart {
             onDrag?(start)
@@ -193,12 +229,33 @@ final class MirrorNSView: NSView {
         let ticks = Int(scrollAccumulator), pan = Int(panAccumulator)
         scrollAccumulator -= CGFloat(ticks)
         panAccumulator -= CGFloat(pan)
-        guard let input, ticks != 0 || pan != 0 else { return }
+        guard ticks != 0 || pan != 0 else { return }
         let point = normalized(event)
+        if actions != nil { return wheelThroughRunner(at: point, ticks: ticks, pan: pan) }
+        guard let input else { return }
         Task {
             if ticks != 0 { try? await input.scroll(at: point, ticks: ticks) }
             if pan != 0 { try? await input.pan(at: point, ticks: pan) }
         }
+    }
+
+    /// Mobdev Runner takes a swipe per request, which takes a second or two, so the wheel's steps add
+    /// up until it rests for a quarter of a second and go out as one swipe.
+    private func wheelThroughRunner(at point: NormalizedPoint, ticks: Int, pan: Int) {
+        var pending = pendingWheel ?? (point, 0, 0)
+        pending.ticks += ticks
+        pending.pan += pan
+        pendingWheel = pending
+        wheelFlush?.cancel()
+        let flush = DispatchWorkItem { [weak self] in
+            guard let self, let pending = self.pendingWheel, let actions = self.actions else { return }
+            self.pendingWheel = nil
+            self.sendPendingText()
+            if pending.ticks != 0 { actions.scroll(pending.point, pending.ticks, false) }
+            if pending.pan != 0 { actions.scroll(pending.point, pending.pan, true) }
+        }
+        wheelFlush = flush
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25, execute: flush)
     }
 
     /// Two fingers on the trackpad move a touch on the iPhone the same way and as far, sideways too,
@@ -206,7 +263,7 @@ final class MirrorNSView: NSView {
     /// down, in small steps, which made sideways scrolling impossible (2026-10-01). The scroll's
     /// momentum after the fingers lift is left to iOS.
     private func trackpadScroll(_ event: NSEvent) {
-        guard let input, event.momentumPhase == [] else { return }
+        guard input != nil || actions != nil, event.momentumPhase == [] else { return }
         // Fingers resting on the trackpad send "may begin", then "cancelled": that is no touch.
         if event.phase.contains(.began) {
             let point = normalized(event)
@@ -222,6 +279,17 @@ final class MirrorNSView: NSView {
                 y: min(max(touch.current.y + direction * event.scrollingDeltaY / bounds.height, 0), 1))
         }
         scrollTouch = touch
+        // Through Mobdev Runner the touch goes out whole once the fingers lift.
+        if let actions {
+            guard event.phase.contains(.ended) || event.phase.contains(.cancelled) else { return }
+            scrollTouch = nil
+            sendPendingText()
+            if hypot(touch.current.x - touch.start.x, touch.current.y - touch.start.y) > 0.02 {
+                actions.swipe(touch.start, touch.current, min(max(Date().timeIntervalSince(touch.started), 0.1), 0.5))
+            }
+            return
+        }
+        guard let input else { return }
         // Down once the fingers have moved a little, so a short brush is not a tap.
         if !touchDown, hypot(touch.current.x - touch.start.x, touch.current.y - touch.start.y) > 0.01 {
             input.pointerDown(at: touch.start)
@@ -246,6 +314,7 @@ final class MirrorNSView: NSView {
     }
 
     override func keyDown(with event: NSEvent) {
+        if let actions { return keyThroughRunner(event, actions) }
         guard let input else { return }
         let flags = event.modifierFlags.intersection([.command, .shift, .option, .control])
         if flags == .command, event.charactersIgnoringModifiers == "v" {
@@ -276,5 +345,51 @@ final class MirrorNSView: NSView {
             onInput?(.text(characters))
         }
         input.pressLive(stroke)
+    }
+
+    /// Characters go to Mobdev Runner as text, whatever the keyboard layout; named keys and
+    /// shortcuts as keys. ⌘V types the Mac clipboard.
+    private func keyThroughRunner(_ event: NSEvent, _ actions: MirrorActions) {
+        let flags = event.modifierFlags.intersection([.command, .shift, .option, .control])
+        if flags == .command, event.charactersIgnoringModifiers == "v" {
+            if let text = NSPasteboard.general.string(forType: .string), !text.isEmpty { type(text) } else { NSSound.beep() }
+            return
+        }
+        let isISO = KBGetLayoutType(Int16(LMGetKbdType())) == UInt32(kKeyboardISO)
+        let usage = MacKeyCodes.hidUsage(forKeyCode: event.keyCode, isISO: isISO)
+        // Space types as text with the characters around it.
+        let named = usage.map { FlowRecorder.keyName(usage: $0) != nil && !($0 == 0x2C && flags.isEmpty) } ?? false
+        if let usage, named || flags.contains(.command) || flags.contains(.control) {
+            var modifiers: UInt8 = 0
+            if flags.contains(.shift) { modifiers |= KeyStroke.shift }
+            if flags.contains(.control) { modifiers |= KeyStroke.control }
+            if flags.contains(.option) { modifiers |= KeyStroke.option }
+            if flags.contains(.command) { modifiers |= KeyStroke.command }
+            sendPendingText()
+            actions.key(KeyStroke(usage, modifiers))
+        } else if let characters = event.characters, !characters.isEmpty,
+            characters.unicodeScalars.allSatisfy({ $0.value >= 0x20 && $0.value != 0x7F })
+        {
+            type(characters)
+        } else {
+            super.keyDown(with: event)
+        }
+    }
+
+    private func type(_ text: String) {
+        pendingText += text
+        textFlush?.cancel()
+        let flush = DispatchWorkItem { [weak self] in self?.sendPendingText() }
+        textFlush = flush
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2, execute: flush)
+    }
+
+    private func sendPendingText() {
+        textFlush?.cancel()
+        textFlush = nil
+        guard !pendingText.isEmpty, let actions else { return }
+        let text = pendingText
+        pendingText = ""
+        actions.text(text)
     }
 }

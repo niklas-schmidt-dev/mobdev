@@ -8,9 +8,11 @@ enum Pane: Hashable {
     /// The active project's tests, or how to get a project: what the Tests pane of 0.2.50 and
     /// earlier, stored as "tests", opens now.
     case projects
+    /// An app in App Store Connect, by its App Store Connect ID.
+    case appStoreApp(String)
 
     /// Stored in user defaults as "overview", "device:<id>", "remote-device:<mac>/<id>",
-    /// "project:<section>:<path>", "agents", …
+    /// "project:<section>:<path>", "appstore:<app id>", "agents", …
     var rawValue: String {
         switch self {
         case .overview: "overview"
@@ -18,6 +20,7 @@ enum Pane: Hashable {
         case .remoteDevice(let mac, let id): "remote-device:\(mac)/\(id)"
         case .project(let path, let section): "project:\(section.rawValue):\(path)"
         case .projects: "projects"
+        case .appStoreApp(let id): "appstore:\(id)"
         case .agents: "agents"
         case .activity: "activity"
         case .remote: "remote"
@@ -31,6 +34,7 @@ enum Pane: Hashable {
         case "activity": self = .activity
         case "remote": self = .remote
         case let value where value.hasPrefix("device:"): self = .device(String(value.dropFirst("device:".count)))
+        case let value where value.hasPrefix("appstore:"): self = .appStoreApp(String(value.dropFirst("appstore:".count)))
         case let value where value.hasPrefix("project:"):
             let parts = value.dropFirst("project:".count).split(separator: ":", maxSplits: 1)
             if parts.count == 2, let section = ProjectSection(rawValue: String(parts[0])) {
@@ -94,6 +98,8 @@ struct MainView: View {
                 ProjectDetailView(folder: URL(fileURLWithPath: path, isDirectory: true), section: section).id(path + section.rawValue)
             case .projects:
                 NoProjectView()
+            case .appStoreApp(let id):
+                AppStoreAppView(appID: id).id(id)
             case .agents: AgentsView()
             case .activity: ActivityView()
             case .remote: RemoteView()
@@ -103,6 +109,18 @@ struct MainView: View {
         .sheet(isPresented: Bindable(model).showsOnboarding, onDismiss: model.finishOnboarding) {
             OnboardingView()
                 .environment(model)
+        }
+        .sheet(isPresented: Bindable(model).showsNewSimulator) {
+            NewSimulatorSheet()
+                .environment(model)
+        }
+        .alert(
+            "Simulator or Emulator",
+            isPresented: Binding(get: { model.virtualProblem != nil }, set: { if !$0 { model.virtualProblem = nil } })
+        ) {
+            Button("OK") { model.virtualProblem = nil }
+        } message: {
+            Text(model.virtualProblem ?? "")
         }
         .sheet(isPresented: Bindable(model).showsNewProject) {
             NewProjectSheet { folder in storedPane = Pane.project(folder.path, .overview).rawValue }
@@ -117,6 +135,7 @@ struct MainView: View {
 private struct Sidebar: View {
     @Environment(AppModel.self) private var model
     @Binding var selection: Pane?
+    @AppStorage("showsNotRunning") private var showsNotRunning = false
 
     var body: some View {
         List(selection: $selection) {
@@ -160,13 +179,34 @@ private struct Sidebar: View {
                 }
             }
             let emulated = model.devices.filter(\.isEmulated)
-            if !emulated.isEmpty {
+            // Everything not listed above: shut down, starting, or running but not picked up yet.
+            let stopped = model.virtualDevices.filter { virtual in !emulated.contains { $0.id == virtual.deviceID } }
+            if model.settings.emulatorsEnabled, !emulated.isEmpty || !model.virtualDevices.isEmpty {
                 Section("Simulators and Android") {
                     ForEach(emulated) { device in
                         NavigationLink(value: Pane.device(device.id)) {
                             DeviceRow(device: device)
                         }
+                        .contextMenu {
+                            if let virtual = model.virtualDevice(running: device.id) {
+                                Button("Shut Down") { model.virtualDevice(.shutDown, virtual) }
+                                    .disabled(model.virtualBusy.contains(virtual.id))
+                            }
+                        }
                     }
+                    if !stopped.isEmpty {
+                        DisclosureGroup("Not Running", isExpanded: $showsNotRunning) {
+                            ForEach(stopped) { device in
+                                VirtualDeviceRow(device: device)
+                                    .selectionDisabled()
+                            }
+                        }
+                    }
+                    Button { model.showsNewSimulator = true } label: {
+                        Label("New Simulator…", systemImage: "plus")
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
                 }
             }
             ForEach(model.otherMacs) { mac in
@@ -181,6 +221,7 @@ private struct Sidebar: View {
                     }
                 }
             }
+            AppStoreSidebarSection()
             Section("Agents") {
                 NavigationLink(value: Pane.agents) {
                     Label("Connect", systemImage: "point.3.connected.trianglepath.dotted")
@@ -201,6 +242,10 @@ private struct Sidebar: View {
                 Menu {
                     Button("New Project…") { model.showNewProject() }
                     Button("Open Project…") { ProjectActions.open(model) { selection = $0 } }
+                    if model.settings.emulatorsEnabled {
+                        Divider()
+                        Button("New Simulator…") { model.showsNewSimulator = true }
+                    }
                 } label: {
                     Label("Add Project", systemImage: "plus")
                 }

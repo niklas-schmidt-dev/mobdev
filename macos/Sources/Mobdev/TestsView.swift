@@ -5,27 +5,42 @@ import SwiftUI
 /// A project's tests: tests/*.json (or Maestro .yaml) next to the mobdev.json naming the app. Run
 /// them on a device and see each result with its steps, the failure's screenshot and the video.
 /// Agents write and run the same tests through list_tests, save_test, run_tests and test_result,
-/// and `Mobdev test` runs them in CI.
+/// and `Mobdev test` runs them in CI. The Native part runs the app's own XCTest or Gradle suite
+/// (see `NativeTestsView`).
 struct ProjectTestsView: View {
+    /// Mobdev's tests in tests/, or the app's own suite through Xcode or Gradle.
+    enum Kind: String {
+        case mobdev, native
+    }
+
     @Environment(AppModel.self) private var model
     let folder: URL
     @State private var project: TestProject?
     @State private var problem: String?
     @State private var deviceID = ""
+    /// Why a native run did not start.
+    @State private var nativeProblem: String?
     /// The test last selected, by file name, so the window reopens on it.
     @AppStorage("testsSelectedTest") private var storedTest = ""
+    @AppStorage("testsKind") private var kind = Kind.mobdev
 
     private var selectedTest: Binding<String?> {
         Binding(get: { storedTest.isEmpty ? nil : storedTest }, set: { storedTest = $0 ?? "" })
     }
 
     private var readyDevices: [DeviceState] { model.devices.filter(\.isReady) }
-    private var device: DeviceState? { readyDevices.first { $0.id == deviceID } ?? readyDevices.first }
+    /// Xcode and Gradle need no Bluetooth: a connected iPhone runs native tests too.
+    private var nativeDevices: [DeviceState] { model.devices.filter { $0.isReady || $0.isConnected } }
+    private var devices: [DeviceState] { kind == .native ? nativeDevices : readyDevices }
+    private var device: DeviceState? { devices.first { $0.id == deviceID } ?? devices.first }
     private var running: Bool { project.map { model.runningTests.contains($0.folder.path) } ?? false }
+    private var nativeRunning: Bool { model.isRunningNativeTests(folder) }
 
     var body: some View {
         Group {
-            if let project, project.tests.isEmpty {
+            if kind == .native, let project {
+                NativeTestsView(project: project, devices: nativeDevices, deviceID: $deviceID)
+            } else if let project, project.tests.isEmpty {
                 ContentUnavailableView {
                     Label("No Tests Yet", systemImage: "checklist")
                 } description: {
@@ -49,16 +64,39 @@ struct ProjectTestsView: View {
         }
         .toolbar { toolbar }
         .task(id: "\(folder.path) \(model.projectRevision(folder))") { reload() }
+        .alert("Native Tests Did Not Start", isPresented: Binding(get: { nativeProblem != nil }, set: { if !$0 { nativeProblem = nil } })) {
+            Button("OK") { nativeProblem = nil }
+        } message: {
+            Text(nativeProblem ?? "")
+        }
     }
 
     @ToolbarContentBuilder private var toolbar: some ToolbarContent {
+        ToolbarItem(placement: .principal) {
+            Picker("Tests", selection: $kind) {
+                Text("Mobdev Tests").tag(Kind.mobdev)
+                Text("Native Tests").tag(Kind.native)
+            }
+            .pickerStyle(.segmented)
+            .help("Mobdev's tests in tests/, or the app's own XCTest or Gradle suite")
+        }
         ToolbarItemGroup {
             Button("Reload", systemImage: "arrow.clockwise") { reload() }
                 .help("Read the project's files again")
                 .disabled(running)
             // The device is chosen in the project's header: the toolbar draws a picker's menu
             // but not its title, so the choice would be invisible here.
-            if running {
+            if kind == .native {
+                if nativeRunning {
+                    Button("Stop", systemImage: "stop.fill") { model.stopNativeTests(folder) }
+                        .help("Stop xcodebuild or Gradle; the tests that finished keep their results")
+                } else {
+                    // Without a device a Gradle unit-test task still runs, on the Mac; others say why not.
+                    Button("Run", systemImage: "play.fill") { runNative() }
+                        .disabled(project == nil)
+                        .help(device.map { "Run the app's own tests on \($0.name)" } ?? "Run the app's own tests; without a device only Gradle unit tests, on this Mac")
+                }
+            } else if running {
                 Button("Stop", systemImage: "stop.fill") { project.map(model.stopTests) }
                     .help("Stop after the current step")
             } else {
@@ -85,6 +123,11 @@ struct ProjectTestsView: View {
     private func run() {
         guard let project, let device else { return }
         model.runTests(project, on: device.id)
+    }
+
+    private func runNative() {
+        guard let project else { return }
+        Task { nativeProblem = await model.runNativeTests(project, on: device?.id) }
     }
 }
 
@@ -145,29 +188,10 @@ private struct ProjectView: View {
                     .foregroundStyle(.secondary)
             }
             Spacer()
-            devicePicker
+            RunDevicePicker(devices: devices, deviceID: $deviceID, disabled: running)
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 12)
-    }
-
-    /// What the device picker lists: the ready devices, or one entry saying there is none.
-    private struct DeviceOption: Identifiable {
-        let id: String
-        let name: String
-    }
-
-    private var devicePicker: some View {
-        let options = devices.isEmpty
-            ? [DeviceOption(id: "", name: "No Device Ready")] : devices.map { DeviceOption(id: $0.id, name: $0.name) }
-        let chosen = devices.first { $0.id == deviceID }?.id ?? devices.first?.id ?? ""
-        return Picker("Run on", selection: Binding(get: { chosen }, set: { deviceID = $0 })) {
-            ForEach(options) { Text($0.name).tag($0.id) }
-        }
-        .pickerStyle(.menu)
-        .fixedSize()
-        .disabled(running || devices.isEmpty)
-        .help(devices.isEmpty ? "Connect a device or boot a simulator first" : "The device the tests run on")
     }
 
     @ViewBuilder private var detail: some View {

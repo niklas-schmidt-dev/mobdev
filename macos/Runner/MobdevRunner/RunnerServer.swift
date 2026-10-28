@@ -79,7 +79,7 @@ final class RunnerServer {
     }
 
     private func respond(to request: Request, on connection: NWConnection) {
-        guard token.isEmpty || request.headers["authorization"] == "Bearer \(token)" else {
+        guard !token.isEmpty, request.headers["authorization"] == "Bearer \(token)" else {
             send(.error("Wrong or missing token.", status: 401), on: connection)
             return
         }

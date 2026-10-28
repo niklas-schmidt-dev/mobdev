@@ -187,6 +187,28 @@ public enum CallCommand {
                 "\(options.tool) needs the running Mobdev app: without it every call is a process of its own, and the capture ends with it (on Android, with its proxy). Open Mobdev, or put the capture into a flow, which runs in one process.")
             return nil
         }
+        // Simulators and AVDs that are not running need no device, and the simulators Mobdev made
+        // are remembered in Mobdev's folder, not this process's temporary one.
+        if VirtualDeviceTools.isTool(options.tool) {
+            let tools = DeviceTools(hub: DeviceHub(keyboardLayout: .us) {})
+            do {
+                return body(try await tools.call(options.tool, arguments: .object(options.arguments), source: "cli", screenshotByDefault: false))
+            } catch {
+                output(String(describing: error))
+                return nil
+            }
+        }
+        // App Store Connect needs no device, and its key is in Mobdev's folder, which the device
+        // calls below swap for a temporary one.
+        if AppStoreTools.isAppStoreTool(options.tool) {
+            var arguments = options.arguments
+            arguments["device"] = nil
+            let result = await ProjectScope.$pinned.withValue(project(options)) {
+                await AppStoreTools.call(
+                    options.tool, Arguments(.object(arguments)), connect: AppStoreConnect(), projects: ProjectList(), source: "cli")
+            }
+            return body(result)
+        }
         let home = CommandSupport.home(artifacts: nil)
         defer { try? FileManager.default.removeItem(at: home.url) }
         guard let connection = await CommandSupport.connect(device: options.device, wait: 10, output: output) else {
@@ -208,19 +230,24 @@ public enum CallCommand {
                         options.tool, arguments: .object(arguments), source: "cli", screenshotByDefault: false)
                 }
             }
-            var body: [String: JSONValue] = ["ok": .bool(!result.isError), "text": .string(result.text)]
-            if let data = result.data { body["data"] = data }
-            if let image = result.image {
-                body["screenshot"] = [
-                    "mime_type": .string(image.mimeType), "width": .number(Double(image.width)),
-                    "height": .number(Double(image.height)), "data": .string(image.data.base64EncodedString()),
-                ]
-            }
-            return .object(body)
+            return body(result)
         } catch {
             output(String(describing: error))
             return nil
         }
+    }
+
+    /// A result as the app's HTTP API answers it.
+    static func body(_ result: ToolOutput) -> JSONValue {
+        var body: [String: JSONValue] = ["ok": .bool(!result.isError), "text": .string(result.text)]
+        if let data = result.data { body["data"] = data }
+        if let image = result.image {
+            body["screenshot"] = [
+                "mime_type": .string(image.mimeType), "width": .number(Double(image.width)),
+                "height": .number(Double(image.height)), "data": .string(image.data.base64EncodedString()),
+            ]
+        }
+        return .object(body)
     }
 
     /// --project, else MOBDEV_PROJECT, else the project of the current folder.

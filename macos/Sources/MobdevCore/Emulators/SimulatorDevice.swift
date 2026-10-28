@@ -184,6 +184,7 @@ public final class SimulatorDevice: Device, @unchecked Sendable {
     /// Opens an app by its name or bundle ID, without Spotlight.
     public func openApp(named name: String) async throws -> String? {
         let app = try await AppMatcher.find(name, in: control.apps(all: true))
+        try AppBlocklist.checkResolved(name: app.name, bundleID: app.bundleID)
         try await control.activate(app.bundleID)
         return "Opened \(app.name) (\(app.bundleID))."
     }

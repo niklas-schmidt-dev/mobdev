@@ -72,7 +72,8 @@ public struct DeviceSummary: Sendable, Equatable, Codable {
             id: id, name: name, productType: model, osVersion: osVersion, buildVersion: "", deviceClass: deviceClass)
     }
 
-    /// `bluetooth` means "input connected": Bluetooth for iPhones, always for simulators and Android.
+    /// `bluetooth` means "input connected": Mobdev Runner or Bluetooth for iPhones, always for
+    /// simulators and Android.
     /// A simulator's model name says so, since the relays only pass these fields.
     public init(_ device: any Device) {
         let status = device.status()
@@ -93,24 +94,31 @@ public struct DeviceSummary: Sendable, Equatable, Codable {
 /// an Android device.
 public final class DeviceTools: ToolCalling {
     private let hub: DeviceHub
-    private let emulators: EmulatorHub?
+    let emulators: EmulatorHub?
+    /// Every simulator and AVD on this Mac, running or not, for the virtual device tools.
+    public let virtualDevices: VirtualDevices
     private let settleDelay: TimeInterval
     private let uploads: UploadStore
     /// The projects every device's tools save into; the app fills it from its settings.
     public let projects: ProjectList
+    /// App Store Connect with the key stored on this Mac, for the appstore_ tools and the app's pages.
+    public let appStore: AppStoreConnect
     /// Per device, with the object it was made for: a rescan can replace a device under the same id.
     private let tools = Locked<[String: (device: any Device, tools: PhoneTools)]>([:])
 
     /// `uploads` is where `install_app` finds an `upload`: the store the API router receives them in.
     public init(
         hub: DeviceHub, emulators: EmulatorHub? = nil, settleDelay: TimeInterval = 0.6, uploads: UploadStore = .shared,
-        projects: ProjectList = ProjectList()
+        projects: ProjectList = ProjectList(), virtualDevices: VirtualDevices = VirtualDevices(),
+        appStore: AppStoreConnect = AppStoreConnect()
     ) {
         self.hub = hub
         self.emulators = emulators
+        self.virtualDevices = virtualDevices
         self.settleDelay = settleDelay
         self.uploads = uploads
         self.projects = projects
+        self.appStore = appStore
     }
 
     public static let definitions: [ToolDefinition] = {
@@ -124,7 +132,8 @@ public final class DeviceTools: ToolCalling {
             description:
                 "The iPhones and iPads on this Mac, booted iOS simulators and Android emulators and phones, with id, name, model, system version and whether each is ready. Pass `device` to the other tools to pick one.",
             inputSchema: ["type": "object", "properties": [:]], readOnly: true)
-        return [listDevices] + ProjectTools.definitions + SecretTools.definitions
+        return [listDevices] + VirtualDeviceTools.definitions + ProjectTools.definitions + SecretTools.definitions
+            + AppStoreTools.definitions
             + PhoneTools.definitions.map { definition in
                 guard case .object(var schema) = definition.inputSchema,
                     case .object(var properties)? = schema["properties"]
@@ -149,6 +158,13 @@ public final class DeviceTools: ToolCalling {
             if ProjectTools.isProjectTool(name) { return try ProjectTools.call(name, Arguments(arguments ?? [:]), projects: projects) }
             // Nor do the secrets' names.
             if SecretTools.isSecretTool(name) { return SecretTools.call(name) }
+            // Nor simulators and AVDs that are not running.
+            if VirtualDeviceTools.isTool(name) { return try await callVirtualDeviceTool(name, Arguments(arguments ?? [:]), source: source) }
+            // Nor App Store Connect.
+            if AppStoreTools.isAppStoreTool(name) {
+                return await AppStoreTools.call(
+                    name, Arguments(arguments ?? [:]), connect: appStore, projects: projects, source: source)
+            }
             // Only a missing (or null) `device` means "pick for me". A number, an empty string or
             // anything else is a mistake, and guessing could act on the wrong phone.
             let query: String?
@@ -158,6 +174,11 @@ public final class DeviceTools: ToolCalling {
             default: throw ToolFailure("device must be a device id or name from list_devices.")
             }
             if name == "status", query == nil, devices(matching: nil).count != 1 { return overview() }
+            // A Gradle unit-test task runs on the Mac, also with no device to name.
+            if name == "run_native_tests", query == nil, allDevices.isEmpty {
+                return try await PhoneTools(phone: ThisMac(), activity: ActivityLog(), settleDelay: settleDelay, uploads: uploads, projects: projects)
+                    .call(name, arguments: arguments, source: source, screenshotByDefault: false)
+            }
             let device = try resolve(query)
             var remaining = arguments ?? [:]
             if case .object(var object) = remaining {
@@ -201,7 +222,7 @@ public final class DeviceTools: ToolCalling {
     /// iPhones first, then simulators, then Android devices.
     public var allDevices: [any Device] { hub.devices + (emulators?.devices ?? []) }
 
-    private func tools(for device: any Device) -> PhoneTools {
+    func tools(for device: any Device) -> PhoneTools {
         let current = Set(allDevices.map(\.id))
         return tools.withLock { cache in
             cache = cache.filter { current.contains($0.key) }  // Forgotten or shut down devices.
@@ -255,7 +276,14 @@ public final class DeviceTools: ToolCalling {
         if summary.ready { return "ready" }
         let status = device.status()
         if status.screen.isConnected, status.frameSize == nil { return "connected, no picture yet (wake and unlock it)" }
-        if device.kind == .iPhone { return summary.screen ? "screen only, Bluetooth not paired" : "not connected" }
+        if device.kind == .iPhone {
+            guard summary.screen else { return "not connected" }
+            switch status.runner {
+            case .building?, .starting?: return "screen only, Mobdev Runner is starting"
+            case .failed?: return "screen only, Mobdev Runner could not start (see status)"
+            default: return "screen only: needs Developer Mode for Mobdev Runner, or Bluetooth pairing"
+            }
+        }
         return "screen not available yet"
     }
 

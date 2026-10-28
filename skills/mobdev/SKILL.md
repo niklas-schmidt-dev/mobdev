@@ -5,19 +5,27 @@ description: Drive a real iPhone, an iOS simulator or an Android emulator or pho
 
 # Driving an iPhone with Mobdev
 
-Mobdev gives you a real iPhone. The screen comes to the Mac over USB; taps and keys go to the phone
-as a Bluetooth keyboard and pointer. Nothing is installed on the phone, so any app works, including
-App Store apps.
+Mobdev gives you a real iPhone. The screen comes to the Mac over USB. With Developer Mode on the
+iPhone, Mobdev Runner, a small UI test Mobdev keeps running there, taps, swipes, types any text and
+reads the UI tree over the same cable. Without Developer Mode, taps and keys go to the phone as a
+Bluetooth keyboard and pointer. Either way any app works, including App Store apps.
 
 ## Start
 
 1. Call `status`. Work only when it says `Ready.`
    - Screen missing: the phone is locked, asleep or unplugged. Ask the user to unlock it. You
      cannot enter the passcode.
-   - Bluetooth not connected: ask the user to open Settings > Bluetooth on the iPhone, tap the Mac,
-     and turn on Settings > Accessibility > Touch > AssistiveTouch with Snap to Item off.
-   - `Pointer: snaps to items`: swipes would become taps. Ask the user to turn off Snap to Item in
-     Settings > Accessibility > Touch > AssistiveTouch and keep Perform Touch Gestures on.
+   - `Input: Mobdev Runner (Developer Mode)` is the best case: no Bluetooth, pointer or keyboard
+     layout to worry about.
+   - Mobdev Runner starting or failed: it builds and starts by itself on an iPhone in Developer Mode
+     with Xcode signed in; the first build takes a minute or two. Wait, or ask the user to open
+     Diagnose in Mobdev.
+   - Bluetooth not connected (an iPhone without Developer Mode): ask the user to open Settings >
+     Bluetooth on the iPhone, tap the Mac, and turn on Settings > Accessibility > Touch >
+     AssistiveTouch with Snap to Item off.
+   - `Pointer: snaps to items` (Bluetooth only): swipes would become taps. Ask the user to turn off
+     Snap to Item in Settings > Accessibility > Touch > AssistiveTouch and keep Perform Touch
+     Gestures on.
 2. With several iPhones, call `list_devices` and pass `device` (id or name) to every tool.
 3. When you will save anything (tests, flows, screenshots, recordings, crawls), call
    `list_projects` to see which project your calls use; see [Projects](#projects).
@@ -34,7 +42,7 @@ Use the cheapest view that answers your question:
   of this image (long edge 1280 px, origin top-left).
 - `read_screen` returns every visible line of text with its position, from text recognition.
 - `ui_tree` returns every element with role, label, identifier and value, for when you need the
-  identifiers, e.g. to write a test. Simulators, Android and iPhones with the UI tree on.
+  identifiers, e.g. to write a test. Simulators, Android and iPhones in Developer Mode.
 - Actions return a screenshot by default. Pass `"screenshot": false` when you will call `observe`
   next anyway.
 
@@ -45,7 +53,7 @@ Use the cheapest view that answers your question:
 | Press something `observe` listed | `tap_mark` with its number. Marks are where things were at that `observe`; after the screen changed, `observe` again |
 | Press a labelled button or row | `tap_text` with its label. If it appears more than once, the error lists matches; pass `index`. |
 | Press an icon without text | `observe` (it lists icon buttons from the UI tree), or `screenshot` and `tap` its center |
-| Open an app | `open_app` with its name (Spotlight). For your own builds, `launch_app` |
+| Open an app | `open_app` with its name or bundle ID (Spotlight on an iPhone over Bluetooth). For your own builds, `launch_app` |
 | Enter text | `tap` the field, then `type_text`; `submit: true` presses Return |
 | Enter a password or code | `type_secret` with a name from `list_secrets`: you never see the value. Never ask the user for a password to type with `type_text`; ask them to store it in Mobdev's Settings › Secrets |
 | Find a row further down | `scroll_until_visible` with its `text` or `id`; it stops at the end of the list |
@@ -68,11 +76,11 @@ keyboard may be in the way, or the tap hit a neighbour. Do not repeat the same t
   exact text; pass a shorter part of it.
 - A text tool says text recognition failed in macOS: look with `screenshot` and tap by coordinates.
   Where there is a UI tree, the text tools read it instead and say so.
-- Typed text comes out wrong (y and z swapped, wrong symbols): the keyboard layout in Mobdev does not
-  match Settings > General > Keyboard > Hardware Keyboard on the iPhone. Tell the user. Emoji type
-  only with the UI tree on (below).
-- Taps do nothing: AssistiveTouch is off, or the phone locked itself. Suggest Auto-Lock: Never while
-  agents work.
+- Typed text comes out wrong (y and z swapped, wrong symbols) over Bluetooth: the keyboard layout in
+  Mobdev does not match Settings > General > Keyboard > Hardware Keyboard on the iPhone. Tell the
+  user. Emoji type only through Mobdev Runner.
+- Taps do nothing: the phone locked itself, or over Bluetooth AssistiveTouch is off. Suggest
+  Auto-Lock: Never while agents work.
 - `swipe` fails because the pointer snaps to items, or a swipe opened something instead of
   scrolling: Snap to Item is on in AssistiveTouch. Ask the user to turn it off, then swipe again.
 - `wait_for_idle` says the screen kept changing: a video, an animation or a spinner never stops.
@@ -85,6 +93,12 @@ keyboard may be in the way, or the tap hit a neighbour. Do not repeat the same t
 `list_devices` also lists booted iOS simulators and Android emulators and phones. Pass their id or
 name as `device`; without it Mobdev picks the connected iPhone when there is one. They need no
 setup, and the same tools work, with these differences:
+
+- None running, or not the right one? `list_virtual_devices` lists every simulator and AVD on the
+  Mac; `boot_device` starts one and waits until it has booted, `shutdown_device` stops it.
+  `create_simulator` makes one of a type and iOS version (`device_type: "iPhone 17 Pro"`), and
+  `delete_simulator` deletes only what it made. Shut down or delete only what you started, unless
+  the user asks.
 
 - Simulators take keys in their own keyboard layout; Mobdev handles that.
 - On Android, `press_key` with `escape` is Back, and `open_app` matches package names ("Settings"
@@ -203,6 +217,11 @@ failing step and the screen, then fix the test or report the bug. `Mobdev test <
 Action `niklas-schmidt-dev/mobdev/actions/test` does that on a simulator and puts the results in
 the job summary.
 
+The app's own XCTest, Swift Testing or Gradle suite runs with `run_native_tests` on the chosen
+device; do not call xcodebuild or gradlew yourself for that. A long run goes on in the background:
+read it with `native_test_result`, which lists every failure with file and line, and fix the code
+there. `Mobdev test <folder> --native` does the same in CI.
+
 ## Safety
 
 This is the user's own phone, signed in to their accounts. Ask before anything that sends a
@@ -220,5 +239,20 @@ reads their logs and crash reports: `list_apps`, `install_app`, `launch_app`, `s
 `open_url`, `logs`, `crash_reports`. Use the `mobdev-dev-loop` skill for that workflow,
 `mobdev-bug-repro` to reproduce a reported bug, and `mobdev-store-screenshots` for App Store and
 Google Play screenshots. `performance` and `measure_launch` measure an app, with budgets that fail
-the call. For React Native, Expo and Flutter apps (`reload_app`, `dev_menu`, Expo Go, testIDs),
+the call. `record_trace` records an Instruments template (Time Profiler, Allocations, App Launch,
+…) or a Perfetto trace on Android and summarizes the heaviest functions and hangs; `device_load`
+shows what keeps the whole device busy. For React Native, Expo and Flutter apps (`reload_app`, `dev_menu`, Expo Go, testIDs),
 use the `mobdev-react-native` skill.
+
+## App Store Connect
+
+With an App Store Connect key in Mobdev's settings, `appstore_apps`, `appstore_builds`,
+`appstore_testflight`, `appstore_versions` and `appstore_reviews` answer "is my build processed?",
+"which build do testers have?", "is the version in review?" and "what do users complain about?"
+without a device. `app` is a bundle ID; without it the active project's. A missing key or a 403
+means the user has to add or widen the key in Settings › App Store Connect.
+
+`appstore_add_build_to_group`, `appstore_set_what_to_test` and `appstore_reply_to_review` change
+what testers and customers see. Show the user the exact text or build first and ask. They are
+refused until the user turns on "Agents may change App Store Connect"; say so instead of looking
+for another way.

@@ -22,8 +22,12 @@ struct DeviceState: Identifiable, Equatable {
     /// A connected Bluetooth host that may be this iPhone paired again, while its own is away.
     var replacementHost: BluetoothHost? = nil
     var kind: DeviceKind = .iPhone
-    /// Mobdev Runner on an iPhone, for the UI tree; nil until it was turned on once.
+    /// Mobdev Runner on an iPhone, which takes its input in Developer Mode; nil until it was started once.
     var runner: UIRunner.State? = nil
+    /// Whether Mobdev Runner may start on this iPhone, as left under Developer Mode Control.
+    var runnerChoice: RunnerChoice = .automatic
+    /// Developer Mode as Xcode last reported it; nil while unknown.
+    var developerMode: Bool? = nil
 
     var modelName: String { info?.modelName ?? kind.label }
     var isConnected: Bool { status.screen.isConnected }
@@ -33,6 +37,9 @@ struct DeviceState: Identifiable, Equatable {
     /// "iPad" or "iPhone", for text about this device.
     var noun: String { info?.deviceClass == "iPad" ? "iPad" : "iPhone" }
 
+    /// Whether Mobdev Runner is on its way to taking this iPhone's input: building or starting.
+    var runnerStarting: Bool { runner == .building || runner == .starting }
+
     /// One line for the window subtitle, sidebar and menu bar.
     var statusLine: String {
         if isEmulated { return isReady ? "Ready for agents" : "Starting" }
@@ -40,12 +47,18 @@ struct DeviceState: Identifiable, Equatable {
         if case .locked = status.screen { return "Unlock the \(noun) to see its screen" }
         // Found over USB, but no picture has arrived yet.
         if isConnected, status.frameSize == nil { return "Waiting for the screen" }
+        if isConnected, !isReady {
+            if runnerStarting { return "Starting Developer Mode control" }
+            if case .failed = runner { return "Developer Mode control could not start" }
+        }
         return switch (status.screen, status.bluetooth) {
         case (.cameraDenied, _): "Camera access needed"
         case (.failed, _): "Screen capture failed"
+        case (.connected, _) where isReady: "Ready for agents"
         case (.connected, .connected), (.connected, .resting): "Ready for agents"
         case (.connected, .unauthorized): "Bluetooth access needed"
         case (.connected, .poweredOff): "Bluetooth is off"
+        case (.connected, _) where developerMode == false: "Turn on Developer Mode, or pair over Bluetooth"
         case (.connected, _): "Pair over Bluetooth to control"
         default: onUSB ? "Unlock the \(noun) to see its screen" : "Not connected"
         }
@@ -78,6 +91,14 @@ final class AppModel {
     private(set) var ambient: [String: [Color]] = [:]
     /// Your other Macs and their iPhones, from the hosted relay. Empty without Remote Access.
     private(set) var otherMacs: [RemoteMac] = []
+    /// Every simulator and AVD on this Mac, running or not, while simulators and Android are shown.
+    private(set) var virtualDevices: [VirtualDevice] = []
+    /// Simulators and AVDs being started, shut down or deleted from the sidebar.
+    private(set) var virtualBusy: Set<String> = []
+    /// What went wrong with the last of them, for an alert.
+    var virtualProblem: String?
+    var showsNewSimulator = false
+    @ObservationIgnored private var listingVirtualDevices = false
     /// Devices watched through the relay's live view right now, with who watches.
     private(set) var liveSessions: [LiveStreams.Session] = []
     /// The setup assistant. It opens by itself until macOS has asked for camera and Bluetooth
@@ -85,6 +106,8 @@ final class AppModel {
     var showsOnboarding = false
     private(set) var screenStarted = false
     private(set) var bluetoothStarted = false
+    /// The teams with an Apple Development certificate on this Mac, newest first; nil until read.
+    private(set) var teams: [DevelopmentTeam]?
     private(set) var token: String
     private(set) var relaySecret: String
 
@@ -93,6 +116,8 @@ final class AppModel {
     let emulators: EmulatorHub
     /// The tools agents call, which the app's own controls call too.
     @ObservationIgnored let tools: DeviceTools
+    /// The App Store Connect key and apps, with the client the tools use.
+    let appStore: AppStoreModel
     @ObservationIgnored private let router: APIRouter
     @ObservationIgnored private let server: HTTPServer
     /// Where `Mobdev mcp` connects: a Unix socket in the private data directory.
@@ -102,6 +127,8 @@ final class AppModel {
     @ObservationIgnored private let tokenBox: Locked<String>
     @ObservationIgnored private let portBox = Locked<UInt16>(0)
     @ObservationIgnored private var started = false
+    /// Reads Developer Mode of plugged-in iPhones, so Mobdev Runner starts by itself.
+    @ObservationIgnored private let autoStart: RunnerAutoStart
     @ObservationIgnored private var observedLogs = Set<ObjectIdentifier>()
 
     init() {
@@ -128,6 +155,7 @@ final class AppModel {
         projectNames = Self.names(of: projectList.known)
         let tools = DeviceTools(hub: hub, emulators: emulators, projects: projectList)
         self.tools = tools
+        appStore = AppStoreModel(connect: tools.appStore)
         let portBox = self.portBox
         let router = APIRouter(tools: tools, token: { tokenBox.get() }, port: { portBox.get() })
         self.router = router
@@ -145,10 +173,15 @@ final class AppModel {
             relaySignal.fire()
         }
 
+        autoStart = RunnerAutoStart { udid in
+            await DeviceControl(udid: udid, reportsFolder: MobdevPaths.crashReportsFolder).developerModeEnabled()
+        }
         signal.connect { [weak self] in Task { @MainActor in self?.refresh() } }
         UIRunners.shared.onChange { signal.fire() }
         // Agents open and create projects too; the list in the tools is the one that counts.
         projectList.onChange { [weak self] in Task { @MainActor in self?.refreshProjects() } }
+        // Native test runs go on by themselves, started here or by an agent; their progress shows in Tests.
+        NativeTestRuns.onChange { [weak self] folder in Task { @MainActor in self?.refreshNativeRun(folder) } }
         projectList.onOutput { [weak self] folder, _ in
             Task { @MainActor in
                 guard let self else { return }
@@ -177,8 +210,11 @@ final class AppModel {
         started = true
         try? settings.save()
         if DeviceHub.screenAccessDetermined { startScreen() }
+        // Bluetooth is the way for iPhones without Developer Mode; macOS has asked once it was set up.
         if DeviceHub.bluetoothAccessDetermined { startBluetooth() }
-        showsOnboarding = (!screenStarted || !bluetoothStarted) && !settings.iPhoneSetupDeferred
+        showsOnboarding =
+            (!screenStarted || (settings.usesBluetooth && !bluetoothStarted)) && !settings.iPhoneSetupDeferred
+        Task { await refreshTeams() }
         do {
             try await server.start()
             portBox.set(server.port)
@@ -198,6 +234,12 @@ final class AppModel {
         if settings.relayEnabled { startRelay() }
         if settings.emulatorsEnabled { emulators.start() }
         refresh()
+        Task { [weak self] in
+            while let self {
+                await self.refreshVirtualDevices()
+                try? await Task.sleep(for: .seconds(30))
+            }
+        }
         Task.detached(priority: .utility) { TextRecognizer.warmUp() }
         // Builds agents uploaded and left unused for a day; a new upload also clears them.
         Task.detached(priority: .utility) { UploadStore.shared.removeExpired() }
@@ -253,17 +295,25 @@ final class AppModel {
         reconcileRunners(hardware)
         let states =
             hardware.map { device in
-                DeviceState(
+                let udid = device.info?.id ?? device.id
+                return DeviceState(
                     id: device.id, name: device.name, info: device.info, status: device.status(), onUSB: device.isOnUSB,
                     activityCount: device.activity.all.count, replacementHost: hub.replacementHost(for: device.id),
-                    runner: device.runner?.state)
+                    runner: device.runner?.state, runnerChoice: settings.runnerChoice(for: udid),
+                    developerMode: autoStart.knownDeveloperMode(of: udid))
             }
             + emulated.map { device in
                 DeviceState(
                     id: device.id, name: device.name, info: device.info, status: device.status(), onUSB: true,
                     activityCount: device.activity.all.count, kind: device.kind)
             }
-        if states != devices { devices = states }
+        if states != devices {
+            // A simulator or emulator started or stopped, maybe outside Mobdev.
+            if states.filter(\.isEmulated).map(\.id) != devices.filter(\.isEmulated).map(\.id) {
+                Task { await refreshVirtualDevices() }
+            }
+            devices = states
+        }
         let all: [any Device] = hardware + emulated
         for device in all where !observedLogs.contains(ObjectIdentifier(device.activity)) {
             observedLogs.insert(ObjectIdentifier(device.activity))
@@ -365,6 +415,64 @@ final class AppModel {
         settings.emulatorsEnabled = enabled
         save()
         if enabled { emulators.start() } else { emulators.stop() }
+        Task { await refreshVirtualDevices() }
+    }
+
+    // MARK: Simulators and AVDs
+
+    func refreshVirtualDevices() async {
+        guard settings.emulatorsEnabled else {
+            virtualDevices = []
+            return
+        }
+        // One list at a time: reading the AVD folder can block until macOS has asked for access to
+        // the volume it is on, and every refresh would otherwise hold another thread meanwhile.
+        guard !listingVirtualDevices else { return }
+        listingVirtualDevices = true
+        defer { listingVirtualDevices = false }
+        let list = await tools.virtualDevices.list().devices
+        if list != virtualDevices { virtualDevices = list }
+    }
+
+    /// Starts a simulator or AVD, shuts one down, or deletes a simulator Mobdev made, through the
+    /// tools agents use, so a run that holds the device is not cut short.
+    func virtualDevice(_ action: VirtualDeviceAction, _ device: VirtualDevice) {
+        guard !virtualBusy.contains(device.id) else { return }
+        virtualBusy.insert(device.id)
+        let (tool, arguments): (String, JSONValue) =
+            switch action {
+            case .start(let window): ("boot_device", ["id": .string(device.id), "window": .bool(window)])
+            case .shutDown: ("shutdown_device", ["id": .string(device.id)])
+            case .delete: ("delete_simulator", ["id": .string(device.id)])
+            }
+        Task {
+            await callVirtualTool(tool, arguments)
+            virtualBusy.remove(device.id)
+        }
+    }
+
+    /// The running simulator or emulator with this device id.
+    func virtualDevice(running id: String) -> VirtualDevice? {
+        virtualDevices.first { $0.deviceID == id }
+    }
+
+    func createSimulator(type: SimulatorCatalog.DeviceType, runtime: SimulatorCatalog.Runtime, name: String, boot: Bool) {
+        var arguments: [String: JSONValue] = [
+            "device_type": .string(type.id), "runtime": .string(runtime.id), "boot": .bool(boot),
+        ]
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty { arguments["name"] = .string(trimmed) }
+        Task { await callVirtualTool("create_simulator", .object(arguments)) }
+    }
+
+    private func callVirtualTool(_ tool: String, _ arguments: JSONValue) async {
+        do {
+            let result = try await tools.call(tool, arguments: arguments, source: "app", screenshotByDefault: false)
+            if result.isError { virtualProblem = result.text }
+        } catch {
+            virtualProblem = String(describing: error)
+        }
+        await refreshVirtualDevices()
     }
 
     /// Apps agents may not open, by name or bundle ID. Empty entries are dropped.
@@ -372,6 +480,12 @@ final class AppModel {
         settings.blockedApps = apps.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
         save()
         AppBlocklist.reload()
+    }
+
+    /// Whether agents may add builds to TestFlight groups, set What to Test and reply to reviews.
+    func setAppStoreAgentChanges(_ allowed: Bool) {
+        settings.appStoreAgentChanges = allowed
+        save()
     }
 
     func forget(_ id: String) { hub.forget(id) }
@@ -425,7 +539,9 @@ final class AppModel {
     /// known, each drag is followed by a check that moves the pointer without clicking; the setup
     /// panel shows the result.
     func checkPointerAfterDrag(_ id: String, at point: NormalizedPoint) {
-        guard let device = hardware(id), device.status().pointer != .follows, !checkingPointer.contains(id) else {
+        guard let device = hardware(id), device.status().input == .bluetooth, device.status().pointer != .follows,
+            !checkingPointer.contains(id)
+        else {
             return
         }
         checkingPointer.insert(id)
@@ -448,7 +564,8 @@ final class AppModel {
     private func checkPointersByThemselves() {
         for device in hub.devices {
             let status = device.status()
-            guard status.isReady else {
+            // Mobdev Runner needs no pointer.
+            guard status.isReady, status.input == .bluetooth else {
                 automaticChecks[device.id] = nil
                 continue
             }
@@ -482,12 +599,21 @@ final class AppModel {
     }
 
     /// Closes the setup assistant. Skipped steps start anyway, so macOS asks for what is missing,
-    /// unless the welcome page chose simulators and Android only.
+    /// unless the welcome page chose simulators and Android only. Bluetooth only on the way without
+    /// Developer Mode.
     func finishOnboarding() {
         showsOnboarding = false
         guard !settings.iPhoneSetupDeferred else { return }
         startScreen()
-        startBluetooth()
+        if settings.usesBluetooth { startBluetooth() }
+    }
+
+    /// The setup assistant's choice between Developer Mode (Mobdev Runner) and, without it, the
+    /// Bluetooth keyboard and pointer.
+    func setUsesBluetooth(_ uses: Bool) {
+        guard uses != settings.usesBluetooth else { return }
+        settings.usesBluetooth = uses
+        save()
     }
 
     /// "Set Up iPhone" on the welcome page: the iPhone steps follow, and their prompts are wanted.
@@ -513,45 +639,67 @@ final class AppModel {
         Task { try? await device.move(to: NormalizedPoint(x: 0.5, y: 0.5)) }
     }
 
-    // MARK: UI tree on iPhones
+    // MARK: Developer Mode control
 
-    /// Turns the UI tree on or off for an iPhone, for good: Mobdev Runner then starts whenever the
-    /// iPhone is connected (see `reconcileRunners`).
-    func setUITree(_ on: Bool, for id: String) {
+    /// Turns Mobdev Runner on or off for an iPhone, for good. On, it starts whenever the iPhone is
+    /// connected, also before Xcode reports Developer Mode; off, input goes over Bluetooth.
+    func setRunner(_ on: Bool, for id: String) {
         guard let udid = hardware(id)?.info?.id else { return }
-        settings.runnerDevices.removeAll { $0 == udid }
-        if on { settings.runnerDevices.append(udid) }
+        settings.setRunnerChoice(on ? .on : .off, for: udid)
         save()
         if on { refresh() } else { UIRunners.shared.runner(for: udid)?.stop() }
     }
 
-    /// Builds and starts Mobdev Runner again, after it failed.
-    func restartUITree(_ id: String) {
+    /// Builds and starts Mobdev Runner again after it failed, at once: without waiting for
+    /// Developer Mode to be read again.
+    func restartRunner(_ id: String) {
         guard let udid = hardware(id)?.info?.id else { return }
-        UIRunners.shared.runner(for: udid)?.stop()
+        let runner = UIRunners.shared.runner(for: udid, simulator: false)
+        runner.stop()
+        runner.start(team: settings.runnerTeam)
         refresh()
     }
 
-    /// The development team that signs Mobdev Runner. A runner already on starts again with it.
+    /// The development team that signs Mobdev Runner. Runners that build, start or run start again with it.
     func setRunnerTeam(_ team: String) {
         guard team != settings.runnerTeam else { return }
         settings.runnerTeam = team
         save()
-        for udid in settings.runnerDevices {
-            if let runner = UIRunners.shared.runner(for: udid), runner.state != .off { runner.start(team: team) }
+        for device in hub.devices {
+            if let runner = device.runner, runner.state != .off { runner.start(team: team) }
         }
+        refresh()
     }
 
-    /// Starts Mobdev Runner on the connected iPhones that have the UI tree on, and stops it on the
-    /// ones that left. One that failed stays so until Try Again or until it is plugged in again.
+    /// Reads the development teams from the keychain's certificates (no prompt) and picks the
+    /// newest when none is chosen, so Mobdev Runner can start by itself.
+    func refreshTeams() async {
+        let found = await Task.detached { DevelopmentTeam.inKeychain() }.value
+        if found != teams { teams = found }
+        if !UIRunner.isTeamID(settings.runnerTeam), let first = found.first { setRunnerTeam(first.id) }
+    }
+
+    /// Starts Mobdev Runner on connected iPhones that may have it (see `RunnerAutoStart`), and stops
+    /// it on the ones that left. One that failed stays so until Try Again or until it is plugged in
+    /// again.
     private func reconcileRunners(_ hardware: [HardwareDevice]) {
         for device in hardware {
-            guard let udid = device.info?.id, settings.runnerDevices.contains(udid) else { continue }
-            let runner = UIRunners.shared.runner(for: udid, simulator: false)
-            if device.isOnUSB, runner.state == .off {
-                runner.start(team: settings.runnerTeam)
-            } else if !device.isOnUSB, runner.state != .off {
-                runner.stop()
+            guard let udid = device.info?.id else { continue }
+            let runner = UIRunners.shared.runner(for: udid)
+            guard device.isOnUSB else {
+                if let runner, runner.state != .off { runner.stop() }
+                autoStart.forget(udid)
+                continue
+            }
+            // run_native_tests has the iPhone's XCTest session for now.
+            guard (runner?.state ?? .off) == .off, !UIRunners.shared.isPaused(udid) else { continue }
+            let choice = settings.runnerChoice(for: udid)
+            let developerMode =
+                choice == .automatic
+                ? autoStart.developerMode(of: udid) { [weak self] in Task { @MainActor in self?.refresh() } } : nil
+            if RunnerAutoStart.shouldStart(choice: choice, developerMode: developerMode, team: settings.runnerTeam) {
+                Log.info("runner for \(udid): starting (\(choice == .on ? "turned on" : "Developer Mode is on"))")
+                UIRunners.shared.runner(for: udid, simulator: false).start(team: settings.runnerTeam)
             }
         }
     }
@@ -866,6 +1014,44 @@ final class AppModel {
     /// Stops after the current step; what ran so far is kept as the run's result.
     func stopTests(_ project: TestProject) { testTasks[project.folder.path]?.cancel() }
 
+    /// Each project's native test run in progress, else its newest one, by normalized folder path.
+    private(set) var nativeResults: [String: NativeTestResult] = [:]
+
+    func nativeResult(_ folder: URL) -> NativeTestResult? { nativeResults[ProjectList.normalized(folder).path] }
+
+    func isRunningNativeTests(_ folder: URL) -> Bool { nativeResult(folder)?.running == true }
+
+    /// Reads a project's native run again: the one going on, else the newest saved one.
+    func refreshNativeRun(_ folder: URL) {
+        let key = ProjectList.normalized(folder).path
+        if let running = NativeTestRuns.running(for: folder) {
+            nativeResults[key] = running.snapshot
+        } else if let project = try? TestProject.load(folder) {
+            nativeResults[key] = NativeTestRuns.result(for: project)
+        }
+    }
+
+    /// Runs the project's native suite on a device through `run_native_tests`, as an agent would,
+    /// and returns at once; progress arrives through `NativeTestRuns.onChange`. Nil, or why the
+    /// run could not start.
+    func runNativeTests(_ project: TestProject, on device: String?) async -> String? {
+        let arguments: [String: JSONValue] = ["project": .string(project.folder.path), "wait": 0]
+        // Without a device a Gradle unit-test task still runs, on the Mac.
+        let output: ToolOutput
+        if let device {
+            output = await run("run_native_tests", on: device, arguments)
+        } else {
+            output =
+                (try? await tools.call("run_native_tests", arguments: .object(arguments), source: "app", screenshotByDefault: false))
+                ?? ToolOutput(text: "The tests did not start.", isError: true)
+        }
+        refreshNativeRun(project.folder)
+        return output.isError ? output.text : nil
+    }
+
+    /// Stops xcodebuild or Gradle; the tests that finished stay in the run's results.
+    func stopNativeTests(_ folder: URL) { NativeTestRuns.running(for: folder)?.cancel() }
+
     // MARK: Flows
 
     /// Devices recording a flow. The steps themselves live with the device's tools, which record
@@ -965,7 +1151,7 @@ final class AppModel {
         }
     }
 
-    /// A click or drag in a simulator's or Android device's screen.
+    /// A click in a simulator's or Android device's screen, or an iPhone's through Mobdev Runner.
     func tap(_ id: String, at point: NormalizedPoint) {
         guard let device = device(id) else { return }
         recordTap(id, at: point)
@@ -983,6 +1169,26 @@ final class AppModel {
         guard let device = device(id) else { return }
         recordKey(id, stroke)
         enqueue(id) { try? await device.press(stroke) }
+    }
+
+    /// Wheel steps from an iPhone's mirror through Mobdev Runner, as a swipe. Like the wheel over
+    /// Bluetooth, it is not recorded.
+    func scroll(_ id: String, at point: NormalizedPoint, ticks: Int, sideways: Bool) {
+        guard let device = device(id) else { return }
+        enqueue(id) {
+            if sideways { try? await device.pan(at: point, ticks: ticks) } else { try? await device.scroll(at: point, ticks: ticks) }
+        }
+    }
+
+    /// Whole gestures for an iPhone's mirror while Mobdev Runner takes its input; nil over Bluetooth.
+    func mirrorActions(_ id: String) -> MirrorActions? {
+        guard state(id)?.status.input == .runner else { return nil }
+        return MirrorActions(
+            tap: { [weak self] in self?.tap(id, at: $0) },
+            swipe: { [weak self] in self?.swipe(id, from: $0, to: $1, duration: $2) },
+            scroll: { [weak self] in self?.scroll(id, at: $0, ticks: $1, sideways: $2) },
+            text: { [weak self] in self?.type($0, on: id) },
+            key: { [weak self] in self?.pressKey($0, on: id) })
     }
 
     func saveScreenshot(_ id: String) {

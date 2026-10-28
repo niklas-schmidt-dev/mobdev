@@ -34,19 +34,25 @@ public protocol CommandRunning: Sendable {
 public struct ProcessRunner: CommandRunning {
     public init() {}
 
+    /// A cancelled caller ends the command, such as a relay that stopped waiting or an app that
+    /// quits: xcodebuild and xctrace would go on for minutes otherwise.
     public func run(_ executable: URL, _ arguments: [String], timeout: TimeInterval) async throws -> CommandResult {
         let (process, pipe) = Self.process(executable, arguments)
         let box = ProcessBox(process)
         try process.run()
         // SIGKILL: devicectl does not always stop on SIGTERM.
         DispatchQueue.global().asyncAfter(deadline: .now() + timeout) { box.stop() }
-        return await withCheckedContinuation { continuation in
-            DispatchQueue.global().async {
-                // Reading until EOF keeps a chatty command from blocking on a full pipe.
-                let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                continuation.resume(
-                    returning: CommandResult(status: box.waitForExit(timeout: timeout), output: String(decoding: data, as: UTF8.self)))
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                DispatchQueue.global().async {
+                    // Reading until EOF keeps a chatty command from blocking on a full pipe.
+                    let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                    continuation.resume(
+                        returning: CommandResult(status: box.waitForExit(timeout: timeout), output: String(decoding: data, as: UTF8.self)))
+                }
             }
+        } onCancel: {
+            box.stop()
         }
     }
 

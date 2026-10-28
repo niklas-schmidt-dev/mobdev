@@ -181,7 +181,7 @@
   "a23cdd89efb441fa": "Download für Mac",
   "53ea457ed050c196": "Was alles drinsteckt ›",
   "fb29bc8562fc5588": "Kostenlos. Aktualisiert sich selbst. Erfordert macOS 26.",
-  "0118879b5f6477a9": "Alle Geräte in einer Liste, und alle verstehen dieselben 70 Tools.",
+  "e32f9bff5aef9581": "Alle Geräte in einer Liste, und alle verstehen dieselben 87 Tools.",
   "6e3a1ad8ecdae7b4": "Dein Agent steuert.",
   "38b4bfda87fcb470": "Claude Code, Codex, Cursor oder jeder andere MCP-Client sieht, tippt und schreibt auf jedem Smartphone. Du siehst dabei zu.",
   "d4615a60ce29cf83": "Von überall.",
@@ -425,6 +425,7 @@
   "42cce71308122e86": "Tests",
   "655ace1b049d1c8e": "Prüfungen",
   "9c00b962b302cf7c": "Eine App erkunden",
+  "1269a4f72deba78c": "App Store Connect",
   "75d18dac06f4f037": "Skills",
   "01a394b897c45b5a": "Fernzugriff",
   "755fc95de75d13e3": "Eigenes Relay betreiben",
@@ -441,7 +442,7 @@
   "02f5c269c01a2e8f": "Die Namen der gespeicherten Secrets, nie ihre Werte",
   "a6daf7dca0f6ab24": "z. B. space + cmd für Spotlight",
   "b1fc445861a7ba55": "Zum Home-Bildschirm wechseln",
-  "038de3a084a2d4de": "Eine App über ihren Namen öffnen (auf dem iPhone per Spotlight)",
+  "ddf15cc46eb21eaa": "Eine App über ihren Namen oder ihre Bundle-ID öffnen (per Spotlight auf einem iPhone ohne Entwicklermodus)",
   "ea148fcf86e39555": "Gesamter sichtbarer Text mit Positionen (lokale Texterkennung)",
   "ddd038df170c14ab": "Wo eine Beschriftung steht",
   "eebc314143e05858": "Auf eine sichtbare Beschriftung tippen",
@@ -456,7 +457,7 @@
   "f41a62a71376e00b": "Die Aufnahme beenden und sagen, wo sie liegt",
   "7ac9020db1a7cd6e": "Die neuesten Aktionen, die geklappt haben, als Schritte für einen Test",
   "bb53097697b33342": "Einen Kurzbefehl aus Apples Kurzbefehle-App ausführen",
-  "d2cbdef90a410a0e": "Elemente aus dem Accessibility-Baum (Simulatoren, Android, iPhones mit eingeschaltetem UI-Baum)",
+  "4095314e4645b899": "Elemente aus dem Accessibility-Baum (Simulatoren, Android, iPhones im Entwicklermodus)",
   "65fbd65bd75ffa0e": "Auf ein Element tippen, per Identifier, Label, Rolle, Zustand oder dem Label daneben",
   "cde6ef43d109ddbf": "Warten, bis ein Element erscheint oder verschwindet",
   "cdc8646da3ae3f06": "Einen Flow abspielen (JSON oder Maestro-YAML); stoppt beim ersten fehlgeschlagenen Schritt und kann ein Video speichern",
@@ -473,6 +474,8 @@
   "81f56d55045933fc": "Einen Test in ein Projekt schreiben; legt es bei Bedarf an",
   "fab100381a47a28a": "Einen Flow in den Ordner flows/ des Projekts schreiben",
   "b95b3c240b2d36e0": "Die Ergebnisse des neuesten Laufs mit Schritt, Screenshot und Video jedes Fehlschlags",
+  "e9f1ed5e39f88b9d": "Die eigene XCTest-, Swift-Testing- oder Gradle-Suite der App auf dem Gerät ausführen, im Hintergrund",
+  "fa29a76ceac1e52a": "Der Fortschritt eines nativen Laufs, sonst jeder Fehlschlag mit Datei, Zeile und Anhängen",
   "af08407c2398abf1": "Ein simulierter Standort oder eine Route, der das Gerät folgt",
   "0d4971d236379131": "Standort, Fotos, Kamera und mehr ohne Nachfrage erlauben, entziehen oder zurücksetzen",
   "ff4d2767b050d628": "Eine Push-Mitteilung an eine App im Simulator",
@@ -483,6 +486,19 @@
   "86249db27bf95865": "Die Daten einer App löschen, als wäre sie gerade installiert",
   "22d298ff9b191f98": "Die Zwischenablage lesen oder setzen",
   "f59079f4da39a60a": "Hoch- oder Querformat",
+  "0217d187f17a8103": "Alle Simulatoren und Android Virtual Devices auf dem Mac, ob sie laufen oder nicht",
+  "64262a73419c7264": "Einen starten und warten, bis er hochgefahren ist; danach erscheint er in list_devices",
+  "1d62c8af83df2662": "Einen Simulator herunterfahren oder einen Emulator beenden",
+  "53284e7780ceac09": "Einen iOS-Simulator mit jedem Typ und jeder iOS-Version anlegen, die Xcode mitbringt",
+  "fb875db2de896182": "Einen Simulator löschen, den Mobdev angelegt hat",
+  "b6986f7051b9d84c": "Die Apps des Schlüssels: Name, Bundle-ID, App-ID",
+  "8035014f9e2b94a6": "Builds, neueste zuerst, mit Verarbeitungs- und TestFlight-Status",
+  "195c6e062126efd1": "TestFlight-Gruppen mit Anzahl der Tester, öffentlichem Link und Builds",
+  "49fa2b1a555da6f9": "App-Store-Versionen und ihr Prüfstatus",
+  "638befbcac26a004": "Kundenbewertungen und deine Antworten",
+  "14b66d22a429ba80": "Einer TestFlight-Gruppe einen Build geben",
+  "7369e39b2010fac8": "„What to Test“ eines Builds setzen",
+  "ce9aa7eca8460eef": "Auf eine Kundenbewertung antworten oder deine Antwort ersetzen",
   "6661cfcb8d9efd9d": "Zur Entwicklung installierte Apps oder alle Apps",
   "4f86acfd95052ec5": "Einen Build vom Mac installieren oder einen, der über das Relay hochgeladen wurde: .app/.ipa, Simulator-.app oder .apk",
   "f2d9c22dc9b53669": "Eine zur Entwicklung installierte App entfernen",
@@ -497,13 +513,15 @@
   "d40f8ab5d7cf415d": "Android: eine feste Antwort auf einfache HTTP-Anfragen, etwa einen Fehler deiner API",
   "93fae913627ba671": "CPU, Speicher und auf Android Frames einer laufenden App; Budgets lassen den Aufruf fehlschlagen",
   "965ce66b601a2102": "Kaltstartzeit über mehrere Läufe: schnellster, Median, langsamster",
+  "0f72820983047661": "Ein Instruments-Trace (iPhones, Simulatoren) oder ein Perfetto-Trace (Android), mit kurzer Zusammenfassung",
+  "06558f2d70059737": "Das ganze Gerät: die Prozesse mit der meisten CPU und dem meisten Speicher, belegter Speicher, Temperaturstatus",
   "491ff4ed5c824653": "Eine React-Native- oder Expo-App über Metro neu laden, sonst über ihr Entwicklermenü",
   "c135835721e02020": "Das Entwicklermenü einer React-Native- oder Expo-App öffnen",
   "e4911e502264cb64": "Auf dieser Seite",
   "b18ddcdea5477466": "Tool",
   "5772a96c29d1b1e0": "Argumente",
   "0cec07430a396fe0": "Was es tut",
-  "bd4bc9e0c3371fb3": [
+  "981c5c8f6b0996f0": [
     {
       "t": "p",
       "i": 1,
@@ -517,34 +535,45 @@
     {
       "t": "p",
       "i": 3,
-      "c": "Mobdev bringt deine iPhones, iOS-Simulatoren und Android-Geräte in einer Mac-App zusammen, für dich und deinen KI-Agenten. Es liest den iPhone-Bildschirm über USB und tippt und schreibt als Bluetooth-Tastatur und -Zeiger; Simulatoren und Android brauchen nur Xcode oder adb. Agenten nutzen es über MCP oder HTTP."
+      "c": "Mobdev bringt deine iPhones, iOS-Simulatoren und Android-Geräte in einer Mac-App zusammen, für dich und deinen KI-Agenten. Es liest den iPhone-Bildschirm über USB. Im Entwicklermodus tippt, schreibt und liest den UI-Baum ein kleiner UI-Test, den Mobdev auf dem iPhone am Laufen hält, über dasselbe Kabel; ohne ihn tippt und schreibt Mobdev als Bluetooth-Tastatur und -Zeiger. Simulatoren und Android brauchen nur Xcode oder adb. Agenten nutzen es über MCP oder HTTP."
     }
   ],
-  "b1e3f25fce7e95a5": {
+  "6b1426bac7ee27e9": {
     "t": "p",
     "i": 1,
     "c": [
-      "Du brauchst einen Mac mit Bluetooth LE und ",
+      "Du brauchst einen Mac mit ",
       {
         "t": "strong",
         "i": 2,
         "c": "macOS 26 oder neuer"
       },
-      ", ein iPhone und ein USB-",
+      " und ",
       {
         "t": "strong",
         "i": 3,
+        "c": "Xcode"
+      },
+      ", ein iPhone im Entwicklermodus und ein USB-",
+      {
+        "t": "strong",
+        "i": 4,
         "c": "Daten"
       },
-      "kabel. Lade die App herunter, öffne das Disk-Image und ziehe Mobdev in den Ordner „Programme“. Sie ist von Apple signiert und notarisiert und aktualisiert sich selbst."
+      "kabel. Ohne Entwicklermodus braucht der Mac Bluetooth LE. Lade die App herunter, öffne das Disk-Image und ziehe Mobdev in den Ordner „Programme“. Sie ist von Apple signiert und notarisiert und aktualisiert sich selbst."
     ]
   },
-  "3107b519781d5e20": {
+  "9230334a6e8aa076": {
     "t": "p",
     "i": 1,
-    "c": "Erlaube Bluetooth und Kamera, wenn macOS fragt. macOS behandelt den iPhone-Bildschirm wie eine Kamera, deshalb fragt es nach dem Kamerazugriff. Selbst bauen kannst du die App mit Xcode 26 oder neuer:"
+    "c": "Erlaube die Kamera, wenn macOS fragt, und auf dem Weg ohne Entwicklermodus auch Bluetooth. macOS behandelt den iPhone-Bildschirm wie eine Kamera, deshalb fragt es nach dem Kamerazugriff. Selbst bauen kannst du die App mit Xcode 26 oder neuer:"
   },
-  "aeeee8ce23292a9d": {
+  "ace29a63d795c7c4": {
+    "t": "p",
+    "i": 1,
+    "c": "Der Einrichtungsassistent hakt jeden Schritt ab, sobald der Mac ihn erkennt."
+  },
+  "869eb21eff81245b": {
     "t": "ol",
     "i": 1,
     "c": [
@@ -565,16 +594,78 @@
         "t": "li",
         "i": 4,
         "c": [
-          "Öffne auf dem iPhone ",
+          "Aktiviere ",
           {
             "t": "strong",
             "i": 5,
+            "c": "Einstellungen › Datenschutz & Sicherheit › Entwicklermodus"
+          },
+          " und starte das iPhone neu. Der Schalter erscheint, sobald das iPhone einmal mit Xcode verbunden war."
+        ]
+      },
+      {
+        "t": "li",
+        "i": 6,
+        "c": [
+          "Melde dich in Xcode unter ",
+          {
+            "t": "strong",
+            "i": 7,
+            "c": "Xcode › Settings › Apple Accounts"
+          },
+          " mit deinem Apple Account an. Ein kostenloser Account genügt."
+        ]
+      },
+      {
+        "t": "li",
+        "i": 8,
+        "c": [
+          "Mobdev baut ",
+          {
+            "t": "strong",
+            "i": 9,
+            "c": "Mobdev Runner"
+          },
+          ", einen kleinen UI-Test, und startet ihn von selbst auf dem iPhone; der erste Build dauert ein bis zwei Minuten. Fragt iOS danach, aktiviere Einstellungen › Entwickler › UI-Automatisierung aktivieren. Mit einem kostenlosen Account vertraust du dem Entwickler einmal unter Einstellungen › Allgemein › VPN und Geräteverwaltung."
+        ]
+      },
+      {
+        "t": "li",
+        "i": 10,
+        "c": "Stelle „Automatische Sperre“ auf „Nie“, solange Agenten arbeiten. Das iPhone muss entsperrt bleiben."
+      }
+    ]
+  },
+  "075589564e6c09a7": [
+    {
+      "t": "h3",
+      "i": 1,
+      "c": "Ohne Entwicklermodus"
+    },
+    {
+      "t": "p",
+      "i": 2,
+      "c": "Wähle im Einrichtungsassistenten „Without Developer Mode“. Mobdev tippt und schreibt dann als Bluetooth-Tastatur und -Zeiger und installiert nichts auf dem iPhone."
+    }
+  ],
+  "dbdc704b695f6e1d": {
+    "t": "ol",
+    "i": 1,
+    "c": [
+      {
+        "t": "li",
+        "i": 2,
+        "c": [
+          "Öffne auf dem iPhone ",
+          {
+            "t": "strong",
+            "i": 3,
             "c": "Einstellungen › Bluetooth"
           },
           " und tippe unter „Andere Geräte“ auf deinen Mac. iOS zeigt ihn unter dem Namen des Macs an. Fehlt er, warte einen Moment oder klicke in Mobdev auf ",
           {
             "t": "strong",
-            "i": 6,
+            "i": 4,
             "c": "Show on iPhone Again"
           },
           ": Ein iPhone mit demselben Apple Account übersieht den Mac womöglich, bis Mobdev ihn erneut anbietet."
@@ -582,24 +673,24 @@
       },
       {
         "t": "li",
-        "i": 7,
+        "i": 5,
         "c": [
           "Aktiviere ",
           {
             "t": "strong",
-            "i": 8,
+            "i": 6,
             "c": "Einstellungen › Bedienungshilfen › Tippen › AssistiveTouch"
           },
           ". AssistiveTouch macht aus dem Zeiger Tippgesten. Deaktiviere auf derselben Seite ",
           {
             "t": "strong",
-            "i": 9,
+            "i": 7,
             "c": "Am Objekt einrasten"
           },
           " und lass ",
           {
             "t": "strong",
-            "i": 10,
+            "i": 8,
             "c": "Berührungsgesten ausführen"
           },
           " eingeschaltet, sonst wird jedes Wischen zum Tippen."
@@ -607,21 +698,16 @@
       },
       {
         "t": "li",
-        "i": 11,
+        "i": 9,
         "c": [
           "Wähle in Mobdev das Tastaturlayout, das auf dem iPhone unter ",
           {
             "t": "strong",
-            "i": 12,
+            "i": 10,
             "c": "Einstellungen › Allgemein › Tastatur › Hardwaretastatur"
           },
           " eingestellt ist."
         ]
-      },
-      {
-        "t": "li",
-        "i": 13,
-        "c": "Stelle „Automatische Sperre“ auf „Nie“, solange Agenten arbeiten. Das iPhone muss entsperrt bleiben."
       }
     ]
   },
@@ -879,7 +965,7 @@
       }
     ]
   },
-  "877ec71d21c9ee2f": {
+  "b36d39cf57fdb4d7": {
     "t": "p",
     "i": 1,
     "c": [
@@ -901,7 +987,7 @@
         "i": 4,
         "c": "wait_for_element"
       },
-      " finden sie über Identifier oder Label: zuverlässiger als die Texterkennung, und sie finden auch Buttons, die nur ein Symbol zeigen. Auf einem iPhone muss dafür der UI-Baum eingeschaltet sein (siehe Bauen, starten und debuggen); bis dahin nutzen Agenten dort ",
+      " finden sie über Identifier oder Label: zuverlässiger als die Texterkennung, und sie finden auch Buttons, die nur ein Symbol zeigen. Auf einem iPhone brauchen sie den Entwicklermodus (siehe iPhone einrichten); ohne ihn nutzen Agenten dort ",
       {
         "t": "code",
         "i": 5,
@@ -914,6 +1000,25 @@
     "t": "p",
     "i": 1,
     "c": "Wenn du nur iPhones willst, schalte sie in der App unter „Settings › General“ aus."
+  },
+  "0ab7fb8b32712baf": {
+    "t": "p",
+    "i": 1,
+    "c": [
+      "Simulatoren und AVDs, die nicht laufen, stehen in der Seitenleiste unter ",
+      {
+        "t": "strong",
+        "i": 2,
+        "c": "Not Running"
+      },
+      ": ▶ startet einen, ohne Fenster, weil Mobdev den Bildschirm selbst zeigt. ",
+      {
+        "t": "strong",
+        "i": 3,
+        "c": "New Simulator…"
+      },
+      " legt einen mit jedem Typ und jeder iOS-Version an, die Xcode mitbringt. Agenten machen dasselbe mit diesen Tools, die kein Gerät brauchen. Mobdev löscht nur Simulatoren, die es selbst angelegt hat, und fährt kein Gerät herunter, das ein Flow oder ein Testlauf gerade nutzt."
+    ]
   },
   "914c376b07dd7339": {
     "t": "p",
@@ -982,22 +1087,22 @@
       " beziehen sich auf den Mac, auf dem Mobdev läuft, auch über ein Relay. Mobdev entfernt nie Apps aus dem App Store oder System-Apps."
     ]
   },
-  "a616d7572877102a": {
+  "e439d6e049e1cda1": {
     "t": "p",
     "i": 1,
     "c": [
       {
         "t": "strong",
         "i": 2,
-        "c": "UI-Baum auf iPhones."
+        "c": "Steuerung im Entwicklermodus."
       },
-      " Mit Entwicklermodus und Xcode öffnest du in Mobdev die Infos des iPhones und schaltest ",
+      " Mobdev Runner wird mit Xcode gebaut, mit deinem Entwicklerteam signiert und auf dem iPhone am Laufen gehalten, so wie WebDriverAgent. Solange er läuft, geht jedes Tippen, Wischen, jede Taste und jeder Text durch ihn, ",
       {
-        "t": "strong",
+        "t": "code",
         "i": 3,
-        "c": "UI Tree"
+        "c": "type_text"
       },
-      " ein. Mobdev baut dann Mobdev Runner, einen kleinen UI-Test, mit Xcode, signiert ihn mit deinem Entwicklerteam und hält ihn auf dem iPhone am Laufen, so wie WebDriverAgent. Danach funktionieren ",
+      " tippt auch Emoji, und ",
       {
         "t": "code",
         "i": 4,
@@ -1015,16 +1120,10 @@
         "i": 6,
         "c": "wait_for_element"
       },
-      " dort wie in Simulatoren, und ",
-      {
-        "t": "code",
-        "i": 7,
-        "c": "type_text"
-      },
-      " tippt auch Emoji. Der erste Build dauert ein bis zwei Minuten. Mit einem kostenlosen Apple Account vertraust du dem Entwickler einmal unter Einstellungen › Allgemein › VPN und Geräteverwaltung."
+      " funktionieren wie in Simulatoren. Für ein einzelnes iPhone schaltest du ihn in dessen Infos in Mobdev aus; dieses iPhone nutzt dann Bluetooth."
     ]
   },
-  "125a6744ca226996": [
+  "de3dc7964d98a62e": [
     {
       "t": "h3",
       "i": 1,
@@ -1045,22 +1144,52 @@
           "i": 4,
           "c": "measure_launch"
         },
-        " stoppt Kaltstarts so, wie Xcode und Android sie angeben. Beide funktionieren auf Simulatoren und Android; auf einem iPhone misst ",
+        " stoppt Kaltstarts so, wie Xcode und Android sie angeben. Auf einem iPhone zeichnet ",
         {
           "t": "code",
           "i": 5,
-          "c": "measure_launch"
+          "c": "performance"
         },
-        " den Bildschirm, bis er stillsteht. Budgets wie ",
+        " den Activity Monitor von Instruments auf, was 10 bis 20 Sekunden länger dauert, und ",
         {
           "t": "code",
           "i": 6,
+          "c": "measure_launch"
+        },
+        " misst den Bildschirm, bis er stillsteht. Budgets wie ",
+        {
+          "t": "code",
+          "i": 7,
           "c": "max_ms"
         },
         " lassen den Schritt fehlschlagen, so bemerkt ein Test, wenn eine App langsamer oder schwerer geworden ist."
       ]
     }
   ],
+  "2822b199843305d5": {
+    "t": "p",
+    "i": 1,
+    "c": [
+      {
+        "t": "code",
+        "i": 2,
+        "c": "record_trace"
+      },
+      " zeichnet auf iPhones und Simulatoren jede Instruments-Vorlage auf, etwa Time Profiler, Allocations, Leaks, Network, SwiftUI oder App Launch, an eine laufende App angehängt, mit ihrem Start oder für alle Prozesse. Auf Android zeichnet es einen Perfetto-Trace auf. Der Trace landet in ",
+      {
+        "t": "code",
+        "i": 3,
+        "c": "output/traces"
+      },
+      " des Projekts, und die Antwort fasst ihn zusammen, wo das wenig kostet: die teuersten Funktionen und Hänger, Ruckler, CPU und Speicher. Öffne ihn in Instruments oder auf ui.perfetto.dev. ",
+      {
+        "t": "code",
+        "i": 4,
+        "c": "device_load"
+      },
+      " zeigt das ganze Gerät: die geschäftigsten Prozesse, den Speicher und den Temperaturstatus. Der Geräte-Inspektor in der App hat dasselbe unter „Performance“."
+    ]
+  },
   "fbce5bf050b53728": [
     {
       "t": "h3",
@@ -1073,7 +1202,7 @@
       "c": "Die Netzwerk-Tools zeigen, welche Anfragen eine App stellt: zum Debuggen, um Analytics- und API-Aufrufe zu prüfen und für Datenschutz-Audits. Auf dem Gerät wird nichts installiert, und HTTPS wird nie entschlüsselt. Auf iOS startet Mobdev die App mit Apples Netzwerkdiagnose neu und liest ihr Log: Methode, Host, Status, Bytes und Dauer, Pfade und Queries verbirgt iOS allerdings. Auf Android leitet Mobdev das Gerät über einen Proxy auf dem Mac: einfaches HTTP vollständig, HTTPS als Host, Bytes und Dauer. Endet die Aufzeichnung, verschwindet auch der Proxy wieder, und ein Dev-Server auf dem Mac bleibt unter 10.0.2.2 erreichbar."
     }
   ],
-  "f99d189b406690fc": {
+  "e4b8eecebcdef156": {
     "t": "p",
     "i": 1,
     "c": [
@@ -1083,7 +1212,7 @@
         "i": 2,
         "c": "Record"
       },
-      ", dann zeichnet Mobdev alle Aktionen auf dem Gerät auf, deine und die eines Agenten; auf Simulatoren, Android und iPhones mit UI-Baum werden Klicks auf benannte Elemente zu ",
+      ", dann zeichnet Mobdev alle Aktionen auf dem Gerät auf, deine und die eines Agenten; auf Simulatoren, Android und iPhones im Entwicklermodus werden Klicks auf benannte Elemente zu ",
       {
         "t": "code",
         "i": 3,
@@ -1461,6 +1590,61 @@
       "."
     ]
   },
+  "b451750e32f950c5": [
+    {
+      "t": "h3",
+      "i": 1,
+      "c": "Native Tests"
+    },
+    {
+      "t": "p",
+      "i": 2,
+      "c": [
+        {
+          "t": "code",
+          "i": 3,
+          "c": "run_native_tests"
+        },
+        " führt die eigene XCTest-, XCUITest-, Swift-Testing- oder Gradle-Suite der App auf dem gewählten Gerät aus: ",
+        {
+          "t": "code",
+          "i": 4,
+          "c": "xcodebuild test"
+        },
+        " auf einem Simulator oder einem iPhone im Entwicklermodus, ",
+        {
+          "t": "code",
+          "i": 5,
+          "c": "connectedDebugAndroidTest"
+        },
+        " auf einem Emulator oder Telefon und ",
+        {
+          "t": "code",
+          "i": 6,
+          "c": "testDebugUnitTest"
+        },
+        " auf dem Mac. Mobdev findet Workspace, Scheme und ",
+        {
+          "t": "code",
+          "i": 7,
+          "c": "gradlew"
+        },
+        " im Repository oder liest sie aus ",
+        {
+          "t": "code",
+          "i": 8,
+          "c": "native_tests"
+        },
+        " in mobdev.json. Jeder Fehlschlag kommt mit Meldung, Datei und Zeile zurück, fehlgeschlagene UI-Tests mit ihrer Bildschirmaufnahme. Lange Läufe gehen im Hintergrund weiter, damit Agenten und Relays nicht abgeschnitten werden; ",
+        {
+          "t": "code",
+          "i": 9,
+          "c": "native_test_result"
+        },
+        " liest sie. Jeder Lauf behält junit.xml und das Result-Bundle, und die App zeigt sie unter Tests › Native Tests."
+      ]
+    }
+  ],
   "949bcf3475631db4": {
     "t": "p",
     "i": 1,
@@ -1554,6 +1738,81 @@
         "c": "navigate_to"
       },
       " geht danach direkt zu einem erfassten Bildschirm, über seinen Titel."
+    ]
+  },
+  "1418de12eebedec3": {
+    "t": "p",
+    "i": 1,
+    "c": [
+      "Mit einem API-Schlüssel für App Store Connect listet Mobdev deine Apps in der Seitenleiste auf, mit ihren Builds, TestFlight-Gruppen, App-Store-Versionen und Kundenbewertungen, und Agenten lesen dasselbe mit den ",
+      {
+        "t": "code",
+        "i": 2,
+        "c": "appstore_"
+      },
+      "-Tools. Sie brauchen kein Gerät. ",
+      {
+        "t": "code",
+        "i": 3,
+        "c": "app"
+      },
+      " ist eine Bundle-ID oder App-ID; ohne sie nimmt Mobdev die des aktiven Projekts."
+    ]
+  },
+  "ab03f80dfc2ddfbb": {
+    "t": "ol",
+    "i": 1,
+    "c": [
+      {
+        "t": "li",
+        "i": 2,
+        "c": [
+          "Öffne in App Store Connect ",
+          {
+            "t": "strong",
+            "i": 3,
+            "c": "Benutzer und Zugriff › Integrationen › App Store Connect API"
+          },
+          " und erstelle einen Teamschlüssel mit der Rolle ",
+          {
+            "t": "strong",
+            "i": 4,
+            "c": "App-Manager"
+          },
+          "."
+        ]
+      },
+      {
+        "t": "li",
+        "i": 5,
+        "c": "Lade seine .p8-Datei herunter, die Apple nur einmal anbietet, und kopiere die Aussteller-ID über der Liste der Schlüssel."
+      },
+      {
+        "t": "li",
+        "i": 6,
+        "c": [
+          "Öffne in Mobdev ",
+          {
+            "t": "strong",
+            "i": 7,
+            "c": "Settings › App Store Connect"
+          },
+          ", trage die Aussteller-ID ein, wähle die .p8-Datei und klicke auf „Save Key“."
+        ]
+      }
+    ]
+  },
+  "844103252e727687": {
+    "t": "p",
+    "i": 1,
+    "c": [
+      "Der Schlüssel bleibt auf deinem Mac und ist nur für dich lesbar. Kein Tool gibt ihn heraus, und er geht nie über ein Relay; Mobdev signiert damit kurzlebige Tokens und spricht nur mit Apples API. Einen Build einer TestFlight-Gruppe geben, „What to Test“ setzen und auf Bewertungen antworten ändert, was Tester und Kunden sehen: Agenten dürfen das erst, wenn du in denselben Einstellungen ",
+      {
+        "t": "strong",
+        "i": 2,
+        "c": "Agents may change App Store Connect"
+      },
+      " einschaltest, und in der App fragt jede Änderung vorher nach."
     ]
   },
   "2981c207065f0b60": {
@@ -1870,19 +2129,19 @@
   "ec808611335364cd": "Agenten sehen, tippen und schreiben auf jedem Smartphone.",
   "5016f1e9671cde73": "Jedes Gerät",
   "1d594e3559e74284": "iPhone, Simulator und Android in einer Liste.",
-  "d983e2e71e036133": "Bauen und starten",
-  "67a2f25a0607461e": "Builds installieren, Apps starten, Deep Links öffnen.",
+  "ed8dd873f14e8df6": "Bauen und ausliefern",
+  "ec1750cce0544279": "Builds installieren, dann TestFlight und Bewertungen.",
   "936ec164b44447a7": "Debuggen",
-  "0d353daf0f0f0d2c": "Logs und Crash-Reports, direkt an deinen Agenten.",
+  "b4562188ea709f1c": "Logs, Crash-Reports und Performance-Traces.",
   "5ed80fd96269f7e4": "Testen",
-  "d39f3d369e75d48d": "Aufgezeichnete Flows, CI-Läufe und Smoke-Tests.",
+  "a4ff30d6670010f9": "Deine Test-Suites, aufgezeichnete Flows und CI-Läufe.",
   "1738f499d0c9cf60": "Recherche",
   "45ebd1091ee5c3e5": "Konkurrenz-Apps und ihre Paywalls, auf einem echten iPhone.",
   "e6166776e3fa77ad": "Live-Spiegelung",
   "9b41c8e50f08e334": "Klicken, wischen und schreiben von deinem Mac aus.",
   "5e8b5f680d43ceb4": "Fernzugriff",
   "171ea50a5c54e304": "Jeder Mac und seine Smartphones, von überall.",
-  "9a663a1031947a8a": "Das Bild kommt über das USB-Kabel, Tippen und Schreiben über Bluetooth. Kein Entwicklermodus und keine App auf dem iPhone, deshalb funktioniert jede App: der App Store, Nachrichten, Wallet.",
+  "f69eda381234f711": "Das Bild kommt über das USB-Kabel. Im Entwicklermodus tippt, schreibt und liest ein kleiner UI-Test den UI-Baum über dasselbe Kabel; ohne ihn ist Mobdev eine Bluetooth-Tastatur samt Zeiger. Jede App funktioniert: der App Store, Nachrichten, Wallet.",
   "8c1a00890dc615a2": "ein USB-Datenkabel",
   "1017eac8807f74a1": "iOS-Simulator.",
   "4b98a1b253e1cd2c": "Jeder gestartete Simulator erscheint von selbst. Installier den Build, den du gerade gebaut hast, und bedien die App wie ein Nutzer.",
@@ -1904,8 +2163,8 @@
   "8d8555364510a069": "Geplant",
   "abeb6ee67f73f8bd": "Ersetzt Mobdev Xcode oder Android Studio?",
   "44ee2c19acafea77": "Nein. Bau weiter mit Xcode, Android Studio, Gradle oder XcodeBuildMCP. Mobdev übernimmt, sobald es einen Build gibt: Es installiert ihn auf einem Gerät, startet ihn, bedient ihn und liest seine Logs und Crash-Reports.",
-  "e1e9ccdf882b927a": "Braucht das iPhone den Entwicklermodus oder eine App?",
-  "56fd0fef35e89316": "Nein. Mobdev nutzt nur das Bildsignal über USB und eine Bluetooth-Tastatur samt Zeiger, die jedes iPhone unterstützt. Du schaltest einmal AssistiveTouch ein. Nur die optionalen Tools für deine eigenen Apps, etwa Builds installieren und ihre Logs lesen, und der UI-Baum brauchen den Entwicklermodus und Xcode.",
+  "a002cc978093a3c2": "Braucht das iPhone den Entwicklermodus?",
+  "316e17a06e217cd9": "Er ist der beste Weg. Mit eingeschaltetem Entwicklermodus und angemeldetem Xcode baut Mobdev Mobdev Runner, einen kleinen UI-Test, und hält ihn auf dem iPhone am Laufen: Er tippt, schreibt beliebigen Text und liest den UI-Baum über das USB-Kabel. Auch das Installieren deiner Builds, Logs, Instruments und Geräteeinstellungen brauchen ihn. Ohne Entwicklermodus steuert Mobdev das iPhone als Bluetooth-Tastatur samt Zeiger, was jedes iPhone kann, sobald AssistiveTouch eingeschaltet ist.",
   "0d0c754624892508": "Funktioniert es mit dem Simulator und Android?",
   "f1812a1824958fc5": "Ja. Gestartete iOS-Simulatoren sowie Android-Emulatoren und -Smartphones erscheinen neben deinen iPhones und verstehen dieselben Tools, Installieren und Logs lesen eingeschlossen. Simulatoren brauchen Xcode, Android braucht adb aus dem Android SDK. Auf den Geräten wird nichts installiert.",
   "234e7291b21b4445": "Brauche ich einen KI-Agenten?",
@@ -1942,7 +2201,7 @@
       "c": "Mobdev deckt alles ab, was auf dem Gerät passiert, für dich und für deinen Agenten. Bau weiter wie bisher, ab da übernimmt Mobdev."
     }
   ],
-  "8cfe9b2c8a6ec492": [
+  "8a48245140cd7bda": [
     {
       "t": "h2",
       "i": 1,
@@ -1958,7 +2217,7 @@
     {
       "t": "p",
       "i": 3,
-      "c": "Schließ ein iPhone an, starte einen Simulator oder einen Emulator, und das Gerät erscheint in Mobdev. Jedes Gerät versteht dieselben 70 Tools, so kann ein Agent in einer Sitzung auf allen testen."
+      "c": "Schließ ein iPhone an, starte einen Simulator oder einen Emulator, und das Gerät erscheint in Mobdev. Jedes Gerät versteht dieselben 87 Tools, so kann ein Agent in einer Sitzung auf allen testen."
     }
   ],
   "0e93ea2eb9c558d4": [

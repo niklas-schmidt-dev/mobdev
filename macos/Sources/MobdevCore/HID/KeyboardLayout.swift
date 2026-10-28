@@ -1,6 +1,6 @@
 import Foundation
 
-public struct KeyStroke: Equatable, Sendable {
+public struct KeyStroke: Hashable, Sendable {
     public var usage: UInt8
     public var modifiers: UInt8
 

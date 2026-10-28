@@ -5,6 +5,7 @@ import { localeOfPath, localizePath, stripLocale } from "../src/lib/locales";
 
 /** English entries that read the same in German. */
 const sameInGerman = new Set([
+  "App Store Connect",
   "Dashboard",
   "Download",
   "Home",

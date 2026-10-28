@@ -4,7 +4,8 @@ import Foundation
 /// Tools for the loop of building an app: how it performs (CPU, memory, frames, launch time, with
 /// optional budgets that fail the call, so tests can hold an app to them) and the conveniences of
 /// React Native and Expo development builds (reload, developer menu). Performance runs through
-/// `PhoneBackend.performance`; reloads through Metro on this Mac (`Metro`).
+/// `PhoneBackend.performance`, which on an iPhone records Instruments' Activity Monitor; reloads
+/// go through Metro on this Mac (`Metro`). Traces and the device's load are in `ProfilingTools`.
 extension PhoneTools {
     static let devLoopDefinitions: [ToolDefinition] = {
         let bundleID: JSONValue = [
@@ -18,7 +19,7 @@ extension PhoneTools {
             ToolDefinition(
                 name: "performance", title: "App performance",
                 description:
-                    "Sample a running app for seconds (default 5, at most 60): average and peak CPU as a percent of one core (above 100 when several cores work), memory at the start, the end and its peak, and on Android its frames (rendered, janky share, 50th to 99th percentile frame times). Budgets make the call fail when the app goes over: max_cpu (average), max_memory_mb (peak) and max_janky_percent, so a test can use it as a check. Simulators and Android; on an iPhone it says how to record with Instruments.",
+                    "Sample a running app for seconds (default 5, at most 60): average and peak CPU as a percent of one core (above 100 when several cores work), memory at the start, the end and its peak, and on Android its frames (rendered, janky share, 50th to 99th percentile frame times). Budgets make the call fail when the app goes over: max_cpu (average), max_memory_mb (peak) and max_janky_percent, so a test can use it as a check. Simulators and Android read the process directly; an iPhone (Developer Mode) records Instruments' Activity Monitor template, which adds 10 to 20 s and still fits a relay's 90 s.",
                 inputSchema: schema(
                     [
                         "bundle_id": bundleID,
@@ -34,7 +35,7 @@ extension PhoneTools {
             ToolDefinition(
                 name: "measure_launch", title: "Measure launch",
                 description:
-                    "Time an app's cold launch over runs (default 3, at most 10): stop it, start it, measure until its first frame; returns min, median and max in milliseconds and the method. Android uses am start -W, simulators iOS's first-frame signpost (the launch time Xcode reports). method screen instead times from the launch animation until the screen stays still for stable seconds, which includes what the app loads after its first frame; iPhones always use it. A launch or splash screen that stays up longer than stable ends it early: raise stable then. max_ms fails the call when the median is slower. The app keeps running without its output captured; launch_app captures it.",
+                    "Time an app's cold launch over runs (default 3, at most 10): stop it, start it, measure until its first frame; returns min, median and max in milliseconds and the method. Android uses am start -W, simulators iOS's first-frame signpost (the launch time Xcode reports). method screen instead times from the launch animation until the screen stays still for stable seconds, which includes what the app loads after its first frame; iPhones always use it (for the system's view there, record_trace with template App Launch and open it in Instruments). A launch or splash screen that stays up longer than stable ends it early: raise stable then. max_ms fails the call when the median is slower. The app keeps running without its output captured; launch_app captures it.",
                 inputSchema: schema(
                     [
                         "bundle_id": bundleID,
@@ -77,9 +78,9 @@ extension PhoneTools {
 
     private func requirePerformance() throws -> AppPerformance {
         guard let performance = phone.performance else {
-            if phone.status().input == .bluetooth {
+            if phone.status().input.isIPhone {
                 throw ToolFailure(
-                    "Mobdev cannot read an iPhone app's CPU and memory without Instruments. Record it on this Mac with xcrun xctrace record --template 'Activity Monitor' --device <udid from list_devices> --attach <app name> --time-limit 10s and open the trace in Instruments, or measure on a simulator.")
+                    "Mobdev reads an iPhone app's CPU and memory with Instruments once it has read the iPhone's identity over USB: connect it with a cable and unlock it.")
             }
             throw ToolFailure("This device cannot report an app's performance.")
         }
@@ -136,7 +137,7 @@ extension PhoneTools {
             if !percentiles.isEmpty { line += "; frame times " + percentiles.joined(separator: ", ") }
             lines.append(line)
         } else if sample.memoryKind == "physical footprint" {
-            lines.append("Frames: simulators do not report frame times; use Android or Instruments for them.")
+            lines.append("Frames: not measured on iOS; on an iPhone, record_trace with template Animation Hitches records hitches.")
         }
         if let ended = sample.ended { lines.append(ended) }
         return lines.joined(separator: "\n")
@@ -174,11 +175,12 @@ extension PhoneTools {
         let runs = Int(try args.number("runs", default: 3, range: 1...10))
         let maxMS = args.has("max_ms") ? try args.number("max_ms", default: 0, range: 0...600_000) : nil
         let stable = try args.number("stable", default: 2, range: 0.3...10)
-        let performance = phone.performance
+        let performance = phone.performance.flatMap { $0.timesLaunches ? $0 : nil }
         let method = args.has("method") ? try args.string("method") : performance == nil ? "screen" : "system"
         guard method == "system" || method == "screen" else { throw ToolFailure("method must be system or screen.") }
         if method == "system", performance == nil {
-            throw ToolFailure("This device has no launch timing of its own that Mobdev can read. Pass method screen to time the screen instead.")
+            throw ToolFailure(
+                "This device has no launch timing of its own that Mobdev can read. Pass method screen to time the screen instead, or on an iPhone record_trace with template App Launch for Instruments' view of it.")
         }
         let how: String
         var times: [Double] = []

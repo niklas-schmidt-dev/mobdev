@@ -3,28 +3,36 @@
 The Mobdev app: your iPhones, iOS simulators and Android devices in one window, for you and your AI
 agent. Free, open source, about 2 MB, no account.
 
-Mobdev reads the iPhone screen over the USB cable and taps and types through Bluetooth, posing as a
-keyboard and pointer. Nothing is installed on the phone: no developer mode, no jailbreak. (Only the
-optional UI tree on iPhones runs a small UI test there.) Booted simulators and Android devices take the
-same tools. Agents get an MCP server and a small HTTP API.
+Mobdev reads the iPhone screen over the USB cable, the way QuickTime does. With Developer Mode on
+the iPhone and Xcode on the Mac, it builds Mobdev Runner, a small UI test, and keeps it running on
+the iPhone: the runner taps, swipes, types any text, presses keys and buttons and reads the UI tree,
+over the same cable. iPhones without Developer Mode are driven over Bluetooth instead, with the Mac
+posing as a keyboard and pointer; nothing is installed on them. Booted simulators and Android
+devices take the same tools. Agents get an MCP server and a small HTTP API.
 An optional relay lets agents elsewhere reach the devices.
 
 ```
               USB cable: screen frames (like QuickTime)
-   ┌─────────┐ ◀──────────────────────────────────────── ┌────────┐
-   │  Mac    │                                           │ iPhone │
-   │ Mobdev  │ ────────────────────────────────────────▶ │        │
-   └─────────┘   Bluetooth LE: keyboard + pointer (HID)   └────────┘
-     ▲     ▲                                     AssistiveTouch turns
-     │     └── MCP / HTTP on 127.0.0.1           the pointer into taps
+   ┌─────────┐ ◀──────────────────────────────────────────────── ┌────────┐
+   │  Mac    │                                                   │ iPhone │
+   │ Mobdev  │ ────────────────────────────────────────────────▶ │        │
+   │         │   Developer Mode: Mobdev Runner over the cable    │        │
+   │         │   (XCUITest: taps, swipes, keys, text, UI tree)   │        │
+   │         │ ────────────────────────────────────────────────▶ │        │
+   └─────────┘   without it: Bluetooth LE keyboard + pointer     └────────┘
+     ▲     ▲     (AssistiveTouch turns the pointer into taps)
+     │     └── MCP / HTTP on 127.0.0.1
      │
      └── optional outgoing connection to a relay (see ../relay)
 ```
 
 ## Requirements
 
-- A Mac with Bluetooth LE running macOS 26 or later (the interface uses Liquid Glass). Developed on macOS 27 with Swift 6.4.
+- A Mac running macOS 26 or later (the interface uses Liquid Glass). Developed on macOS 27 with Swift 6.4.
 - An iPhone and a USB **data** cable. Charge-only cables give power and no picture.
+- To control the iPhone: **Developer Mode** on it and **Xcode** on the Mac, signed in with an Apple
+  Account (a free one works). Without Developer Mode: Bluetooth LE on the Mac and AssistiveTouch on
+  the iPhone.
 - To build: Xcode 26 or later (Swift 6.2+, macOS 26 SDK).
 
 ## Build and run
@@ -32,7 +40,7 @@ An optional relay lets agents elsewhere reach the devices.
 ```sh
 cd macos
 MOBDEV_VARIANT=release scripts/build-app.sh   # builds build/Mobdev.app (ad hoc signature)
-open build/Mobdev.app                         # allow Bluetooth and Camera when macOS asks
+open build/Mobdev.app                         # allow Camera (and Bluetooth without Developer Mode) when macOS asks
 ```
 
 macOS treats the iPhone screen like a camera, hence the Camera prompt. To sign with a certificate,
@@ -44,32 +52,51 @@ development. It is a separate app that runs next to an installed Mobdev without 
 bundle ID `dev.mobdev.mac.dev`, its own settings and secrets in
 `~/Library/Application Support/dev.mobdev.mac.dev`, port 4687, the `mobdev-dev://` URL scheme (so
 dashboard links keep opening the installed app), the MCP name `mobdev-dev`, an amber icon and no
-automatic updates. Both apps share the Mac's Bluetooth, so quit one before testing touch.
+automatic updates. Both apps share the Mac's Bluetooth, and each starts its own Mobdev Runner on an
+iPhone in Developer Mode, so quit one before testing input on an iPhone.
 
 ## Set up the iPhone (once)
 
-On first launch a setup assistant walks through these steps. It asks for camera and Bluetooth
-access on the page that explains them and checks each step off as soon as the Mac detects it. Open
-it again with **Mobdev › Set Up iPhone…**. Without an iPhone, choose **Simulators and Android
-Only** on the welcome page: nothing asks for camera or Bluetooth access until you set one up.
+On first launch a setup assistant walks through these steps and checks each off as soon as the Mac
+detects it. It asks for camera access on the page that explains it, and for Bluetooth access only
+on the way without Developer Mode. Open it again with **Mobdev › Set Up iPhone…**. Without an
+iPhone, choose **Simulators and Android Only** on the welcome page: nothing asks for camera or
+Bluetooth access until you set one up.
 
 1. Plug it in, unlock it and tap **Trust**. If the Mac asks to allow the accessory, click **Allow**.
    The screen appears in Mobdev.
-2. On the iPhone open **Settings > Bluetooth** and tap this Mac under **Other Devices** to pair. iOS lists
+2. Turn on **Developer Mode**: Settings › Privacy & Security › Developer Mode, tap Restart, and after
+   the restart tap Turn On and enter the passcode. The switch appears once the iPhone was connected
+   to Xcode (Window › Devices and Simulators). Mobdev reads it from Xcode's device list.
+3. Sign in to **Xcode** with your Apple Account (Xcode › Settings › Apple Accounts; a free account
+   works). Mobdev picks the newest team of the Apple Development certificates in your keychain.
+4. Mobdev builds **Mobdev Runner** and starts it on the iPhone by itself (see
+   [Developer Mode control on iPhones](#developer-mode-control-on-iphones)); the first build takes a
+   minute or two. If iOS asks, turn on Settings › Developer › Enable UI Automation. With a free
+   account, trust your developer certificate once: Settings › General › VPN & Device Management.
+5. Set **Auto-Lock** to Never while agents work. The phone must stay unlocked.
+
+### Without Developer Mode
+
+Choose **Without Developer Mode** in the setup assistant. Mobdev then taps and types through
+Bluetooth, posing as a keyboard and pointer, and installs nothing on the iPhone. The same way serves
+an iPhone whose Developer Mode Control is turned off, and, when the iPhone is paired, stands in while
+Mobdev Runner is still starting.
+
+1. On the iPhone open **Settings > Bluetooth** and tap this Mac under **Other Devices** to pair. iOS lists
    it by the Mac's name (System Settings › General › Sharing), not as “Mobdev”. An iPhone on the
    same Apple Account can miss the Mac, because it already knows it from Handoff and trusts the
    Bluetooth services it cached. Until an iPhone pairs, Mobdev rebuilds its Bluetooth services after
    8 seconds and then at doubling intervals up to every 2 minutes, which makes iOS look again.
    **Show on iPhone Again** in the setup does it right away.
-3. Turn on **Settings > Accessibility > Touch > AssistiveTouch**. iOS then shows a pointer and
+2. Turn on **Settings > Accessibility > Touch > AssistiveTouch**. iOS then shows a pointer and
    turns clicks into taps. On the same page turn off **Snap to Item** and keep **Perform Touch
    Gestures** on. With Snap to Item on, iOS moves the pointer onto the nearest item and every swipe
    becomes a tap on it. Mobdev checks this without clicking before the first swipe and after a drag
    in the mirror, shows the result as **Pointer** in the device panel and in `status`, and `swipe`
    refuses while the pointer snaps.
-4. In Mobdev pick the **keyboard layout** that matches Settings > General > Keyboard > Hardware
+3. In Mobdev pick the **keyboard layout** that matches Settings > General > Keyboard > Hardware
    Keyboard on the iPhone (U.S. or German).
-5. Set **Auto-Lock** to Never while agents work. The phone must stay unlocked.
 
 iOS hides its on-screen keyboard while a Bluetooth keyboard is connected, with or without the
 cable. After five minutes without input Mobdev lets go of Bluetooth, so the iPhone shows its own
@@ -83,7 +110,8 @@ click without the pointer move before it.
 
 The mirror in the app is live: click to tap, drag to swipe, swipe with two fingers on the trackpad
 (sideways too), scroll with the wheel (a sideways wheel or Shift scrolls sideways), and type while
-it has focus.
+it has focus. Over Bluetooth the pointer follows the mouse as it moves; through Mobdev Runner each
+tap, swipe and scroll goes out when the button or the fingers lift, and typing in short bursts.
 ⌘V types the Mac clipboard on the phone. The inspector on the right shows what is still missing,
 Activity lists every agent action, and Settings (⌘,) holds the keyboard layout and API token.
 
@@ -92,15 +120,18 @@ Activity lists every agent action, and Settings (⌘,) holds the keyboard layout
   live, open its crash reports and try deep links. It uses the same tools as agents, so it needs
   Developer Mode and Xcode for an iPhone, and nothing for simulators and Android.
 - **Diagnose…** (under the setup steps and in the device info) checks the cable, the picture, the
-  iPhone's USB screen interface, macOS's screen capture helper, Bluetooth, AssistiveTouch and
-  Developer Mode, and offers the fix for each, such as restarting a stuck capture helper.
+  iPhone's USB screen interface, macOS's screen capture helper, Developer Mode, Mobdev Runner,
+  Bluetooth and AssistiveTouch, and offers the fix for each, such as restarting a stuck capture
+  helper or building the runner again. Bluetooth and AssistiveTouch count only without the runner.
 - **Projects** (at the top of the sidebar) hold an app's tests, flows, screenshots, map, recordings
   and runs in a folder of its repository; see [Projects](#projects).
+- **App Store Connect** (in the sidebar, after a key in Settings) shows your apps' builds,
+  TestFlight groups, versions and reviews; see [App Store Connect](#app-store-connect).
 - **Record** and **Run Flow…** (in the activity header) record and replay flows; see below.
 - **Inspect** (in the toolbar) lays an inspector over the screen: the element under the pointer is
   outlined with its role, label and identifier, and a click copies the step that taps it, such as
   `{"tap_element":{"id":"login"}}`, instead of tapping the device. Simulators, Android, and
-  iPhones with the UI tree on.
+  iPhones with Mobdev Runner.
 - **Settings › Agents** lists apps agents may not open; see [Security and privacy](#security-and-privacy).
 
 ## Connect an agent
@@ -144,18 +175,23 @@ only device, or the connected iPhone when simulators or Android devices run next
 | Tool | Arguments | |
 |---|---|---|
 | `list_devices` | | iPhones, booted simulators and Android devices: id, name, model, system version, ready |
-| `status` | | Screen and input readiness, screenshot size |
+| `list_virtual_devices` | | Every iOS simulator and Android Virtual Device on the Mac, running or not (see [Simulators and Android](#simulators-and-android)) |
+| `boot_device` | `id`, `window` | Starts a simulator or AVD and waits until it has booted; it then appears in `list_devices` |
+| `shutdown_device` | `id` | Shuts a simulator down or quits an emulator, unless a flow, test run or crawl holds it |
+| `create_simulator` | `device_type`, `runtime`, `name`, `boot` | Makes an iOS simulator, such as `"iPhone 17 Pro"` on `"27.0"` (default the newest iOS), and boots it |
+| `delete_simulator` | `id` | Deletes a simulator that `create_simulator` made; others are refused |
+| `status` | | Screen and input readiness, how input reaches an iPhone (Mobdev Runner or Bluetooth), screenshot size |
 | `screenshot` | | JPEG of the screen |
 | `tap` | `x`, `y`, `double` | `x` and `y` may also be shares of the screen such as `"50%"`, as in every tool with coordinates |
 | `long_press` | `x`, `y`, `seconds` | |
 | `swipe` | `from_x`, `from_y`, `to_x`, `to_y`, `duration` | |
-| `scroll` | `direction` (`up`/`down`/`left`/`right`), `amount`, `x`, `y` | Mouse wheel; `right` reveals content further right |
+| `scroll` | `direction` (`up`/`down`/`left`/`right`), `amount`, `x`, `y` | Mouse wheel over Bluetooth, a swipe elsewhere; `right` reveals content further right |
 | `type_text` | `text`, `submit` | Into the focused field, at most 1000 characters per call |
 | `type_secret` | `name`, `submit` | Types a stored password or code without the agent seeing it (see [Secrets](#secrets)) |
 | `list_secrets` | | The names of the stored secrets, never their values |
 | `press_key` | `key`, `modifiers`, `count` | e.g. `space` + `cmd` for Spotlight; `volume_up` and `volume_down` press the buttons (iPhones, Android) |
 | `home` | | |
-| `open_app` | `name` | Through Spotlight on an iPhone; by name or bundle ID on simulators and Android |
+| `open_app` | `name` | By name or bundle ID on simulators, Android and iPhones with Mobdev Runner; through Spotlight on an iPhone over Bluetooth |
 | `read_screen` | | All visible text with positions (on-device OCR) |
 | `find_text` | `text` | |
 | `tap_text` | `text`, `index`, `double`, `hold` | Taps a visible label; `double` taps twice, `hold` presses for that many seconds |
@@ -164,7 +200,7 @@ only device, or the connected iPhone when simulators or Android devices run next
 | `tap_mark` | `mark` | Taps a mark from the last `observe` |
 | `scroll_until_visible` | `text`, `id`, `direction`, `max_scrolls` | Scrolls until it shows, stops at the end of the list |
 | `wait_for_idle` | `timeout`, `stable` | Until the screen stops changing, status bar ignored |
-| `ui_tree` | `contains`, `all` | Elements from the accessibility tree: role, label, identifier, value, position. Simulators, Android, and iPhones with the UI tree on |
+| `ui_tree` | `contains`, `all` | Elements from the accessibility tree: role, label, identifier, value, position. Simulators, Android, and iPhones with Mobdev Runner |
 | `tap_element` | `id`, `text`, `regex`, `role`, `value`, `enabled`, `region`, `near`, `index`, `timeout`, `double`, `hold` | Taps an element by identifier, label, role, state or the label next to it, waiting up to 5 s for it |
 | `wait_for_element` | `id`, `text`, `regex`, `role`, `value`, `enabled`, `region`, `near`, `timeout`, `gone` | Like `wait_for_text`, from the tree |
 | `assert_screenshot` | `name` or `path`, `threshold`, `mask`, `compare_status_bar`, `update` | Compares the screen with a baseline picture and fails with a diff; records the baseline when there is none (see [Checks](#checks)) |
@@ -179,6 +215,8 @@ only device, or the connected iPhone when simulators or Android devices run next
 | `save_test` | `project`, `name`, `steps`, `description`, `platforms`, `file` | Writes a test into the project, creating it when needed |
 | `save_flow` | `project`, `name`, `steps`, `file` | Writes a flow into the project's `flows/` |
 | `test_result` | `project`, `run` | The newest run's results, with each failure's step, screenshot and video |
+| `run_native_tests` | `project`, `platform`, `only`, `workspace`, `xcode_project`, `scheme`, `test_plan`, `build`, `gradle_root`, `task`, `module`, `wait` | Runs the app's own XCTest/Swift Testing or Gradle suite on this device in the background (see [Native tests](#native-tests)) |
+| `native_test_result` | `project`, `run` | A native run's progress, else its results: every failure with message and file:line, attachments, the .xcresult |
 | `save_screenshot` | `path` | The screen as a full-resolution PNG in the project's `screenshots/`, such as `de-DE/iphone-6.9/01-home` |
 | `crawl_app` | `bundle_id`, `max_actions`, `max_screens`, `max_depth`, `seconds`, `avoid`, `output` | Explores an app without a model, maps its screens and keeps every crash with the steps to it |
 | `navigate_to` | `bundle_id`, `screen`, `map` | Goes to a screen the map of `crawl_app` knows |
@@ -208,8 +246,10 @@ only device, or the connected iPhone when simulators or Android devices run next
 | `stop_recording` | | Ends the recording and says where it is |
 | `recent_steps` | `count`, `clear` | The newest actions that worked, as flow steps for `save_test` |
 | `run_shortcut` | `name` | Runs a shortcut from Apple's Shortcuts app |
-| `performance` | `bundle_id`, `seconds`, `max_cpu`, `max_memory_mb`, `max_janky_percent` | CPU, memory and (Android) frames of a running app; budgets fail the call. Simulators and Android |
+| `performance` | `bundle_id`, `seconds`, `max_cpu`, `max_memory_mb`, `max_janky_percent` | CPU, memory and (Android) frames of a running app; budgets fail the call. iPhones through Instruments |
 | `measure_launch` | `bundle_id`, `runs`, `method`, `max_ms`, `stable` | Cold launch time over several runs: min, median, max |
+| `record_trace` | `template`, `seconds`, `bundle_id`, `launch`, `path` | An Instruments trace (iPhones, simulators) or a Perfetto trace (Android) into the project's `output/traces`, with a short summary |
+| `device_load` | `count` | The whole device: busiest processes by CPU and memory, memory used and total, thermal state |
 | `dev_menu` | `port` | Opens a React Native or Expo app's developer menu |
 | `reload_app` | `port` | Reloads a React Native or Expo app through Metro, else through its developer menu |
 
@@ -359,19 +399,61 @@ goes over `max_cpu` (average), `max_memory_mb` (peak), `max_janky_percent` or `m
   with `proc_pid_rusage`. Launch time is iOS's own `ApplicationFirstFramePresentation` signpost,
   streamed with `simctl spawn <udid> log stream`: from SpringBoard taking the launch request to the
   app's first frame, the number Xcode's Organizer and MetricKit report. Simulators have no frame
-  times; use Android or Instruments for those. A simulator shares the Mac's CPU, so its numbers say
-  how an app compares with itself, not how fast an iPhone is.
+  times, and Instruments' Animation Hitches does not run on them; use an iPhone or Android for
+  those. A simulator shares the Mac's CPU, so its numbers say how an app compares with itself, not
+  how fast an iPhone is.
+- **iPhone** (Developer Mode, Xcode on the Mac): `performance` records Instruments' Activity
+  Monitor template with `xcrun xctrace record --template 'Activity Monitor' --attach <pid>`, the pid
+  `devicectl` names, and reads its `activity-monitor-process-live` table with `xctrace export`: the
+  app's CPU time, the percent of one core in each interval (about once a second) and its physical
+  footprint. Instruments needs 10 to 20 seconds more than `seconds` to start and to save.
+  `measure_launch` times the screen: one App Launch recording per run would add that much each
+  time, so three runs do not fit a relay's call. Record `record_trace` with `template: "App Launch"`
+  for Instruments' own view of a launch.
 - **Android**: one adb shell command reads `/proc/<pid>/stat` and `VmRSS` about once a second,
   resets `dumpsys gfxinfo` before and reads it after (frames, janky share, 50th to 99th percentile
   frame times), and adds the PSS from `dumpsys meminfo`. Launch time is `am start -W`'s `TotalTime`
   after `am force-stop`.
-- **iPhone**: CPU and memory need Instruments, so `performance` says how to record them with
-  `xcrun xctrace record --template 'Activity Monitor'`. `measure_launch` times the screen instead.
 - `method: "screen"` (any device): from the first frame that changes (the launch animation) to the
   last change before the screen stays still for `stable` seconds (default 2). It includes what the
   app loads after its first frame, but a launch or splash screen shown longer than `stable` ends it
   early.
 - Over a relay a call has 90 seconds, so keep `seconds`, and `runs` times the launch, below that.
+
+`record_trace` records a trace for `seconds` (default 10, at most 60) to look at in Instruments or
+Perfetto, by default into the project's `output/traces` (without a project, `traces/` in Mobdev's
+folder), or to `path`:
+
+- **iPhones and simulators**: any template `xcrun xctrace list templates` names, such as Time
+  Profiler (the default), Allocations, Leaks, Network, Animation Hitches, SwiftUI, Power Profiler,
+  App Launch or your own. With `bundle_id` it attaches to the running app, with `launch: true` it
+  starts the app for the recording (App Launch always does), without `bundle_id` it records every
+  process, which takes a minute or more for Time Profiler. xctrace sometimes does not find an app
+  that started moments ago; Mobdev tries again once. Activity Monitor and Animation Hitches need
+  an iPhone: simulators have no activity monitoring service and no hitch recording. Where the
+  export makes it cheap, the answer adds a summary: Time Profiler's heaviest functions (self time)
+  and potential hangs, the number of hitches, Activity Monitor's CPU and memory. Leaks keeps its
+  findings in Instruments: `xctrace export` has no table of them. Open the trace in Instruments
+  with `open <path>`.
+- **Android**: a Perfetto trace from the device's own `perfetto` (scheduling, CPU frequencies and
+  idle states, activity and window manager, graphics, views, input, binder; with `bundle_id` the
+  app's own trace sections too), written to `/data/misc/perfetto-traces`, pulled to the Mac and
+  deleted on the device. Open it at [ui.perfetto.dev](https://ui.perfetto.dev) or in Android
+  Studio. Android 9 and 10 need `adb shell setprop persist.traced.enable 1` once.
+- Instruments takes 10 to 20 seconds more than `seconds`, so 60 still fits a relay's 90 seconds.
+
+`device_load` shows the whole device right now: its busiest processes by CPU and by memory (`count`
+of each, default 10), memory used and total, and the thermal state.
+
+| | How | Memory | Thermal state |
+|---|---|---|---|
+| iPhone | 3 seconds of Instruments' Activity Monitor for every process (about 15 s in all) | Memory used, the iPhone's total; physical footprint per process | Nominal, Fair, Serious or Critical |
+| iOS Simulator | The processes the simulator's launchd lists, read on the Mac twice a second apart | What they take together, out of the Mac's memory | The Mac's, which the simulator shares |
+| Android | `top` (two frames a second apart), `/proc/meminfo`, `dumpsys thermalservice` | `MemTotal` less `MemAvailable`; resident memory per process | Android's thermal status and the HAL's temperatures |
+
+The device inspector in the app has the same in its **Performance** section: pick an app and
+**Sample** it, see the **Device Load**, or **Record Trace…** with a template and a duration; the
+trace opens in Instruments, a Perfetto trace in Finder next to ui.perfetto.dev.
 
 ### React Native, Expo and Flutter
 
@@ -427,6 +509,24 @@ Booted iOS simulators and Android emulators and phones appear next to your iPhon
 in `list_devices`, and take the same tools. Nothing needs to be set up on them: no cable, no
 Bluetooth, no Developer Mode. Turn them off in Settings › General if you only want iPhones.
 
+The ones that are not running are under **Not Running** in the sidebar: ▶ starts one, its menu
+also starts it with Simulator's or the emulator's window, and a running one's menu has Shut Down.
+**New Simulator…** (also under + below the sidebar) makes an iOS simulator of any type and iOS
+version Xcode has. Agents do the same with `list_virtual_devices`, `boot_device`,
+`shutdown_device`, `create_simulator` and `delete_simulator`, which need no device; `Mobdev
+boot_device id=Pixel_9_Pro` works from the terminal without the app too.
+
+- Mobdev shows the screen itself, so it starts simulators and emulators without a window unless
+  you ask for one. An AVD starts as Android Studio starts it and keeps what happens on it (only
+  `Mobdev test --emulator` runs read-only copies). AVDs come from `~/.android/avd`
+  (`ANDROID_AVD_HOME` and `ANDROID_USER_HOME` move it); create them in Android Studio's Device
+  Manager. Through a relay, `boot_device` answers after 75 seconds at the latest, as the relay
+  waits 90; an emulator that is still booting goes on, and `list_virtual_devices` shows when it
+  runs.
+- Mobdev deletes only simulators it made itself, which it remembers in its data folder
+  (`created-simulators.json`). Delete others in Xcode. Shutting down or deleting a device that a
+  flow, test run or crawl holds fails with "Busy".
+
 - **iOS Simulator** (needs Xcode): Mobdev reads the screen from the simulator's framebuffer and
   sends touches, keys and the Home button through Xcode's SimulatorKit, the way Simulator.app and
   idb do, so there is no helper app and no window to keep open. Keys follow the simulator's own
@@ -472,33 +572,47 @@ only an icon. Every field given must hold, so they narrow each other down:
 `image`, `cell` and `link`; other names match roles that contain them. When nothing matches, the
 error lists the elements on screen, so the agent can correct the query without calling `ui_tree`.
 Simulators are read through macOS's accessibility translation, as idb does; Android
-through `uiautomator dump`, which takes about two seconds. An iPhone needs the UI tree turned on
-(below); until then the tools say how, and `read_screen` and `tap_text` work instead.
+through `uiautomator dump`, which takes about two seconds. An iPhone has a tree while Mobdev Runner
+runs on it (below); until then the tools say how, and `read_screen` and `tap_text` work instead.
 
-### UI tree on iPhones
+### Developer Mode control on iPhones
 
-iOS shows an app's accessibility tree only to a UI test running on the phone. With **Developer Mode**
-on the iPhone and **Xcode** on the Mac, open the iPhone's info in Mobdev, pick a team under **UI
-Tree** and click **Turn On**. Mobdev builds Mobdev Runner, a small XCUITest (`Runner/`), signs it
-with your team and keeps it running on the iPhone, the way WebDriverAgent does. `ui_tree`,
-`tap_element` and `wait_for_element` then work as on simulators, and Record names clicked elements.
+iOS lets only a UI test running on the phone read an app's accessibility tree and touch the screen
+without a pointer. With **Developer Mode** on the iPhone and **Xcode** on the Mac, Mobdev builds
+Mobdev Runner, a small XCUITest (`Runner/`), signs it with your team and keeps it running on the
+iPhone, the way WebDriverAgent does. It starts by itself when such an iPhone connects. While it
+runs, taps, long presses, double taps, swipes, scrolls, keys, typed text, the Home and volume
+buttons, `open_app` and the app's live mirror go through it instead of Bluetooth, and `status` says
+`Input: Mobdev Runner (Developer Mode)`. Coordinates stay pixels of the screenshot. `ui_tree`,
+`tap_element` and `wait_for_element` work as on simulators, and Record names clicked elements.
 
+- **Developer Mode Control** in the iPhone's info says what the runner does: controls the iPhone,
+  builds, starts, could not start (with xcodebuild's reason, the usual fix and **Try Again**), or
+  waits for Developer Mode or a team. **Turn Off** keeps that iPhone on Bluetooth for good; **Turn
+  On** starts it again, also before Xcode reports Developer Mode.
+- **Starting by itself**: Mobdev reads Developer Mode from Xcode's device list when the iPhone
+  connects, and again every 30 seconds while it is off or unknown. Turning Developer Mode on
+  restarts the iPhone, which Mobdev sees as connecting again.
 - **Team**: Mobdev lists the teams of the Apple Development certificates in your keychain (the
   certificate's organizational unit, not the ID in parentheses in its name) and picks the newest.
   Xcode must be signed in to that team's Apple Account (Xcode's Settings) to make the provisioning
   profile and register the iPhone. The runner's bundle ID is `dev.mobdev.runner.<team>`.
 - **First start**: the build takes a minute or two; later starts a few seconds. With a free Apple
   Account, iOS asks you once to trust the developer: Settings › General › VPN & Device Management.
-  A failed start shows xcodebuild's reason and the usual fix under UI Tree, such as turning on
-  Settings › Developer › Enable UI Automation; **Try Again** builds again.
+  A failed start shows xcodebuild's reason and the usual fix under Developer Mode Control, such as
+  turning on Settings › Developer › Enable UI Automation; **Try Again** builds again.
 - **While it runs**: Mobdev keeps `xcodebuild test-without-building` running and starts it again
   when it ends, stops it when the iPhone is unplugged or Mobdev quits, and starts it when the iPhone
   is back. The runner appears on the iPhone as MobdevRunner-Runner. Build, logs and the copy of the
   project are in `~/Library/Application Support/dev.mobdev.mac/runner/<udid>`.
+- **Bluetooth stands in** while the runner builds or starts, or after it failed, when the iPhone is
+  paired. Mute and play/pause, which XCTest cannot press, always use Bluetooth. Without Developer
+  Mode, Bluetooth is the only way (see [Without Developer Mode](#without-developer-mode)).
 - The runner answers HTTP on port 47270 on the iPhone's loopback interface only. Mobdev reaches it
   through usbmuxd over the USB cable, and every request carries a token made for that start, so
-  other apps on the phone cannot use it. Taps still go through Bluetooth; text the keyboard layout
-  has no keys for, such as emoji, is typed by the runner.
+  other apps on the phone cannot use it. It speaks version 2 (`/tree`, `/tap` with a hold or a
+  double tap, `/drag`, `/type`, `/key`, `/button`, `/activate`); Mobdev builds it from its own copy
+  at every start and refuses a runner that answers with another version.
 
 ### Projects
 
@@ -507,13 +621,13 @@ the app:
 
 ```
 mobdev/
-  mobdev.json    the app, its builds and what every test starts with (see Tests)
+  mobdev.json    the app, its builds, what every test starts with and its native suites (see Tests)
   tests/         tests
   flows/         saved flows
   baselines/     assert_screenshot's reference pictures
   screenshots/   save_screenshot's pictures, such as App Store screenshots
   maps/          crawl_app's map of each app
-  output/        test runs, recordings, crawls, failed checks and flow videos
+  output/        test runs, native test runs, recordings, crawls, traces, failed checks and flow videos
 ```
 
 Commit everything but `output/`. It brings its own `.gitignore`, so the repository's stays as it
@@ -846,6 +960,72 @@ iOS, and the other way round.
 runners next to the flow; a job for your app looks like the one above with `Mobdev test` in place
 of `Mobdev flow`, and `junit.xml` in the artifacts.
 
+### Native tests
+
+Mobdev also runs the app's own test suite on the device you pick: XCTest, XCUITest and Swift
+Testing through Xcode on a simulator or an iPhone (with Developer Mode), and Android's
+instrumented tests through Gradle on an emulator or phone. A Gradle unit-test task such as
+`testDebugUnitTest` runs on the Mac without a device. Mobdev finds the suite in the repository when
+there is one candidate: its only Xcode workspace (else project) and the only shared scheme with
+tests, and its `gradlew`. Otherwise name it in `mobdev.json`; every key is optional and paths are
+relative to the project folder, like `app.builds`:
+
+```json
+"native_tests": {
+  "ios": {"workspace": "../ios/MyApp.xcworkspace", "scheme": "MyApp", "test_plan": "UnitTests"},
+  "android": {"gradle_root": "../android", "module": "app", "task": "connectedDebugAndroidTest"}
+}
+```
+
+`ios` takes `workspace` or `project` (an .xcodeproj), `scheme` and `test_plan`; `android` takes
+`gradle_root`, `task` (default `connectedDebugAndroidTest`) and `module`, which qualifies the task
+(`:app:connectedDebugAndroidTest`) and limits where results are read. Only test tasks run, whose
+name contains "test": an agent cannot start `publish` or `clean` this way.
+
+- **iOS** runs `xcodebuild test -scheme … -destination id=<udid> -resultBundlePath …`
+  (`test-without-building` with `build: false`), and on an iPhone with `-allowProvisioningUpdates`
+  as Xcode does. It passes `-collect-test-diagnostics never`: after a failure Xcode would otherwise
+  gather a sysdiagnose-like report from the device, which takes minutes. The results come from the result bundle (`xcrun xcresulttool get test-results`,
+  Xcode 26 or later): each test's outcome and time, every failure's message with its file and line,
+  the compiler's errors with file and line when the build failed, and each failed test's
+  attachments (for a UI test the screen recording, its UI hierarchy and element descriptions),
+  exported from the bundle under the names Xcode gives them, for up to 20 failed tests.
+- **Android** runs `./gradlew <task>` in the Gradle root with `ANDROID_SERIAL` set to the device, and
+  reads the JUnit XML the run wrote under `build/outputs/androidTest-results` and `build/test-results`;
+  a failure's place is the test's own frame in the stack trace. When Gradle finds a unit-test task
+  up to date and runs nothing, the results of its previous run stand, with a note. An app started
+  from Finder gets `ANDROID_HOME` from the SDK Mobdev finds adb in and `JAVA_HOME` from Android
+  Studio's own Java when it has none.
+- `only` (`--test` on the command line) picks tests: `Target`, `Target/Class` or
+  `Target/Class/method` for Xcode, as `-only-testing:` takes them (a Swift Testing function with its
+  parentheses, `AppTests/adding()`), and a class or `Class#method` for Gradle.
+- Builds take minutes, more than an agent's call or the relays' 90 seconds should wait. A run goes
+  on in the background and holds the device, so other callers get "Busy" until it ends, as with
+  `run_tests`. `run_native_tests` waits up to `wait` seconds (by default until the end; through a
+  relay at most 75) and otherwise answers while it runs; `native_test_result` then says how it is
+  doing (building, testing, how many tests finished) and, once done, every failure. A project runs
+  one native suite at a time.
+- Each run keeps `results.json`, `junit.xml`, `summary.md`, the log (`xcodebuild.log` or
+  `gradle.log`), `Tests.xcresult` and the failures' attachments in the project's
+  `output/native-runs`, the newest 20.
+- In the app, **Native Tests** at the top of a project's **Tests** shows the suite that runs on the
+  chosen device, **Run** and **Stop**, the progress, and the results by suite: a failure's file and
+  line open in Xcode at that line, its attachments open with a click, and **Open in Xcode** opens
+  the result bundle. **Runs** lists native runs next to test runs.
+- `Mobdev test --native` runs the suite without the app, for CI, on a booted simulator or Android
+  device, or on one it creates for the run:
+
+  ```sh
+  Mobdev test mobdev/ --native --simulator "iPhone 17" --artifacts native-artifacts
+  Mobdev test mobdev/ --native --platform android --task testDebugUnitTest
+  ```
+
+  It prints the phases and a line per test, and exits 0 when every test passed, 1 when one failed
+  and 2 when the tests could not run (no suite found, the build failed, no device). `--scheme`,
+  `--test-plan`, `--workspace`, `--xcode-project`, `--no-build`, `--gradle-root`, `--task` and
+  `--module` override `mobdev.json`; `--device`, `--emulator`, `--artifacts` and `--wait` work as
+  for `Mobdev test`. `--artifacts` gets the files above.
+
 ### Checks
 
 Three tools judge the screen and fail their step when it does not pass, so a test can check how a
@@ -925,6 +1105,65 @@ a few seconds. The on-device model is small: ask about one visible thing at a ti
 
 A recorded flow keeps the checks; `accessibility_audit` only with `fail_on`, since without it the
 call only looks.
+
+### App Store Connect
+
+With an App Store Connect API key, Mobdev shows your apps the way Helm does, and agents read them
+with the `appstore_` tools: builds and their TestFlight states, TestFlight groups, App Store
+versions and their review state, and customer reviews.
+
+**Set up (once):**
+
+1. In [App Store Connect](https://appstoreconnect.apple.com) open **Users and Access ›
+   Integrations › App Store Connect API** and create a **team key** with the **App Manager** role,
+   which allows everything Mobdev does. A key with a narrower role sees less, and the tools answer
+   403 for the rest. Individual keys are not supported.
+2. Download the key's `AuthKey_<key ID>.p8` file; Apple offers it only once. Copy the **issuer ID**
+   shown above the list of keys.
+3. In Mobdev open **Settings › App Store Connect**, enter the issuer ID, choose the `.p8` file (the
+   key ID is taken from its name) and click **Save Key**. **Test Connection** says how many apps the
+   key sees.
+
+The key is stored in `app-store-connect.json` in Mobdev's folder, readable only by you (mode 0600),
+like the API token. No tool, API or log returns it and it never goes through a relay: Mobdev signs
+a token with it (ES256, valid for 19 minutes, reused until shortly before it expires) and sends
+requests to `api.appstoreconnect.apple.com` only. **Remove Key…** deletes the file; revoke the key in
+App Store Connect when you no longer need it.
+
+**In the app**, the sidebar's **App Store Connect** section lists the key's apps. An app's page
+shows **Builds**, **TestFlight**, **Versions** and **Reviews** (the control in the toolbar; ⌘R loads
+again). Select a build to add it to a TestFlight group or change its What to Test; select a review
+to reply to it or replace your reply. Each change asks first.
+
+**Agents** call these tools from anywhere Mobdev's tools work (MCP, the HTTP API, `Mobdev call`,
+relays). They need no device. `app` is a bundle ID or App Store Connect app ID; without it Mobdev
+takes the active project's bundle ID, else the key's only app.
+
+| Tool | Arguments | |
+|---|---|---|
+| `appstore_apps` | | The key's apps: name, bundle ID, App Store Connect app ID, SKU |
+| `appstore_builds` | `app`, `version`, `limit` | Newest first: version and build number, platform, processing state, upload date, expiry, TestFlight state for internal and external testers, beta app review, What to Test, id |
+| `appstore_testflight` | `app` | TestFlight groups: internal or external, how many testers, public link, their builds. Testers' names and addresses are not read |
+| `appstore_versions` | `app`, `limit` | App Store versions: state (`PREPARE_FOR_SUBMISSION`, `WAITING_FOR_REVIEW`, `IN_REVIEW`, `REJECTED`, `READY_FOR_SALE`, …), platform, build, release type, phased release |
+| `appstore_reviews` | `app`, `rating`, `territory`, `unanswered`, `limit` | Customer reviews, newest first: rating, title, text, nickname, country, date, id, your reply and its state |
+| `appstore_add_build_to_group` | `app`, `build`, `version`, `group` | Gives a TestFlight group a build (by build number, or id from `appstore_builds`); external testers get it after beta app review |
+| `appstore_set_what_to_test` | `app`, `build`, `version`, `text`, `locale` | Sets a build's What to Test, at most 4000 characters |
+| `appstore_reply_to_review` | `review`, `text` | Replies to a review or replaces your reply, at most 5970 characters; Apple checks it before it appears |
+
+The last three change data testers and customers see. Agents may call them only after you turn on
+**Agents may change App Store Connect** in Settings › App Store Connect (off by default); until then
+they are refused with a message that says so, and nothing is sent. A build number that appears in
+several versions needs `version` (or the build's id).
+
+```sh
+M=/Applications/Mobdev.app/Contents/MacOS/Mobdev
+$M appstore_builds app=com.example.MyApp limit=5
+$M appstore_reviews unanswered=true
+```
+
+App Store Connect allows each key a limited number of requests an hour; when it is used up, the
+tools say so (429) and when to try again. A 401 means the key ID, the issuer ID or the key is
+wrong or revoked, a 403 that the key's role does not allow the request.
 
 ## HTTP API
 
@@ -1030,9 +1269,12 @@ Mobdev's log (Console, subsystem `dev.mobdev.mac`), the install in the device's 
 
 - The API binds only to 127.0.0.1, requires the bearer token, rejects browser requests (`Origin`)
   and foreign `Host` headers.
-- The token, the relay secret and the [secrets](#secrets) agents type are files readable only by
-  you (mode 0600) in `~/Library/Application Support/dev.mobdev.mac`. `MOBDEV_HOME` moves that
-  directory.
+- The token, the relay secret, the [secrets](#secrets) agents type and the
+  [App Store Connect](#app-store-connect) key are files readable only by you (mode 0600) in
+  `~/Library/Application Support/dev.mobdev.mac`. `MOBDEV_HOME` moves that directory.
+- Agents read App Store Connect with your key but never get the key. They change it (TestFlight
+  groups, What to Test, replies to reviews) only after you turn on **Agents may change App Store
+  Connect**; in the app every change asks first.
 - No telemetry, no account. Every agent action appears under **Activity** in the app.
 - Live view in the browser is off until **Allow live view** is turned on under Remote Access; the
   app shows while someone watches and can stop it (see [Live view](#live-view)).
@@ -1051,9 +1293,14 @@ Mobdev's log (Console, subsystem `dev.mobdev.mac`), the install in the device's 
   This has not been tried with two iPhones at once yet.
 - Verified on hardware so far: screen capture from an iPhone over USB, Bluetooth pairing, the API,
   OCR, MCP, the relay, taps, swipes and the scroll wheel with AssistiveTouch, and typing with the
-  German layout (letters, umlauts, ß and symbols), on iOS 27.
-- Typing supports the U.S. and German hardware layouts, including common accents. Emoji and other
-  characters without a key need the UI tree on: Mobdev Runner types them.
+  German layout (letters, umlauts, ß and symbols), on iOS 27. Input through Mobdev Runner has been
+  tested on an iOS 27 simulator, not yet on an iPhone.
+- Over Bluetooth, typing supports the U.S. and German hardware layouts, including common accents.
+  Emoji and other characters without a key need Mobdev Runner, which types any text.
+- Through Mobdev Runner, XCTest waits for the app to settle after each action, so on a simulator a
+  tap takes one to two seconds and a swipe about as long; the mirror reacts more slowly than over
+  Bluetooth. XCTest cannot press `escape` or `forwarddelete`, nor Return and Backspace with
+  modifiers: `press_key` says so instead of reporting them pressed.
 - Portrait orientation is the tested case. Coordinates follow the current screenshot size.
 - The phone must stay unlocked. Mobdev cannot enter the passcode.
 - Simulator input uses Xcode's private SimulatorKit; tested with Xcode 27 and 26.6. A later Xcode
@@ -1075,9 +1322,13 @@ Mobdev's log (Console, subsystem `dev.mobdev.mac`), the install in the device's 
 - Recording does not capture the scroll wheel; drag to scroll while recording.
 - A double tap (`double`) on Android takes two `input tap` calls through adb, which can be slower
   than an app's double-tap timeout.
+- App Store Connect is tested against answers shaped like the API's, not yet against a live
+  account. The key's token is checked with OpenSSL.
 - Mobdev Runner finds the app in front through XCTest's private API, as WebDriverAgent does; tested
-  with Xcode 27 on simulators. Its frames assume portrait. It is built with your Xcode, so a new
-  Xcode can break it until Mobdev catches up.
+  with Xcode 27 on simulators. Its frames and touches assume portrait. It is built with your Xcode,
+  so a new Xcode can break it until Mobdev catches up.
+- Mobdev and Mobdev Dev each start their own Mobdev Runner on an iPhone in Developer Mode, and the
+  second one replaces the first; run one of them at a time while an iPhone is connected.
 
 ## Development
 
@@ -1129,10 +1380,14 @@ run from `swift build` download it into `.build/scrcpy-server-v<version>` on fir
 protocol is tested byte for byte against scrcpy's own tests, the decoder with pictures this Mac
 encodes, and the session against a fake server and fake adb.
 
-Mobdev Runner is tested against usbmuxd and runner answers from fakes. The opt-in `RunnerIntegration`
-test builds it for a simulator (no signing; the runner listens on the Mac's 127.0.0.1), drives Settings
+Mobdev Runner is tested against usbmuxd and runner answers from fakes, and the input routing against
+a fake runner and fake Bluetooth. The opt-in `RunnerIntegration` tests build it for a simulator (no
+signing; the runner listens on the Mac's 127.0.0.1). `runnerServesTreeTapsAndTyping` drives Settings
 through `/tree`, `/tap` and `/type` and then `ui_tree`, `tap_element` and `wait_for_element`, and
-checks that stopping ends it. Two read-only checks help on an iPhone: one asks usbmuxd for its
+checks that stopping ends it. `runnerDrivesAllInput` sends every input endpoint (`/activate`,
+`/drag`, `/tap` with a hold and a double tap, `/type`, `/key`, `/button`) and then the tools on top,
+as on an iPhone in Developer Mode without Bluetooth; `MOBDEV_TEST_RUNNER_SHOTS=1` saves screenshots
+of the steps to `$TMPDIR/mobdev-runner-input`. Two read-only checks help on an iPhone: one asks usbmuxd for its
 device list, the other reads the tree of a runner started by hand with
 `TEST_RUNNER_MOBDEV_RUNNER_TOKEN=<token> xcodebuild test-without-building …`, through usbmuxd:
 

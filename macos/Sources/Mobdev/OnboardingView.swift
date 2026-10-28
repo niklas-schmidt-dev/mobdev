@@ -3,11 +3,23 @@ import MobdevCore
 import SwiftUI
 
 /// The setup assistant: one step per page. Each page checks itself off and moves on as soon as the
-/// Mac sees the permission, the iPhone or the pairing, so most of setup is watching it happen.
+/// Mac sees the permission, the iPhone, Developer Mode or the runner, so most of setup is watching
+/// it happen. With Developer Mode (the usual way for developers) Mobdev Runner controls the
+/// iPhone; "Without Developer Mode" leads to Bluetooth pairing, AssistiveTouch and the keyboard
+/// layout instead, and only that way asks for Bluetooth access.
 struct OnboardingView: View {
     enum Step: Int, CaseIterable {
-        case welcome, screen, connect, bluetooth, assistiveTouch, keyboard, done
+        case welcome, screen, connect, developerMode, xcode, runner, bluetooth, assistiveTouch, keyboard, done
     }
+
+    /// The pages of one way through setup.
+    static func steps(usesBluetooth: Bool) -> [Step] {
+        usesBluetooth
+            ? [.welcome, .screen, .connect, .bluetooth, .assistiveTouch, .keyboard, .done]
+            : [.welcome, .screen, .connect, .developerMode, .xcode, .runner, .done]
+    }
+
+    private var steps: [Step] { Self.steps(usesBluetooth: model.settings.usesBluetooth) }
 
     private struct PageProgress: Equatable {
         let step: Step
@@ -72,10 +84,73 @@ struct OnboardingView: View {
                     .font(.callout)
                     .foregroundStyle(.tertiary)
             }
+        case .developerMode:
+            StepPage(
+                symbol: "hammer", title: "Turn On Developer Mode",
+                message: "With Developer Mode, \(MobdevPaths.appName) controls your iPhone directly: taps, swipes and typing, with nothing to pair.",
+                waiting: model.primary?.developerMode != true
+            ) {
+                Instructions(lines: [
+                    "On your iPhone, open Settings › Privacy & Security › Developer Mode and turn it on.",
+                    "Tap Restart. After the restart, tap Turn On and enter your passcode.",
+                ])
+                StatusPill(developerModeStatus)
+                Text("Not in Settings? It appears once the iPhone was connected to Xcode: open Xcode › Window › Devices and Simulators with the iPhone plugged in.")
+                    .font(.callout)
+                    .foregroundStyle(.tertiary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 430)
+                    .fixedSize(horizontal: false, vertical: true)
+                withoutDeveloperMode
+            }
+        case .xcode:
+            StepPage(
+                symbol: "person.badge.key", title: "Sign In to Xcode",
+                message: "\(MobdevPaths.appName) builds Mobdev Runner, a small UI test, with Xcode and signs it with your development team.",
+                waiting: !isComplete(.xcode)
+            ) {
+                Instructions(lines: [
+                    "Install Xcode from the App Store and open it once.",
+                    "In Xcode › Settings › Apple Accounts, sign in with your Apple Account. A free account works.",
+                ])
+                teamChooser
+                StatusPill(teamStatus)
+            }
+            // Xcode makes the certificate a moment after signing in; look again while this page is open.
+            .task {
+                while !Task.isCancelled {
+                    await model.refreshTeams()
+                    try? await Task.sleep(for: .seconds(4))
+                }
+            }
+        case .runner:
+            StepPage(
+                symbol: "iphone.gen3.radiowaves.left.and.right", title: "Start Mobdev Runner",
+                message: "\(MobdevPaths.appName) installs Mobdev Runner on your iPhone and keeps it running. The first build takes a minute or two.",
+                waiting: model.primary?.runnerStarting == true
+            ) {
+                StatusPill(runnerStatus)
+                if let primary = model.primary, case .failed(let reason) = primary.runner {
+                    Text(reason)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .lineLimit(4)
+                        .frame(maxWidth: 460)
+                        .textSelection(.enabled)
+                    Button("Try Again", systemImage: "arrow.clockwise") { model.restartRunner(primary.id) }
+                        .buttonStyle(.glass)
+                }
+                Instructions(lines: [
+                    "If iOS asks, allow UI automation: Settings › Developer › Enable UI Automation.",
+                    "With a free Apple Account, trust yourself once: Settings › General › VPN & Device Management.",
+                ])
+                withoutDeveloperMode
+            }
         case .bluetooth:
             StepPage(
                 symbol: "dot.radiowaves.left.and.right", title: "Pair over Bluetooth",
-                message: "\(MobdevPaths.appName) taps and types as a Bluetooth keyboard and pointer.",
+                message: "Without Developer Mode, \(MobdevPaths.appName) taps and types as a Bluetooth keyboard and pointer.",
                 waiting: model.bluetoothStarted && !isComplete(.bluetooth)
             ) {
                 if model.bluetoothStarted {
@@ -98,6 +173,11 @@ struct OnboardingView: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
+                Button("Use Developer Mode Instead") {
+                    model.setUsesBluetooth(false)
+                    go(to: .developerMode)
+                }
+                .buttonStyle(.link)
             }
         case .assistiveTouch:
             StepPage(
@@ -177,13 +257,13 @@ struct OnboardingView: View {
             }
             Spacer()
             if step != .welcome, step != .done {
-                Button("Back") { go(to: Step(rawValue: step.rawValue - 1) ?? .welcome) }
+                Button("Back") { go(to: previous(step)) }
                     .buttonStyle(.glass)
                     .controlSize(.large)
             }
             primaryButton
         }
-        .overlay { PageDots(count: Step.allCases.count, current: step.rawValue) }
+        .overlay { PageDots(count: steps.count, current: steps.firstIndex(of: step) ?? 0) }
         .padding(.horizontal, 24)
         .padding(.vertical, 20)
     }
@@ -220,7 +300,15 @@ struct OnboardingView: View {
                 return ("Open Privacy Settings", true, { model.openPrivacySettings("Privacy_Camera") })
             }
         case .bluetooth:
-            if !model.bluetoothStarted { return ("Turn On Bluetooth", true, model.startBluetooth) }
+            if !model.bluetoothStarted {
+                return (
+                    "Turn On Bluetooth", true,
+                    {
+                        model.setUsesBluetooth(true)
+                        model.startBluetooth()
+                    }
+                )
+            }
             if model.setupBluetooth == .unauthorized {
                 return ("Open Privacy Settings", true, { model.openPrivacySettings("Privacy_Bluetooth") })
             }
@@ -243,8 +331,69 @@ struct OnboardingView: View {
             default: false
             }
         case .connect: model.setupScreen.isConnected
+        case .developerMode: model.primary?.developerMode == true
+        case .xcode: UIRunner.isTeamID(model.settings.runnerTeam)
+        case .runner: model.primary?.runner == .running
         case .bluetooth: model.setupBluetooth.isConnected
         case .welcome, .assistiveTouch, .keyboard, .done: true
+        }
+    }
+
+    /// Leaves the Developer Mode pages for Bluetooth, AssistiveTouch and the keyboard layout.
+    private var withoutDeveloperMode: some View {
+        Button("Without Developer Mode") {
+            model.setUsesBluetooth(true)
+            go(to: .bluetooth)
+        }
+        .buttonStyle(.link)
+        .help("Control the iPhone as a Bluetooth keyboard and pointer instead; needs pairing and AssistiveTouch")
+    }
+
+    /// The teams of this Mac's Apple Development certificates, or a field for the team ID.
+    @ViewBuilder private var teamChooser: some View {
+        let selection = Binding(get: { model.settings.runnerTeam }, set: { model.setRunnerTeam($0) })
+        if let teams = model.teams, !teams.isEmpty {
+            Picker("Team", selection: selection) {
+                ForEach(teams) { Text("\($0.name) (\($0.id))").tag($0.id) }
+                if !teams.contains(where: { $0.id == model.settings.runnerTeam }) {
+                    Text(model.settings.runnerTeam.isEmpty ? "None" : model.settings.runnerTeam).tag(model.settings.runnerTeam)
+                }
+            }
+            .frame(width: 320)
+        } else if model.teams != nil {
+            TextField("Team ID", text: selection, prompt: Text("Team ID, e.g. ABCDE12345"))
+                .frame(width: 260)
+                .help("No Apple Development certificate was found yet. Xcode makes one when you sign in; or enter your team ID.")
+        }
+    }
+
+    private var developerModeStatus: StatusPill.Status? {
+        guard let device = model.primary, !device.isEmulated, device.isConnected else {
+            return .problem("Connect your iPhone first")
+        }
+        return switch device.developerMode {
+        case true?: .done("Developer Mode is on")
+        case false?: .waiting("Waiting for Developer Mode…")
+        case nil: .waiting("Asking Xcode about Developer Mode…")
+        }
+    }
+
+    private var teamStatus: StatusPill.Status? {
+        if UIRunner.isTeamID(model.settings.runnerTeam) { return .done("Team \(model.settings.runnerTeam)") }
+        return model.teams == nil ? nil : .waiting("Looking for a development team…")
+    }
+
+    private var runnerStatus: StatusPill.Status? {
+        guard let device = model.primary, !device.isEmulated else { return .problem("Connect your iPhone first") }
+        switch device.runner ?? .off {
+        case .running: return .done("Mobdev Runner controls your iPhone")
+        case .building: return .waiting("Building with Xcode…")
+        case .starting: return .waiting("Starting on your iPhone…")
+        case .failed: return .problem("Could not start")
+        case .off:
+            if device.developerMode != true { return .problem("Turn on Developer Mode first") }
+            if !UIRunner.isTeamID(model.settings.runnerTeam) { return .problem("Choose a development team first") }
+            return .waiting("Starting…")
         }
     }
 
@@ -296,10 +445,19 @@ struct OnboardingView: View {
 
     // MARK: Navigation
 
-    private func next(_ step: Step) -> Step { Step(rawValue: step.rawValue + 1) ?? .done }
+    private func next(_ step: Step) -> Step {
+        guard let index = steps.firstIndex(of: step), index + 1 < steps.count else { return .done }
+        return steps[index + 1]
+    }
+
+    /// The page before on this way; a page of the other way goes back to where the ways part.
+    private func previous(_ step: Step) -> Step {
+        guard let index = steps.firstIndex(of: step) else { return .connect }
+        return index > 0 ? steps[index - 1] : .welcome
+    }
 
     private func go(to target: Step) {
-        forward = target.rawValue >= step.rawValue
+        forward = (steps.firstIndex(of: target) ?? target.rawValue) >= (steps.firstIndex(of: step) ?? step.rawValue)
         // Let the leaving page pick up the new direction before it animates out.
         Task { @MainActor in
             withAnimation(.smooth(duration: 0.45)) { step = target }
@@ -380,7 +538,7 @@ private struct WelcomePage: View {
             VStack(alignment: .leading, spacing: 18) {
                 Feature(
                     symbol: "iphone.gen3", title: "Your iPhone",
-                    detail: "Screen over the USB cable, taps over Bluetooth. Nothing to install on it.")
+                    detail: "Screen and taps over the USB cable in Developer Mode, else Bluetooth.")
                 Feature(
                     symbol: "macbook.and.iphone", title: "Simulators and Android",
                     detail: "Appear by themselves, with nothing to set up.")
@@ -408,6 +566,7 @@ private struct WelcomePage: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title).font(.headline)
                     Text(detail).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
         }

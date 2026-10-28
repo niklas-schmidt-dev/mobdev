@@ -391,6 +391,7 @@ public final class AndroidDevice: Device, @unchecked Sendable {
             InstalledApp(bundleID: $0, name: $0, version: "", build: "", developer: false, location: nil)
         }
         let app = try AppMatcher.find(name, in: apps)
+        try AppBlocklist.checkResolved(name: app.name, bundleID: app.bundleID)
         try await appBackend.activate(app.bundleID)
         return "Opened \(app.bundleID)."
     }

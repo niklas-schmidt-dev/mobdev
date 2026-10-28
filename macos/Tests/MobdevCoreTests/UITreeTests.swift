@@ -166,6 +166,6 @@ import Testing
         #expect(output.text.contains("read_screen"))
         // And how to get one: Mobdev Runner.
         #expect(output.text.contains("Developer Mode"))
-        #expect(output.text.contains("Turn On under UI Tree"))
+        #expect(output.text.contains("Turn On under Developer Mode Control"))
     }
 }

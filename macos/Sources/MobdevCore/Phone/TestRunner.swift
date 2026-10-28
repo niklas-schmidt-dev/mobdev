@@ -427,7 +427,7 @@ extension PhoneTools {
         progress: (@Sendable (TestRunResult.Test) -> Void)?, busy: String? = nil
     ) async -> TestRunResult {
         let device = phone as? any Device
-        let kind = device?.kind ?? (phone.status().input == .bluetooth ? DeviceKind.iPhone : .simulator)
+        let kind = device?.kind ?? (phone.status().input.isIPhone ? DeviceKind.iPhone : .simulator)
         var result = TestRunResult(
             project: project, device: .init(id: device?.id ?? "", name: device?.name ?? "Device", kind: kind.rawValue),
             output: options.output)

@@ -81,11 +81,124 @@ public struct LaunchTiming: Sendable, Equatable {
     }
 }
 
-/// How an app performs: its CPU and memory over a few seconds, and how long a cold launch takes.
+/// The whole device at one moment: its busiest processes, its memory and how warm it is.
+public struct DeviceLoad: Sendable, Equatable {
+    public struct Process: Sendable, Equatable {
+        public var name: String
+        public var pid: Int
+        /// Percent of one core over the last interval.
+        public var cpuPercent: Double
+        public var memoryMB: Double
+
+        public init(name: String, pid: Int, cpuPercent: Double, memoryMB: Double) {
+            self.name = name
+            self.pid = pid
+            self.cpuPercent = cpuPercent
+            self.memoryMB = memoryMB
+        }
+    }
+
+    public var processes: [Process]
+    /// Every core's load together, as a percent of one core; nil when the device does not say.
+    public var cpuPercent: Double?
+    /// How many cores the percent is out of, where known.
+    public var cores: Int?
+    public var memoryUsedMB: Double?
+    public var memoryTotalMB: Double?
+    /// e.g. "Nominal", or Android's "none (0)".
+    public var thermalState: String?
+    /// Temperatures the device reports, e.g. "CPU 41.0 °C".
+    public var temperatures: [String]
+    /// What each process's memory is, e.g. "physical footprint" or "resident (RSS)".
+    public var memoryKind: String
+    /// How long the readings took to collect.
+    public var seconds: Double
+    /// How it was measured, in a few words for the tool's answer.
+    public var source: String
+    /// What the numbers do not cover, e.g. that a simulator shares the Mac's memory.
+    public var note: String?
+
+    public init(
+        processes: [Process], cpuPercent: Double? = nil, cores: Int? = nil, memoryUsedMB: Double? = nil,
+        memoryTotalMB: Double? = nil, thermalState: String? = nil, temperatures: [String] = [], memoryKind: String,
+        seconds: Double, source: String, note: String? = nil
+    ) {
+        self.processes = processes
+        self.cpuPercent = cpuPercent
+        self.cores = cores
+        self.memoryUsedMB = memoryUsedMB
+        self.memoryTotalMB = memoryTotalMB
+        self.thermalState = thermalState
+        self.temperatures = temperatures
+        self.memoryKind = memoryKind
+        self.seconds = seconds
+        self.source = source
+        self.note = note
+    }
+
+    public func top(byCPU count: Int) -> [Process] {
+        Array(processes.sorted { ($0.cpuPercent, $0.memoryMB) > ($1.cpuPercent, $1.memoryMB) }.prefix(count))
+    }
+
+    public func top(byMemory count: Int) -> [Process] {
+        Array(processes.sorted { ($0.memoryMB, $0.cpuPercent) > ($1.memoryMB, $1.cpuPercent) }.prefix(count))
+    }
+}
+
+/// What to record with `record_trace`.
+public struct TraceRequest: Sendable, Equatable {
+    public enum Target: Sendable, Equatable {
+        /// A running app.
+        case attach(bundleID: String)
+        /// Starts the app under the recording.
+        case launch(bundleID: String)
+        case allProcesses
+    }
+
+    /// An Instruments template; ignored on Android, which records a Perfetto trace.
+    public var template: String
+    public var target: Target
+    public var seconds: TimeInterval
+    /// Where the trace goes: a .trace bundle, or a .perfetto-trace file on Android.
+    public var output: URL
+
+    public init(template: String, target: Target, seconds: TimeInterval, output: URL) {
+        self.template = template
+        self.target = target
+        self.seconds = seconds
+        self.output = output
+    }
+}
+
+/// A recorded trace and what could be read from it cheaply.
+public struct TraceRecording: Sendable, Equatable {
+    public var file: URL
+    /// "Time Profiler", or "Perfetto".
+    public var template: String
+    /// e.g. "Settings (pid 66546)", "all processes".
+    public var target: String
+    public var seconds: Double?
+    /// A few lines, such as the heaviest functions; empty when nothing cheap could be read.
+    public var summary: [String]
+    /// How to look at it, e.g. "Open it in Instruments".
+    public var howToOpen: String
+
+    public init(file: URL, template: String, target: String, seconds: Double?, summary: [String], howToOpen: String) {
+        self.file = file
+        self.template = template
+        self.target = target
+        self.seconds = seconds
+        self.summary = summary
+        self.howToOpen = howToOpen
+    }
+}
+
+/// How apps and the device perform: an app's CPU and memory over a few seconds, how long a cold
+/// launch takes, the whole device's load, and traces to open in Instruments or Perfetto.
 /// Simulators sample the app's process on this Mac and time launches with iOS's own first-frame
-/// signpost (`DeviceControl`); Android reads /proc, `dumpsys` and `am start -W` over adb
-/// (`AndroidApps`). iPhones have neither without Instruments, so `PhoneBackend.performance` is nil
-/// there and `measure_launch` times the screen instead.
+/// signpost (`DeviceControl`); iPhones record Instruments' Activity Monitor template with
+/// `xctrace` (`DeviceControl` too); Android reads /proc, `dumpsys` and `am start -W` over adb and
+/// records Perfetto (`AndroidApps`).
 public protocol AppPerformance: Sendable {
     /// Samples a running app about once a second for `seconds`.
     func sample(_ bundleID: String, seconds: TimeInterval) async throws -> PerformanceSample
@@ -93,6 +206,24 @@ public protocol AppPerformance: Sendable {
     func coldLaunch(_ bundleID: String) async throws -> LaunchTiming
     /// How `coldLaunch` measures, in a few words for the tool's answer.
     var launchMethod: String { get }
+    /// Whether `measure_launch` uses `coldLaunch` unless told otherwise; false times the screen.
+    var timesLaunches: Bool { get }
+    /// The whole device right now: every process's CPU and memory, the memory in use, the thermal state.
+    func deviceLoad() async throws -> DeviceLoad
+    /// Records a trace into `request.output`.
+    func recordTrace(_ request: TraceRequest) async throws -> TraceRecording
+}
+
+extension AppPerformance {
+    public var timesLaunches: Bool { true }
+
+    public func deviceLoad() async throws -> DeviceLoad {
+        throw DeveloperError("This device cannot report its load.")
+    }
+
+    public func recordTrace(_ request: TraceRequest) async throws -> TraceRecording {
+        throw DeveloperError("This device cannot record traces.")
+    }
 }
 
 /// Readings at a steady interval until `seconds` passed or `read` returns nil because the process
@@ -132,23 +263,28 @@ struct UsageSampler {
     static func interval(for seconds: TimeInterval) -> TimeInterval { seconds < 5 ? 0.5 : 1 }
 }
 
-// MARK: - Simulators
+// MARK: - Simulators and iPhones
 
 /// A simulator's app is a process on this Mac, so it is sampled like one: `proc_pid_rusage` gives its
 /// CPU time and physical footprint, the memory Xcode's gauge shows. The pid comes from the
 /// simulator's own launchd, so an app of the same name in another simulator is never measured.
+/// An iPhone's app is recorded with Instruments' Activity Monitor template through `xctrace`,
+/// attached to the pid devicectl names, which reports the same two numbers about once a second.
 extension DeviceControl: AppPerformance {
     public var launchMethod: String { "iOS's first-frame signpost, the time Xcode reports as launch time" }
+
+    /// iPhones time the screen: see `coldLaunch`.
+    public var timesLaunches: Bool { isSimulator }
 
     private func requireSimulator(_ what: String) throws {
         guard isSimulator else {
             throw DeveloperError(
-                "\(what) works on simulators and Android. On an iPhone, record with Instruments: xcrun xctrace record --template 'Activity Monitor' --device <udid> --attach <app name> --time-limit 10s, and open the trace in Instruments.")
+                "\(what) works on simulators and Android. On an iPhone, measure_launch times the screen (method screen), or record the App Launch template with record_trace and open it in Instruments.")
         }
     }
 
     public func sample(_ bundleID: String, seconds: TimeInterval) async throws -> PerformanceSample {
-        try requireSimulator("Sampling an app's CPU and memory")
+        if !isSimulator { return try await sampleWithInstruments(bundleID, seconds: seconds) }
         let pid = try await runningPid(of: bundleID)
         let sampler = UsageSampler(seconds: seconds, interval: UsageSampler.interval(for: seconds)) {
             Self.usage(of: pid).map { ($0.cpuSeconds, $0.footprintMB) }
@@ -178,6 +314,69 @@ extension DeviceControl: AppPerformance {
             throw DeveloperError("The simulator named a process of another simulator for \(bundleID): \(path)")
         }
         return pid
+    }
+
+    /// Records the Activity Monitor template attached to the app for `seconds` and reads its
+    /// per-process table. Instruments takes several seconds to start and to save around that.
+    private func sampleWithInstruments(_ bundleID: String, seconds: TimeInterval) async throws -> PerformanceSample {
+        let (app, pid) = try await runningApp(bundleID)
+        let trace = Self.temporaryTrace()
+        defer { try? FileManager.default.removeItem(at: trace) }
+        let xctrace = Xctrace(runner: runner)
+        try await recordAttached(xctrace, template: "Activity Monitor", app: app, pid: pid, seconds: seconds, output: trace)
+        let rows = try await xctrace.export(trace, schema: "activity-monitor-process-live").flatMap(ActivityMonitor.processRows)
+        guard var sample = ActivityMonitor.sample(rows, pid: pid) else {
+            throw DeveloperError("Instruments recorded no readings of \(bundleID) (pid \(pid)). Is it still running?")
+        }
+        if let last = sample.points.last, last.time < seconds - 3 {
+            sample.ended = "Instruments read \(bundleID) for \(String(format: "%.1f", last.time)) s of \(Int(seconds)); it may have ended."
+        }
+        return sample
+    }
+
+    /// The app and the pid of its process on an iPhone, from devicectl.
+    func runningApp(_ bundleID: String) async throws -> (app: InstalledApp, pid: Int) {
+        guard let app = try await app(bundleID) else { throw DeveloperError("\(bundleID) is not installed.") }
+        guard let pid = try await runningPids(of: app).first else {
+            throw DeveloperError("\(bundleID) is not running. Start it with launch_app first.")
+        }
+        return (app, pid)
+    }
+
+    /// Attaches by pid. xctrace sometimes does not find a process on a simulator, the same app's
+    /// pid one minute and not the next (iOS 27, 2026-10-28), so it tries again after a pause, then
+    /// by the app's executable name.
+    private func recordAttached(
+        _ xctrace: Xctrace, template: String, app: InstalledApp, pid: Int, seconds: TimeInterval, output: URL
+    ) async throws {
+        let targets = [String(pid), String(pid)] + (Self.executableName(app).map { [$0] } ?? [])
+        for (index, target) in targets.enumerated() {
+            do {
+                try await xctrace.record(template: template, device: udid, target: .attach(target), seconds: seconds, output: output)
+                return
+            } catch let error as DeveloperError where error.description.contains("Cannot find process") {
+                guard index < targets.count - 1 else {
+                    throw DeveloperError(
+                        "Instruments did not find \(app.bundleID) (pid \(pid)) on the device: \(error.description) Try again in a few seconds, or record every process (no bundle_id).")
+                }
+                try await Task.sleep(nanoseconds: 2_000_000_000)
+            }
+        }
+    }
+
+    /// "…/My.app/" → "My", the name of the app's process; nil when the location is unknown.
+    static func executableName(_ app: InstalledApp) -> String? {
+        guard let location = app.location else { return nil }
+        let path = location.hasPrefix("file://") ? URL(string: location)?.path ?? location : location
+        if let executable = NSDictionary(contentsOfFile: (path as NSString).appendingPathComponent("Info.plist"))?["CFBundleExecutable"] as? String {
+            return executable
+        }
+        let name = (path as NSString).lastPathComponent
+        return name.hasSuffix(".app") ? String(name.dropLast(4)) : nil
+    }
+
+    static func temporaryTrace() -> URL {
+        FileManager.default.temporaryDirectory.appendingPathComponent("mobdev-\(UUID().uuidString).trace")
     }
 
     /// Lines like "41077\t0\tUIKitApplication:com.apple.Preferences[e5a5][rb-legacy]"; "-" stands
@@ -247,6 +446,162 @@ extension DeviceControl: AppPerformance {
                     : "\(bundleID) showed no first frame within 45 seconds.")
         }
         return LaunchTiming(milliseconds: (watch.state.get().duration ?? 0) * 1000)
+    }
+}
+
+// MARK: - Device load and traces on simulators and iPhones
+
+extension DeviceControl {
+    /// How long `deviceLoad` reads: two readings a second apart on a simulator, a recording this
+    /// long on an iPhone.
+    static let loadSeconds: TimeInterval = 3
+
+    public func deviceLoad() async throws -> DeviceLoad {
+        isSimulator ? try await simulatorLoad() : try await instrumentsLoad()
+    }
+
+    /// The simulator's processes are processes on this Mac: those its launchd lists, read twice a
+    /// second apart. Memory and the thermal state are the Mac's, which the simulator shares.
+    private func simulatorLoad() async throws -> DeviceLoad {
+        let pids = Self.pids(inLaunchctlList: try await simctl(["spawn", udid, "launchctl", "list"]))
+        let ownPids = pids.filter { pid in Self.path(of: pid).map(isSimulatorProcess) ?? false }
+        var first: [pid_t: (cpuSeconds: Double, footprintMB: Double)] = [:]
+        for pid in ownPids { first[pid] = Self.usage(of: pid) }
+        let started = Date()
+        try await Task.sleep(nanoseconds: 1_000_000_000)
+        let elapsed = max(Date().timeIntervalSince(started), 0.1)
+        let processes = ownPids.compactMap { pid -> DeviceLoad.Process? in
+            guard let before = first[pid], let after = Self.usage(of: pid), let path = Self.path(of: pid) else { return nil }
+            return DeviceLoad.Process(
+                name: (path as NSString).lastPathComponent, pid: Int(pid),
+                cpuPercent: max(after.cpuSeconds - before.cpuSeconds, 0) / elapsed * 100, memoryMB: after.footprintMB)
+        }
+        return DeviceLoad(
+            processes: processes, cpuPercent: processes.map(\.cpuPercent).reduce(0, +),
+            cores: ProcessInfo.processInfo.activeProcessorCount,
+            memoryUsedMB: processes.map(\.memoryMB).reduce(0, +),
+            memoryTotalMB: Double(ProcessInfo.processInfo.physicalMemory) / 1_048_576,
+            thermalState: Self.thermalName(ProcessInfo.processInfo.thermalState), memoryKind: "physical footprint",
+            seconds: elapsed, source: "the simulator's processes on this Mac (proc_pid_rusage, 1 s apart)",
+            note: "A simulator runs on this Mac: CPU is out of the Mac's cores, memory used is what the simulator's processes take together out of the Mac's memory, and the thermal state is the Mac's.")
+    }
+
+    /// A process of this simulator: its runtime's system or an app in this simulator's folder.
+    private func isSimulatorProcess(_ path: String) -> Bool {
+        path.contains(".simruntime/") || path.contains("/CoreSimulator/Devices/\(udid)/")
+            || (path.contains("/CoreSimulator/") && !path.contains("/CoreSimulator/Devices/"))
+    }
+
+    /// Every pid of a `launchctl list`; "-" stands for a job that is not running.
+    static func pids(inLaunchctlList text: String) -> [pid_t] {
+        text.split(separator: "\n").compactMap { line in
+            line.split(separator: "\t", omittingEmptySubsequences: false).first.flatMap { pid_t($0) }.flatMap { $0 > 0 ? $0 : nil }
+        }
+    }
+
+    static func path(of pid: pid_t) -> String? {
+        var buffer = [UInt8](repeating: 0, count: 4096)
+        let length = proc_pidpath(pid, &buffer, UInt32(buffer.count))
+        return length > 0 ? String(decoding: buffer.prefix(Int(length)), as: UTF8.self) : nil
+    }
+
+    static func thermalName(_ state: ProcessInfo.ThermalState) -> String {
+        switch state {
+        case .nominal: "Nominal"
+        case .fair: "Fair"
+        case .serious: "Serious"
+        case .critical: "Critical"
+        @unknown default: "Unknown"
+        }
+    }
+
+    /// A short Activity Monitor recording of every process on the iPhone.
+    private func instrumentsLoad() async throws -> DeviceLoad {
+        let trace = Self.temporaryTrace()
+        defer { try? FileManager.default.removeItem(at: trace) }
+        let xctrace = Xctrace(runner: runner)
+        try await xctrace.record(
+            template: "Activity Monitor", device: udid, target: .allProcesses, seconds: Self.loadSeconds, output: trace)
+        let contents = try? await xctrace.contents(trace)
+        let processes = try await xctrace.export(trace, schema: "activity-monitor-process-live").first
+        let system = try? await xctrace.export(trace, schema: "activity-monitor-system").first
+        let thermal = try? await xctrace.export(trace, schema: "device-thermal-state-intervals").first
+        return ActivityMonitor.deviceLoad(
+            processes: processes, system: system ?? nil, thermal: thermal ?? nil, memoryBytes: contents?.memoryBytes,
+            seconds: contents?.duration ?? Self.loadSeconds)
+    }
+
+    /// Records an Instruments template with xctrace, attached to an app, launching it, or for
+    /// every process, and reads a summary from the trace where that is cheap.
+    public func recordTrace(_ request: TraceRequest) async throws -> TraceRecording {
+        let xctrace = Xctrace(runner: runner)
+        let template = try await xctrace.template(named: request.template)
+        if isSimulator, template == "Activity Monitor" {
+            throw DeveloperError(
+                "Instruments' Activity Monitor needs an iPhone or this Mac: a simulator has no activity monitoring service. Use performance or device_load, which read the simulator's processes on this Mac.")
+        }
+        try FileManager.default.createDirectory(at: request.output.deletingLastPathComponent(), withIntermediateDirectories: true)
+        var pid: Int?
+        let target: String
+        switch request.target {
+        case .allProcesses:
+            target = "all processes"
+            try await xctrace.record(
+                template: template, device: udid, target: .allProcesses, seconds: request.seconds, output: request.output)
+        case .attach(let bundleID):
+            if isSimulator {
+                guard let app = try await app(bundleID) else { throw DeveloperError("\(bundleID) is not installed.") }
+                let found = Int(try await runningPid(of: bundleID))
+                pid = found
+                try await recordAttached(xctrace, template: template, app: app, pid: found, seconds: request.seconds, output: request.output)
+            } else {
+                let (app, found) = try await runningApp(bundleID)
+                pid = found
+                try await recordAttached(xctrace, template: template, app: app, pid: found, seconds: request.seconds, output: request.output)
+            }
+            target = "\(bundleID) (pid \(pid ?? 0))"
+        case .launch(let bundleID):
+            // xctrace starts the app by its bundle ID, on simulators too (checked on iOS 27).
+            guard let app = try await app(bundleID) else { throw DeveloperError("\(bundleID) is not installed.") }
+            _ = try? await stop(bundleID)
+            target = "\(bundleID), launched for the recording"
+            try await xctrace.record(
+                template: template, device: udid, target: .launch(app.bundleID), seconds: request.seconds,
+                output: request.output)
+        }
+        // The trace is saved; its summary may take only so long, so the answer still fits a relay's
+        // call. A summary that runs over is left out and its exports stopped.
+        let output = request.output
+        let attached = pid
+        let read = await TraceSummary.within(TraceSummary.deadline) { () -> (TraceContents?, [String]) in
+            let contents = try? await xctrace.contents(output)
+            return (contents, await TraceSummary.read(output, template: template, contents: contents, pid: attached, xctrace: xctrace))
+        }
+        let contents = read?.0
+        let summary = read?.1 ?? ["The summary took too long; the trace has it all."]
+        return TraceRecording(
+            file: request.output, template: template, target: target, seconds: contents?.duration, summary: summary,
+            howToOpen: "Open it in Instruments (open \(Shell.quoted(request.output.path)))")
+    }
+}
+
+extension TraceSummary {
+    /// How long the summary of a recorded trace may take: Instruments' 10 to 20 seconds and a
+    /// minute of recording leave this much of a relay's 90.
+    static let deadline: TimeInterval = 15
+
+    /// What `work` returns within `seconds`, or nil, after cancelling it, when it takes longer.
+    static func within<T: Sendable>(_ seconds: TimeInterval, _ work: @escaping @Sendable () async -> T) async -> T? {
+        await withTaskGroup(of: T?.self) { group in
+            group.addTask { await work() }
+            group.addTask {
+                try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+                return nil
+            }
+            let first = await group.next() ?? nil
+            group.cancelAll()
+            return first
+        }
     }
 }
 
