@@ -789,22 +789,60 @@ enum XCResultReader {
         return failures
     }
 
-    /// The exported files of each test, by its `-only-testing:` identifier, from the manifest.json
-    /// of `export attachments`, made absolute. `bundles` names the bundle of a test identifier when
-    /// the manifest has no URL.
-    static func attachments(manifest data: Data, folder: URL, bundles: [String: String] = [:]) -> [String: [String]] {
-        guard let entries = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else { return [:] }
-        var files: [String: [String]] = [:]
+    /// The identifier URL of each test case by its `-only-testing:` identifier: what
+    /// `export attachments --test-id` takes.
+    static func identifierURLs(_ data: Data) -> [String: String] {
+        guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return [:] }
+        var urls: [String: String] = [:]
+        func visit(_ node: [String: Any], bundle: String?) {
+            let type = node["nodeType"] as? String ?? ""
+            let name = node["name"] as? String ?? ""
+            if type == "Test Case" {
+                if let url = node["nodeIdentifierURL"] as? String {
+                    urls[onlyTesting(url: url, identifier: node["nodeIdentifier"] as? String ?? name, bundle: bundle)] = url
+                }
+                return
+            }
+            let isBundle = type == "Unit test bundle" || type == "UI test bundle"
+            for child in node["children"] as? [[String: Any]] ?? [] { visit(child, bundle: isBundle ? name : bundle) }
+        }
+        for node in root["testNodes"] as? [[String: Any]] ?? [] { visit(node, bundle: nil) }
+        return urls
+    }
+
+    /// The files `export attachments` wrote into `folder` for one test, renamed from their UUIDs
+    /// to the names Xcode suggests ("Screen Recording … .mp4", "Debug description for …txt"), as
+    /// absolute paths. Xcode 27 marks a failing UI test's recording, hierarchy and descriptions as
+    /// not associated with the failure, so a failed test's attachments are all of its own.
+    static func readableAttachments(manifest data: Data, folder: URL) -> [String] {
+        guard let entries = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else { return [] }
+        let files = FileManager.default
+        var paths: [String] = []
         for entry in entries {
-            guard let identifier = entry["testIdentifier"] as? String else { continue }
-            let id = onlyTesting(
-                url: entry["testIdentifierURL"] as? String, identifier: identifier, bundle: bundles[identifier])
             for attachment in entry["attachments"] as? [[String: Any]] ?? [] {
-                guard let name = attachment["exportedFileName"] as? String else { continue }
-                files[id, default: []].append(folder.appendingPathComponent(name).path)
+                guard let exported = attachment["exportedFileName"] as? String, !exported.contains("/") else { continue }
+                let source = folder.appendingPathComponent(exported)
+                var name = (attachment["suggestedHumanReadableName"] as? String ?? "")
+                    .replacingOccurrences(of: "/", with: "-").replacingOccurrences(of: ":", with: "-")
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                if name.hasPrefix(".") { name = String(name.drop { $0 == "." }) }
+                name = String(name.prefix(120))
+                let ext = (exported as NSString).pathExtension
+                if !ext.isEmpty, (name as NSString).pathExtension.lowercased() != ext.lowercased() { name += ".\(ext)" }
+                var target = folder.appendingPathComponent(name.isEmpty ? exported : name)
+                var copy = 2
+                while target != source, files.fileExists(atPath: target.path) {
+                    target = folder.appendingPathComponent("\(copy) \(name)")
+                    copy += 1
+                }
+                if target != source, (try? files.moveItem(at: source, to: target)) != nil {
+                    paths.append(target.path)
+                } else if files.fileExists(atPath: source.path) {
+                    paths.append(source.path)
+                }
             }
         }
-        return files
+        return paths
     }
 
     /// The start and end of the run in `get test-results summary`, for its duration.

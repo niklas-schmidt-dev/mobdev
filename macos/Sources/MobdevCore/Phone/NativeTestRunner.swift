@@ -372,11 +372,13 @@ public struct NativeTestRunner: Sendable {
         }
         let path = ["--path", bundle.path]
         var tests: [NativeTestResult.Test] = []
+        var listing = Data()
         var problem: String?
         do {
             let listed = try await commands.run(Self.xcrun, ["xcresulttool", "get", "test-results", "tests"] + path, timeout: 300)
             if listed.status == 0 {
-                tests = try XCResultReader.tests(Data(Self.json(listed.output).utf8))
+                listing = Data(Self.json(listed.output).utf8)
+                tests = try XCResultReader.tests(listing)
             } else {
                 problem = listed.output.trimmingCharacters(in: .whitespacesAndNewlines)
             }
@@ -396,17 +398,19 @@ public struct NativeTestRunner: Sendable {
         {
             buildErrors = XCResultReader.buildErrors(Data(Self.json(built.output).utf8))
         }
-        // The failures' attachments, such as a UI test's screenshot, next to the results.
-        if tests.contains(where: { $0.status == .failed }) {
+        // The failed tests' attachments, such as a UI test's screen recording, next to the results.
+        let urls = XCResultReader.identifierURLs(listing)
+        for (number, index) in tests.indices.filter({ tests[$0].status == .failed }).prefix(Self.attachedFailures).enumerated() {
+            let identifier = tests[index].identifier
             let folder = run.output.appendingPathComponent("attachments", isDirectory: true)
+                .appendingPathComponent("\(number + 1)-\(TestProject.slug(identifier))", isDirectory: true)
             let exported = try? await commands.run(
-                Self.xcrun, ["xcresulttool", "export", "attachments"] + path + ["--output-path", folder.path, "--only-failures"],
+                Self.xcrun,
+                ["xcresulttool", "export", "attachments"] + path + ["--test-id", urls[identifier] ?? identifier, "--output-path", folder.path],
                 timeout: 300)
             if exported?.status == 0, let manifest = try? Data(contentsOf: folder.appendingPathComponent("manifest.json")) {
-                let files = XCResultReader.attachments(manifest: manifest, folder: folder)
-                for index in tests.indices {
-                    if let found = files[tests[index].identifier], !found.isEmpty { tests[index].attachments = found }
-                }
+                let files = XCResultReader.readableAttachments(manifest: manifest, folder: folder)
+                if !files.isEmpty { tests[index].attachments = files }
             }
         }
         return finish(run) { result in
@@ -426,6 +430,9 @@ public struct NativeTestRunner: Sendable {
             }
         }
     }
+
+    /// How many failed tests get their attachments exported; a run with more failures has bigger problems.
+    static let attachedFailures = 20
 
     /// xcresulttool's JSON without a warning printed before or after it: stdout and stderr come
     /// together.

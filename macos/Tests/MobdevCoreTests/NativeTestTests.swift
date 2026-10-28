@@ -21,7 +21,8 @@ final class NativeCommands: CommandRunning, @unchecked Sendable {
     var tests = ""
     var summary = ""
     var build = ""
-    var manifest: String?
+    /// The manifest `export attachments` writes for a test, by its --test-id; each file it names is written too.
+    var manifests: [String: String] = [:]
     /// Holds the started command until `release()`.
     var held = false
     let started = Locked<[[String]]>([])
@@ -35,10 +36,16 @@ final class NativeCommands: CommandRunning, @unchecked Sendable {
         if joined.contains("test-results tests") { return CommandResult(status: 0, output: tests) }
         if joined.contains("test-results summary") { return CommandResult(status: 0, output: summary) }
         if joined.contains("build-results") { return CommandResult(status: 0, output: build) }
-        if joined.contains("export attachments"), let manifest, let index = arguments.firstIndex(of: "--output-path") {
+        if joined.contains("export attachments"), let index = arguments.firstIndex(of: "--output-path"),
+            let test = arguments.firstIndex(of: "--test-id")
+        {
             let folder = URL(fileURLWithPath: arguments[index + 1])
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            let manifest = manifests[arguments[test + 1]] ?? "[]"
             try Data(manifest.utf8).write(to: folder.appendingPathComponent("manifest.json"))
+            for match in manifest.matches(of: /"exportedFileName": "([^"]+)"/) {
+                try Data("x".utf8).write(to: folder.appendingPathComponent(String(match.1)))
+            }
             return CommandResult(status: 0, output: "")
         }
         return CommandResult(status: 1, output: "unexpected \(joined)")
@@ -510,16 +517,32 @@ final class NativeCommands: CommandRunning, @unchecked Sendable {
         #expect(errors[0].message.hasPrefix("Use of 'add' refers to instance method"))
     }
 
-    @Test func readsAttachmentsByTest() {
-        let manifest = #"""
-            [{"testIdentifier": "SampleUITests/testMissing()", "testIdentifierURL": "test://com.apple.xcode/Sample/SampleUITests/SampleUITests/testMissing",
-              "attachments": [{"exportedFileName": "A1.png", "suggestedHumanReadableName": "Screenshot", "isAssociatedWithFailure": true, "configurationName": "x", "deviceName": "y", "deviceId": "z"}]},
-             {"testIdentifier": "SampleTests/testOld()", "attachments": [{"exportedFileName": "B.txt"}]}]
-            """#
-        let files = XCResultReader.attachments(
-            manifest: Data(manifest.utf8), folder: URL(fileURLWithPath: "/run/attachments"), bundles: ["SampleTests/testOld()": "SampleTests"])
-        #expect(files["SampleUITests/SampleUITests/testMissing"] == ["/run/attachments/A1.png"])
-        #expect(files["SampleTests/SampleTests/testOld"] == ["/run/attachments/B.txt"])
+    /// What `export attachments --test-id` wrote for a failed UI test on Xcode 27: none of it is
+    /// marked as associated with the failure.
+    static let manifestJSON = #"""
+        [{"attachments": [
+          {"configurationName": "Test Scheme Action", "deviceId": "SIM", "deviceName": "mobdev", "exportedFileName": "2AB6F026.txt", "isAssociatedWithFailure": false, "suggestedHumanReadableName": "App UI hierarchy for dev.mobdev.Sample", "timestamp": 1793206808.116},
+          {"configurationName": "Test Scheme Action", "deviceId": "SIM", "deviceName": "mobdev", "exportedFileName": "9F08B873", "isAssociatedWithFailure": false, "suggestedHumanReadableName": "UI Snapshot 2026-10-28 at 06.00.08 PM", "timestamp": 1793206808.116},
+          {"configurationName": "Test Scheme Action", "deviceId": "SIM", "deviceName": "mobdev", "exportedFileName": "AFB93861.mp4", "isAssociatedWithFailure": false, "suggestedHumanReadableName": "Screen Recording 2026-10-28 at 05.56.15 PM.mp4", "timestamp": 1793206575.0},
+          {"configurationName": "Test Scheme Action", "deviceId": "SIM", "deviceName": "mobdev", "exportedFileName": "B1.txt", "isAssociatedWithFailure": false, "suggestedHumanReadableName": "Debug description for `missing`/Button: 1", "timestamp": 1793206808.0}],
+          "testIdentifier": "SampleUIFailingTests/testMissingButton()",
+          "testIdentifierURL": "test://com.apple.xcode/Sample/SampleUITests/SampleUIFailingTests/testMissingButton"}]
+        """#
+
+    @Test func attachmentsGetTheirReadableNames() throws {
+        let folder = try folder()
+        for name in ["2AB6F026.txt", "9F08B873", "AFB93861.mp4", "B1.txt"] {
+            try Data("x".utf8).write(to: folder.appendingPathComponent(name))
+        }
+        let files = XCResultReader.readableAttachments(manifest: Data(Self.manifestJSON.utf8), folder: folder)
+        #expect(files.map { ($0 as NSString).lastPathComponent } == [
+            "App UI hierarchy for dev.mobdev.Sample.txt", "UI Snapshot 2026-10-28 at 06.00.08 PM",
+            "Screen Recording 2026-10-28 at 05.56.15 PM.mp4", "Debug description for `missing`-Button- 1.txt",
+        ])
+        #expect(files.allSatisfy { FileManager.default.fileExists(atPath: $0) })
+        let urls = XCResultReader.identifierURLs(Data(Self.testsJSON.utf8))
+        #expect(urls["SampleTests/addingBreaks()"] == "test://com.apple.xcode/Sample/SampleTests/addingBreaks()")
+        #expect(urls["SampleTests/SampleTests/testAddFails"] == "test://com.apple.xcode/Sample/SampleTests/SampleTests/testAddFails")
     }
 
     @Test func readsGradlesJUnitReports() throws {
@@ -601,7 +624,10 @@ final class NativeCommands: CommandRunning, @unchecked Sendable {
 
     @Test func aRunReadsTheResultBundleAndKeepsTheFiles() async throws {
         let (project, commands, runner) = try xcodeSetup()
-        commands.manifest = #"[{"testIdentifier": "SampleTests/testAddFails()", "testIdentifierURL": "test://com.apple.xcode/Sample/SampleTests/SampleTests/testAddFails", "attachments": [{"exportedFileName": "shot.png"}]}]"#
+        commands.manifests = [
+            "test://com.apple.xcode/Sample/SampleTests/SampleTests/testAddFails":
+                #"[{"testIdentifier": "SampleTests/testAddFails()", "attachments": [{"exportedFileName": "A1.png", "suggestedHumanReadableName": "Screenshot"}]}]"#
+        ]
         let plan = try NativeTestPlan.resolve(project, platform: .ios)
         let output = try NativeTestRuns.newRunFolder(for: project)
         #expect(output.path.hasPrefix(project.folder.path + "/output/native-runs/"))
@@ -613,7 +639,13 @@ final class NativeCommands: CommandRunning, @unchecked Sendable {
         #expect(result.error == nil)
         #expect(Int(result.seconds) == 400)
         #expect(result.resultBundle == output.appendingPathComponent("Tests.xcresult").path)
-        #expect(result.tests[2].attachments == [output.appendingPathComponent("attachments/shot.png").path])
+        #expect(result.tests[2].attachments == [output.appendingPathComponent("attachments/2-sampletests-sampletests-testaddfails/Screenshot.png").path])
+        #expect(result.tests[1].attachments == nil)
+        // One export per failed test, by its identifier URL.
+        let exports = commands.ran.get().filter { $0.contains("attachments") }
+        #expect(exports.compactMap { call in call.firstIndex(of: "--test-id").map { call[$0 + 1] } } == [
+            "test://com.apple.xcode/Sample/SampleTests/addingBreaks()", "test://com.apple.xcode/Sample/SampleTests/SampleTests/testAddFails",
+        ])
         #expect(result.command.first == "/usr/bin/xcodebuild")
         let log = try String(contentsOf: URL(fileURLWithPath: result.log), encoding: .utf8)
         #expect(log.contains("testAddFails]' failed"))
