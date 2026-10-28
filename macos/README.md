@@ -937,9 +937,9 @@ versions and their review state, and customer reviews.
 **Set up (once):**
 
 1. In [App Store Connect](https://appstoreconnect.apple.com) open **Users and Access ›
-   Integrations › App Store Connect API** and create a **team key**. The **App Manager** role
-   allows everything Mobdev does; **Developer** is enough to read (replying to reviews also works
-   with **Customer Support**). Individual keys are not supported.
+   Integrations › App Store Connect API** and create a **team key** with the **App Manager** role,
+   which allows everything Mobdev does. A key with a narrower role sees less, and the tools answer
+   403 for the rest. Individual keys are not supported.
 2. Download the key's `AuthKey_<key ID>.p8` file; Apple offers it only once. Copy the **issuer ID**
    shown above the list of keys.
 3. In Mobdev open **Settings › App Store Connect**, enter the issuer ID, choose the `.p8` file (the

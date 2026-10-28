@@ -24,7 +24,7 @@ public enum AppStoreError: Error, Equatable, CustomStringConvertible, LocalizedE
             "App Store Connect did not accept the key (401). Check the key ID and issuer ID in Mobdev's Settings › App Store Connect, and that the key was not revoked."
                 + (detail.isEmpty ? "" : " \(detail)")
         case .forbidden(let detail):
-            "The key's role does not allow this (403)\(detail.isEmpty ? "" : ": \(detail)"). Reading needs at least the Developer role; changing TestFlight and replying to reviews needs App Manager or Admin, or Customer Support for replies."
+            "The key's role does not allow this (403)\(detail.isEmpty ? "" : ": \(detail)"). A key with the App Manager or Admin role may do everything Mobdev asks for; the user creates one in App Store Connect › Users and Access › Integrations."
         case .notFound(let detail): detail.isEmpty ? "App Store Connect does not know it (404)." : "Not found (404): \(detail)"
         case .rateLimited(let seconds):
             "App Store Connect's hourly request limit for this key is used up (429). Try again "

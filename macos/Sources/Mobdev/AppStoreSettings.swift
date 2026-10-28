@@ -66,7 +66,7 @@ struct AppStoreSettings: View {
                     Text("API key")
                 } footer: {
                     Text(
-                        "Create a team key in App Store Connect › Users and Access › Integrations › App Store Connect API, with the App Manager role (Developer is enough to only read). Download its AuthKey_….p8 file, which Apple offers once, and copy the issuer ID shown above the keys."
+                        "Create a team key in App Store Connect › Users and Access › Integrations › App Store Connect API, with the App Manager role, which allows everything Mobdev does. Download its AuthKey_….p8 file, which Apple offers once, and copy the issuer ID shown above the keys."
                     )
                 }
             }
