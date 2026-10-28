@@ -92,7 +92,10 @@ public final class HardwareDevice: PhoneBackend, @unchecked Sendable {
     // MARK: PhoneBackend
 
     public func status() -> PhoneStatus {
-        PhoneStatus(screen: screenState, bluetooth: bluetooth, keyboardLayout: layout.get(), pointer: pointer.get())
+        let runner = self.runner?.state
+        return PhoneStatus(
+            screen: screenState, bluetooth: bluetooth, keyboardLayout: layout.get(), pointer: pointer.get(),
+            input: runner == .running ? .runner : .bluetooth, runner: runner)
     }
 
     /// The capture's state, except that "no picture" from a locked iPhone says so. A locked iPhone
@@ -129,41 +132,64 @@ public final class HardwareDevice: PhoneBackend, @unchecked Sendable {
         return input
     }
 
+    /// Mobdev Runner while it runs, else Bluetooth.
+    private var routes: IPhoneInput {
+        IPhoneInput(runner: activeRunner, bluetooth: { try self.requireInput() }, layout: layout.get())
+    }
+
     public func tap(at point: NormalizedPoint, hold: TimeInterval) async throws {
-        try await requireInput().tap(at: point, hold: hold)
+        try await routes.tap(at: point, hold: hold)
+    }
+
+    public func doubleTap(at point: NormalizedPoint) async throws {
+        try await routes.doubleTap(at: point)
     }
 
     public func swipe(from start: NormalizedPoint, to end: NormalizedPoint, duration: TimeInterval) async throws {
-        try await requireInput().swipe(from: start, to: end, duration: duration)
+        try await routes.swipe(from: start, to: end, duration: duration)
     }
 
     public func scroll(at point: NormalizedPoint, ticks: Int) async throws {
-        try await requireInput().scroll(at: point, ticks: ticks)
+        try await routes.scroll(at: point, ticks: ticks)
     }
 
     public func pan(at point: NormalizedPoint, ticks: Int) async throws {
-        try await requireInput().pan(at: point, ticks: ticks)
+        try await routes.pan(at: point, ticks: ticks)
     }
 
     public func type(_ strokes: [KeyStroke]) async throws {
-        try await requireInput().type(strokes)
+        try await routes.type(strokes)
     }
 
     public func press(_ stroke: KeyStroke) async throws {
-        try await requireInput().press(stroke)
+        try await routes.press(stroke)
     }
 
     public func press(_ button: ConsumerUsage) async throws {
-        try await requireInput().consumer(button)
+        try await routes.press(button)
     }
 
+    /// Mobdev Runner types any text, emoji included. Without it the tools type key by key over
+    /// Bluetooth with the keyboard layout.
+    public func typeText(_ text: String) async throws -> Bool {
+        try await routes.typeText(text)
+    }
+
+    /// Through Mobdev Runner by name or bundle ID; without it, Spotlight over Bluetooth.
+    public func openApp(named name: String) async throws -> String? {
+        try await routes.openApp(named: name, apps: apps)
+    }
+
+    /// The Bluetooth pointer, e.g. to show it during setup. Nothing to move through Mobdev Runner.
     public func move(to point: NormalizedPoint) async throws {
         try await requireInput().move(to: point)
     }
 
     /// Parks the pointer far from `point`, then moves it there and compares the screen before and
     /// after. Nothing is clicked. Takes about a second.
+    /// Nil through Mobdev Runner, which needs no pointer.
     public func checkPointer(at point: NormalizedPoint) async throws -> PointerBehavior? {
+        guard activeRunner == nil else { return nil }
         let input = try requireInput()
         try await input.move(to: PointerCheck.parking(for: point))
         // iOS draws the pointer, and fades a snap outline in, within a few frames.

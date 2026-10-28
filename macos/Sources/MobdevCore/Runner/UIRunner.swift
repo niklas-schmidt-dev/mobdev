@@ -104,7 +104,21 @@ public final class UIRunner: @unchecked Sendable {
     /// Types into the focused field; any characters, emoji included.
     public func type(_ text: String) async throws { try await client().type(text) }
 
-    public func tap(at point: NormalizedPoint) async throws { try await client().tap(point) }
+    public func tap(at point: NormalizedPoint, hold: TimeInterval) async throws {
+        try await client().tap(point, hold: hold)
+    }
+
+    public func doubleTap(at point: NormalizedPoint) async throws { try await client().doubleTap(point) }
+
+    public func drag(from start: NormalizedPoint, to end: NormalizedPoint, duration: TimeInterval) async throws {
+        try await client().drag(from: start, to: end, duration: duration)
+    }
+
+    public func press(key: String, modifiers: [String]) async throws { try await client().key(key, modifiers: modifiers) }
+
+    public func press(button: String) async throws { try await client().button(button) }
+
+    public func activate(_ bundleID: String) async throws { try await client().activate(bundleID) }
 
     /// How to reach the runner while it runs; otherwise why it cannot be reached.
     func client() throws -> RunnerClient {
@@ -118,7 +132,7 @@ public final class UIRunner: @unchecked Sendable {
             throw DeveloperError("Mobdev Runner is starting on this device. Try again in a few seconds.")
         case .failed(let reason):
             throw ToolFailure(
-                "Mobdev Runner could not start: \(reason) Then click Try Again under UI Tree in the device's info in Mobdev.")
+                "Mobdev Runner could not start: \(reason) Then click Try Again under Developer Mode Control in the device's info in Mobdev.")
         case .off:
             throw ToolFailure("Mobdev Runner is off for this device.")
         }
@@ -227,13 +241,21 @@ public final class UIRunner: @unchecked Sendable {
         var answered = false
         while !exited.get(), isCurrent(generation) {
             if !answered {
-                if (try? await client.health()) != nil {
+                do {
+                    try await client.health()
                     answered = true
                     Log.info("runner for \(udid): running")
                     update(generation, .running)
-                } else if Date() > deadline {
+                } catch let mismatch as RunnerClient.VersionMismatch {
+                    // The new build did not replace the runner on the device. After three tries the
+                    // runner fails with this reason, and Try Again builds it again.
+                    lines.withLock { $0.append("error: \(mismatch)") }
+                    process.stop()
+                } catch where Date() > deadline {
                     lines.withLock { $0.append("error: Mobdev Runner did not answer within 5 minutes.") }
                     process.stop()
+                } catch {
+                    // Not up yet.
                 }
             }
             try? await Task.sleep(for: .seconds(1))
@@ -345,6 +367,7 @@ public final class UIRunner: @unchecked Sendable {
             (["Unable to find a destination", "is not available", "could not be found"],
              "Xcode does not see this device yet: connect and unlock it, open Xcode › Window › Devices and Simulators once, then try again."),
             (["is locked", "passcode"], "Unlock the iPhone and try again."),
+            (["an old build is still running"], "Click Try Again to build it again."),
         ]
         return hints.first { entry in entry.needles.contains { output.localizedCaseInsensitiveContains($0) } }?.hint
     }
@@ -384,22 +407,17 @@ public final class UIRunners: Sendable {
 }
 
 extension HardwareDevice {
-    /// Mobdev Runner for this iPhone, once it was turned on.
+    /// Mobdev Runner for this iPhone, once it was started.
     public var runner: UIRunner? { info.flatMap { UIRunners.shared.runner(for: $0.id) } }
+
+    /// Mobdev Runner while it runs on this iPhone: then every tap, swipe, key and button goes
+    /// through it instead of Bluetooth.
+    public var activeRunner: UIRunner? { runner.flatMap { $0.state == .running ? $0 : nil } }
 
     /// The elements on screen through Mobdev Runner. Nil while it is off: ui_tree then says how to
     /// turn it on.
     public func uiTree() async throws -> [UIElement]? {
         guard let runner, runner.state != .off else { return nil }
         return try await runner.elements()
-    }
-
-    /// The Bluetooth keyboard types what the keyboard layout has keys for. Mobdev Runner, while it
-    /// runs, types the rest, such as emoji.
-    public func typeText(_ text: String) async throws -> Bool {
-        guard let runner, runner.state == .running, (try? status().keyboardLayout.strokes(typing: text)) == nil
-        else { return false }
-        try await runner.type(text)
-        return true
     }
 }

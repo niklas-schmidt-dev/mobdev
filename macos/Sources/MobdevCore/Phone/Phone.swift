@@ -3,10 +3,15 @@ import Foundation
 
 /// How taps and keys reach a device.
 public enum InputRoute: Sendable, Equatable {
-    /// The Mac's Bluetooth keyboard and pointer, for iPhones and iPads.
+    /// The Mac's Bluetooth keyboard and pointer, for iPhones and iPads without Mobdev Runner.
     case bluetooth
+    /// Mobdev Runner, the UI test Mobdev keeps running on an iPhone or iPad in Developer Mode.
+    case runner
     /// Straight into the device, e.g. "Simulator" or "adb"; ready whenever the device is.
     case direct(String)
+
+    /// An iPhone or iPad on USB, whichever way its input goes.
+    public var isIPhone: Bool { self == .bluetooth || self == .runner }
 }
 
 public struct PhoneStatus: Sendable, Equatable {
@@ -16,16 +21,20 @@ public struct PhoneStatus: Sendable, Equatable {
     /// How the pointer reacted the last time it was checked; nil until then.
     public var pointer: PointerBehavior?
     public var input: InputRoute
+    /// Mobdev Runner on an iPhone: input goes through it while it runs. Nil where Mobdev has not
+    /// started it, and on simulators and Android.
+    public var runner: UIRunner.State?
 
     public init(
         screen: ScreenState, bluetooth: BluetoothState, keyboardLayout: KeyboardLayout, pointer: PointerBehavior? = nil,
-        input: InputRoute = .bluetooth
+        input: InputRoute = .bluetooth, runner: UIRunner.State? = nil
     ) {
         self.screen = screen
         self.bluetooth = bluetooth
         self.keyboardLayout = keyboardLayout
         self.pointer = pointer
         self.input = input
+        self.runner = runner
     }
 
     public var frameSize: (width: Int, height: Int)? {
@@ -33,10 +42,13 @@ public struct PhoneStatus: Sendable, Equatable {
         return nil
     }
 
-    /// Whether taps and keys can reach the device.
+    /// Whether taps and keys can reach the device. The runner route only exists while it runs.
     public var inputReady: Bool {
-        if case .direct = input { return screen.isConnected }
-        return bluetooth.isConnected
+        switch input {
+        case .direct: screen.isConnected
+        case .runner: true
+        case .bluetooth: bluetooth.isConnected
+        }
     }
 
     public var isReady: Bool { frameSize != nil && inputReady }
@@ -45,6 +57,7 @@ public struct PhoneStatus: Sendable, Equatable {
     public var inputSummary: String {
         switch input {
         case .bluetooth: bluetooth.summary
+        case .runner: "Mobdev Runner (Developer Mode)"
         case .direct(let route): inputReady ? "Direct (\(route))" : "Not available"
         }
     }
@@ -56,6 +69,8 @@ public protocol PhoneBackend: Sendable {
     func status() -> PhoneStatus
     func frame() -> CGImage?
     func tap(at point: NormalizedPoint, hold: TimeInterval) async throws
+    /// Two quick taps. By default two short taps; Mobdev Runner sends them as one gesture.
+    func doubleTap(at point: NormalizedPoint) async throws
     func swipe(from start: NormalizedPoint, to end: NormalizedPoint, duration: TimeInterval) async throws
     func scroll(at point: NormalizedPoint, ticks: Int) async throws
     /// Scrolls sideways; positive `ticks` reveal content further right.
@@ -71,7 +86,8 @@ public protocol PhoneBackend: Sendable {
     func openApp(named name: String) async throws -> String?
     /// Types text as a whole. False: the tools type it key by key with the keyboard layout.
     func typeText(_ text: String) async throws -> Bool
-    /// The elements on screen from the accessibility tree. Nil where there is none (an iPhone).
+    /// The elements on screen from the accessibility tree. Nil where there is none (an iPhone
+    /// without Mobdev Runner).
     func uiTree() async throws -> [UIElement]?
     /// Location, permissions, appearance and other state set from outside. Nil when unavailable.
     var settings: DeviceSettings? { get }
@@ -103,6 +119,11 @@ func wheelSwipe(at point: NormalizedPoint, ticks: Int, sideways: Bool = false) -
 }
 
 extension PhoneBackend {
+    public func doubleTap(at point: NormalizedPoint) async throws {
+        try await tap(at: point, hold: 0.05)
+        try await tap(at: point, hold: 0.05)
+    }
+
     public var apps: AppBackend? { nil }
     public func checkPointer(at point: NormalizedPoint) async throws -> PointerBehavior? { nil }
     public func openApp(named name: String) async throws -> String? { nil }

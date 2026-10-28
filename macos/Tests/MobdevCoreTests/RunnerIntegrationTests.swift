@@ -47,7 +47,7 @@ import Testing
 
         // Tap the search field and type accents and emoji, which the Bluetooth keyboard cannot.
         let search = try #require(elements.first { $0.role == "SearchField" })
-        try await runner.tap(at: search.center)
+        try await runner.tap(at: search.center, hold: 0)
         try await Task.sleep(for: .seconds(1))
         let text = "Grüße 😀 ñ"
         try await runner.type(text)
@@ -173,7 +173,7 @@ private final class RunnerPhone: PhoneBackend, @unchecked Sendable {
     }
 
     func frame() -> CGImage? { nil }
-    func tap(at point: NormalizedPoint, hold: TimeInterval) async throws { try await runner.tap(at: point) }
+    func tap(at point: NormalizedPoint, hold: TimeInterval) async throws { try await runner.tap(at: point, hold: hold) }
     func swipe(from start: NormalizedPoint, to end: NormalizedPoint, duration: TimeInterval) async throws {}
     func scroll(at point: NormalizedPoint, ticks: Int) async throws {}
     func pan(at point: NormalizedPoint, ticks: Int) async throws {}

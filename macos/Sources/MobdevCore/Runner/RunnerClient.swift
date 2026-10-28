@@ -9,19 +9,30 @@ struct RunnerClient: Sendable {
         case loopback
     }
 
-    /// The runner's API version this Mac speaks.
-    static let protocolVersion = 1
+    /// The runner's API version this Mac speaks. Mobdev builds the runner from its own copy of
+    /// `Runner/` on every start, so a runner of another version means an old build is still running.
+    static let protocolVersion = 2
 
     var route: Route
     var port: UInt16
     var token: String
     var usbmux = USBMux()
 
-    /// Throws unless the runner answers with this Mac's token.
+    /// Throws unless the runner answers with this Mac's token and speaks this Mac's version.
     func health() async throws {
-        let reply = try await call("GET", "/health", timeout: 3)
-        guard reply["version"]?.doubleValue == Double(Self.protocolVersion) else {
-            throw DeveloperError("Mobdev Runner on the device is a different version. Turn the UI tree off and on to rebuild it.")
+        try Self.checkVersion(try await call("GET", "/health", timeout: 3))
+    }
+
+    /// Throws when a /health answer names another version than this Mac's.
+    static func checkVersion(_ reply: JSONValue) throws {
+        let version = reply["version"]?.doubleValue.map { Int($0) }
+        guard version == protocolVersion else { throw VersionMismatch(version: version) }
+    }
+
+    struct VersionMismatch: Error, CustomStringConvertible {
+        let version: Int?
+        var description: String {
+            "Mobdev Runner on the device is version \(version.map(String.init) ?? "unknown"); this Mac needs version \(RunnerClient.protocolVersion), so an old build is still running there."
         }
     }
 
@@ -29,13 +40,65 @@ struct RunnerClient: Sendable {
         try Self.elements(fromTree: try await call("GET", "/tree", timeout: 30))
     }
 
-    func tap(_ point: NormalizedPoint) async throws {
-        _ = try await call("POST", "/tap", body: ["x": .number(point.x), "y": .number(point.y)], timeout: 30)
+    /// A tap, or a press of `hold` seconds from 0.2 on (a long press).
+    func tap(_ point: NormalizedPoint, hold: TimeInterval = 0) async throws {
+        _ = try await call("POST", "/tap", body: Self.tapBody(point, hold: hold), timeout: 30 + hold)
+    }
+
+    func doubleTap(_ point: NormalizedPoint) async throws {
+        _ = try await call("POST", "/tap", body: Self.tapBody(point, count: 2), timeout: 30)
+    }
+
+    /// Presses at `start` for `press` seconds, moves to `end` in `duration` seconds and lifts after
+    /// `hold` more: a swipe with the defaults, a drag (rearranging icons) with a longer press.
+    func drag(
+        from start: NormalizedPoint, to end: NormalizedPoint, duration: TimeInterval, press: TimeInterval = 0.05,
+        hold: TimeInterval = 0
+    ) async throws {
+        let body = Self.dragBody(from: start, to: end, duration: duration, press: press, hold: hold)
+        _ = try await call("POST", "/drag", body: body, timeout: 30 + duration + press + hold)
     }
 
     /// Types into the focused element. XCTest types about ten characters a second.
     func type(_ text: String) async throws {
         _ = try await call("POST", "/type", body: ["text": .string(text)], timeout: 30 + Double(text.count) / 5)
+    }
+
+    /// One key by its name (return, escape, …) or character, with cmd, shift, option or ctrl.
+    func key(_ key: String, modifiers: [String] = []) async throws {
+        _ = try await call("POST", "/key", body: Self.keyBody(key, modifiers: modifiers), timeout: 30)
+    }
+
+    /// home, volume_up or volume_down.
+    func button(_ name: String) async throws {
+        _ = try await call("POST", "/button", body: ["name": .string(name)], timeout: 30)
+    }
+
+    /// Brings an app to the front, launching it when it is not running.
+    func activate(_ bundleID: String) async throws {
+        _ = try await call("POST", "/activate", body: ["bundle": .string(bundleID)], timeout: 60)
+    }
+
+    static func tapBody(_ point: NormalizedPoint, hold: TimeInterval = 0, count: Int = 1) -> JSONValue {
+        var body: [String: JSONValue] = ["x": .number(point.x), "y": .number(point.y)]
+        if hold >= 0.2 { body["hold"] = .number(hold) }
+        if count != 1 { body["count"] = .number(Double(count)) }
+        return .object(body)
+    }
+
+    static func dragBody(
+        from start: NormalizedPoint, to end: NormalizedPoint, duration: TimeInterval, press: TimeInterval, hold: TimeInterval
+    ) -> JSONValue {
+        [
+            "from": [.number(start.x), .number(start.y)], "to": [.number(end.x), .number(end.y)],
+            "duration": .number(duration), "press": .number(press), "hold": .number(hold),
+        ]
+    }
+
+    static func keyBody(_ key: String, modifiers: [String]) -> JSONValue {
+        var body: [String: JSONValue] = ["key": .string(key)]
+        if !modifiers.isEmpty { body["modifiers"] = .array(modifiers.map(JSONValue.string)) }
+        return .object(body)
     }
 
     func call(_ method: String, _ path: String, body: JSONValue? = nil, timeout: TimeInterval) async throws -> JSONValue {

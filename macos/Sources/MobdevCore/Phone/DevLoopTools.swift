@@ -77,7 +77,7 @@ extension PhoneTools {
 
     private func requirePerformance() throws -> AppPerformance {
         guard let performance = phone.performance else {
-            if phone.status().input == .bluetooth {
+            if phone.status().input.isIPhone {
                 throw ToolFailure(
                     "Mobdev cannot read an iPhone app's CPU and memory without Instruments. Record it on this Mac with xcrun xctrace record --template 'Activity Monitor' --device <udid from list_devices> --attach <app name> --time-limit 10s and open the trace in Instruments, or measure on a simulator.")
             }

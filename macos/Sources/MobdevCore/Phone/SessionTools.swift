@@ -55,7 +55,7 @@ extension PhoneTools {
             guard let button = buttons[name] else {
                 throw ToolFailure("button must be volume_up, volume_down, mute, play_pause or lock.")
             }
-            if button == .power, phone.status().input == .bluetooth {
+            if button == .power, phone.status().input.isIPhone {
                 throw ToolFailure("Mobdev does not lock an iPhone: it could not enter the passcode to unlock it again.")
             }
             try requireTouch()
