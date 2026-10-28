@@ -44,6 +44,15 @@ public enum AppBlocklist {
         }
     }
 
+    /// Throws when the app a name led to is blocked, by its own name or bundle ID: a call names it
+    /// by a part, such as "Spark" for Sparkasse, that the list does not hold.
+    static func checkResolved(name: String, bundleID: String, list: [String]? = nil) throws {
+        let list = list ?? current()
+        guard !list.isEmpty, isBlocked(name, in: list) || isBlocked(bundleID, in: list) else { return }
+        throw ToolFailure(
+            "\(name) is on Mobdev's list of blocked apps, so agents may not open it. Ask the person at the Mac to open it, or to remove it from Settings › Agents in Mobdev.")
+    }
+
     /// Throws when a call would open a blocked app.
     static func check(_ tool: String, _ args: Arguments, list: [String]? = nil) throws {
         let app: String?

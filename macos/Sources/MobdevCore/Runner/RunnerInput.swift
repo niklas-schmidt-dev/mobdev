@@ -125,6 +125,7 @@ struct IPhoneInput {
     func openApp(named name: String, apps: AppBackend?) async throws -> String? {
         guard let runner, let apps else { return nil }
         let app = try await AppMatcher.find(name, in: apps.apps(all: true))
+        try AppBlocklist.checkResolved(name: app.name, bundleID: app.bundleID)
         try await runner.activate(app.bundleID)
         return "Opened \(app.name) (\(app.bundleID))."
     }
