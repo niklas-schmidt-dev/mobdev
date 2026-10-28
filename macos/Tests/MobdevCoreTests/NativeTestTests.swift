@@ -751,3 +751,64 @@ final class NativeCommands: CommandRunning, @unchecked Sendable {
         #expect(output.text.contains("Native Android tests: module app, task connectedDebugAndroidTest"))
     }
 }
+
+/// `Mobdev test --native`: its options and exit codes.
+@Suite struct NativeTestCommandTests {
+    @Test func parsesTheNativeOptions() throws {
+        let options = try NativeTestCommand.parse([
+            "mobdev/", "--native", "--simulator", "iPhone 17", "--scheme", "App", "--test-plan", "Unit", "--test",
+            "AppTests/LoginTests/testSignIn", "--no-build", "--artifacts", "out", "--wait", "30",
+        ])
+        #expect(options.project == "mobdev/")
+        #expect(options.platform == .ios)
+        #expect(options.simulator == "iPhone 17")
+        #expect(options.overrides == .init(scheme: "App", testPlan: "Unit"))
+        #expect(options.only == ["AppTests/LoginTests/testSignIn"])
+        #expect(!options.build && options.artifacts == "out" && options.wait == 30)
+        let android = try NativeTestCommand.parse(["p", "--native", "--emulator", "Pixel_9_Pro", "--module", "app", "--task", "connectedDebugAndroidTest"])
+        #expect(android.platform == .android && android.overrides == .init(task: "connectedDebugAndroidTest", module: "app"))
+        let unit = try NativeTestCommand.parse(["p", "--native", "--platform", "android", "--task", "testDebugUnitTest"])
+        #expect(unit.platform == .android && unit.device == nil)
+
+        func problem(_ arguments: [String]) -> String {
+            do {
+                _ = try NativeTestCommand.parse(arguments)
+                return ""
+            } catch {
+                return String(describing: error)
+            }
+        }
+        #expect(problem(["p", "--native", "--var", "A=b"]).contains("not for --native"))
+        #expect(problem(["p", "--native", "--device", "x", "--simulator", "iPhone 17"]).contains("one device"))
+        #expect(problem(["p", "--native", "--platform", "android", "--simulator", "iPhone 17"]).contains("--simulator runs iOS"))
+        #expect(problem(["p", "--native", "--platform", "windows"]).contains("ios or android"))
+        #expect(problem(["--native"]).contains("Which project"))
+    }
+
+    @Test func exitCodesSayPassedFailedOrCouldNotRun() throws {
+        let project = TestProject(folder: URL(fileURLWithPath: "/tmp/p"), name: "P")
+        let plan = NativeTestPlan(suite: .gradle(root: URL(fileURLWithPath: "/tmp/a"), task: "testDebugUnitTest", module: nil))
+        var result = NativeTestResult(project: project, plan: plan, device: nil, output: URL(fileURLWithPath: "/tmp/out"))
+        result.progress = nil
+        result.tests = [.init(name: "a", suite: "S", identifier: "S#a", status: .passed, seconds: 0)]
+        #expect(NativeTestCommand.exitCode(result) == 0)
+        result.tests.append(.init(name: "b", suite: "S", identifier: "S#b", status: .failed, seconds: 0, failures: [.init(message: "x")]))
+        #expect(NativeTestCommand.exitCode(result) == 1)
+        result.error = "The build failed"
+        #expect(NativeTestCommand.exitCode(result) == 2)
+        result.error = nil
+        result.tests = []
+        #expect(NativeTestCommand.exitCode(result) == 1)
+    }
+
+    @Test func aMissingSuiteCannotRun() async throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("mobdev-native-cli-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder.appendingPathComponent(".git"), withIntermediateDirectories: true)
+        try Data(#"{"name": "Empty"}"#.utf8).write(to: folder.appendingPathComponent("mobdev.json"))
+        let lines = Locked<[String]>([])
+        let code = await NativeTestCommand.execute(
+            [folder.path, "--native", "--platform", "android", "--task", "testDebugUnitTest"], output: { line in lines.withLock { $0.append(line) } })
+        #expect(code == 2)
+        #expect(lines.get().joined().contains("No Gradle wrapper"))
+    }
+}
