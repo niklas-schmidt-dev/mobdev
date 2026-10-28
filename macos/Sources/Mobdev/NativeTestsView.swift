@@ -29,7 +29,8 @@ struct NativeTestsView: View {
                 Divider()
                 content
             }
-            .frame(maxWidth: .infinity, minHeight: 220)
+            // Fills the pane, header at the top, also without a result below.
+            .frame(maxWidth: .infinity, minHeight: 220, maxHeight: .infinity, alignment: .top)
             if let result, !running, !result.tests.isEmpty || !result.buildErrors.isEmpty {
                 NativeTestDetail(test: selected, result: result)
                     .frame(maxWidth: .infinity, minHeight: 160)

@@ -33,8 +33,8 @@ final class FakeCommands: CommandRunning, @unchecked Sendable {
     static let simctl = """
         {
           "devicetypes": [
-            {"identifier": "com.apple.CoreSimulator.SimDeviceType.iPhone-17", "name": "iPhone 17", "productFamily": "iPhone"},
             {"identifier": "com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro", "name": "iPhone 17 Pro", "productFamily": "iPhone"},
+            {"identifier": "com.apple.CoreSimulator.SimDeviceType.iPhone-17", "name": "iPhone 17", "productFamily": "iPhone"},
             {"identifier": "com.apple.CoreSimulator.SimDeviceType.iPad-Air-11", "name": "iPad Air 11-inch (M4)", "productFamily": "iPad"},
             {"identifier": "com.apple.CoreSimulator.SimDeviceType.Apple-Watch-11", "name": "Apple Watch Series 11", "productFamily": "Apple Watch"}
           ],
@@ -185,6 +185,13 @@ final class FakeCommands: CommandRunning, @unchecked Sendable {
         let older = try await devices.createSimulator(type: "iPhone 17", runtime: "26", name: "Old iOS")
         #expect(older.system == "iOS 26.5" && older.name == "Old iOS")
         #expect(commands.calls.get().last?.hasSuffix("create Old iOS com.apple.CoreSimulator.SimDeviceType.iPhone-17 com.apple.CoreSimulator.SimRuntime.iOS-26-5") == true)
+    }
+
+    @Test func theCatalogKeepsSimctlsNewestFirstOrder() async throws {
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let catalog = try await (try makeDevices(simctlCommands())).catalog()
+        #expect(catalog.deviceTypes.map(\.name) == ["iPhone 17 Pro", "iPhone 17", "iPad Air 11-inch (M4)"])
+        #expect(catalog.runtimes.map(\.name) == ["iOS 27.0", "iOS 26.5"])
     }
 
     @Test func unknownTypesAndVersionsSayWhatThereIs() async throws {

@@ -257,9 +257,9 @@ public final class VirtualDevices: Sendable {
                     deviceTypes: Set((runtime.supportedDeviceTypes ?? []).map(\.identifier)))
             }
             .sorted { $0.version.compare($1.version, options: .numeric) == .orderedDescending }
-        // simctl lists types oldest first; newest first is what people pick from.
-        let ordered = types.filter { $0.family == "iPhone" }.reversed() + types.filter { $0.family == "iPad" }.reversed()
-        return SimulatorCatalog(deviceTypes: Array(ordered), runtimes: runtimes)
+        // simctl lists the newest types first, which is what people pick from.
+        let ordered = types.filter { $0.family == "iPhone" } + types.filter { $0.family == "iPad" }
+        return SimulatorCatalog(deviceTypes: ordered, runtimes: runtimes)
     }
 
     private func simulatorList() async -> Result<[VirtualDevice], Error> {

@@ -98,6 +98,7 @@ final class AppModel {
     /// What went wrong with the last of them, for an alert.
     var virtualProblem: String?
     var showsNewSimulator = false
+    @ObservationIgnored private var listingVirtualDevices = false
     /// Devices watched through the relay's live view right now, with who watches.
     private(set) var liveSessions: [LiveStreams.Session] = []
     /// The setup assistant. It opens by itself until macOS has asked for camera and Bluetooth
@@ -424,6 +425,11 @@ final class AppModel {
             virtualDevices = []
             return
         }
+        // One list at a time: reading the AVD folder can block until macOS has asked for access to
+        // the volume it is on, and every refresh would otherwise hold another thread meanwhile.
+        guard !listingVirtualDevices else { return }
+        listingVirtualDevices = true
+        defer { listingVirtualDevices = false }
         let list = await tools.virtualDevices.list().devices
         if list != virtualDevices { virtualDevices = list }
     }
