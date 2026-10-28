@@ -407,8 +407,16 @@ extension PhoneTools {
         // Everything the steps save without a path lands in this project, whatever becomes active
         // meanwhile.
         let own = TestProject.isProject(project.folder) ? ProjectList.normalized(project.folder) : nil
-        let result = await ProjectScope.$pinned.withValue(own ?? ProjectScope.pinned) {
-            await runTestsInScope(project, options: options, source: source, progress: progress)
+        let result: TestRunResult
+        do {
+            result = try await holding("a test run", source: source) {
+                await ProjectScope.$pinned.withValue(own ?? ProjectScope.pinned) {
+                    await runTestsInScope(project, options: options, source: source, progress: progress)
+                }
+            }
+        } catch {
+            // Another caller's run holds the device: a run that says so instead of an empty one.
+            result = await runTestsInScope(project, options: options, source: source, progress: progress, busy: "\(error)")
         }
         if let own { projects.notifyOutput(own, .runs) }
         return result
@@ -416,7 +424,7 @@ extension PhoneTools {
 
     private func runTestsInScope(
         _ project: TestProject, options: TestRunOptions, source: String,
-        progress: (@Sendable (TestRunResult.Test) -> Void)?
+        progress: (@Sendable (TestRunResult.Test) -> Void)?, busy: String? = nil
     ) async -> TestRunResult {
         let device = phone as? any Device
         let kind = device?.kind ?? (phone.status().input == .bluetooth ? DeviceKind.iPhone : .simulator)
@@ -429,6 +437,10 @@ extension PhoneTools {
             try FileManager.default.createDirectory(at: options.output, withIntermediateDirectories: true)
         } catch {
             result.error = "Could not create \(options.output.path): \(error.localizedDescription)"
+            return finished(result)
+        }
+        if let busy {
+            result.error = busy
             return finished(result)
         }
         var selected: [TestCase] = []

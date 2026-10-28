@@ -577,6 +577,10 @@ arguments. Maestro's YAML flows run too ([below](#maestro-flows)).
 }
 ```
 
+A running flow holds its device, as a test run and `crawl_app` do: actions from other agents, the
+relay or the live view get "Busy" until it ends, so nothing taps into the middle of it. Tools that
+only look, such as `screenshot` and `ui_tree`, still work.
+
 #### Control steps
 
 Control steps decide what runs by looking at the screen, so a flow needs no guessed waits. Their
