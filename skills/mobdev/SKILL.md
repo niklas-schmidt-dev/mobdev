@@ -234,7 +234,9 @@ reads their logs and crash reports: `list_apps`, `install_app`, `launch_app`, `s
 `open_url`, `logs`, `crash_reports`. Use the `mobdev-dev-loop` skill for that workflow,
 `mobdev-bug-repro` to reproduce a reported bug, and `mobdev-store-screenshots` for App Store and
 Google Play screenshots. `performance` and `measure_launch` measure an app, with budgets that fail
-the call. For React Native, Expo and Flutter apps (`reload_app`, `dev_menu`, Expo Go, testIDs),
+the call. `record_trace` records an Instruments template (Time Profiler, Allocations, App Launch,
+…) or a Perfetto trace on Android and summarizes the heaviest functions and hangs; `device_load`
+shows what keeps the whole device busy. For React Native, Expo and Flutter apps (`reload_app`, `dev_menu`, Expo Go, testIDs),
 use the `mobdev-react-native` skill.
 
 ## App Store Connect

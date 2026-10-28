@@ -146,6 +146,8 @@ const networkTools = [
 const performanceTools = [
   ["performance", "bundle_id, seconds, max_cpu, max_memory_mb, max_janky_percent", msg("CPU, memory and, on Android, frames of a running app; budgets fail the call")],
   ["measure_launch", "bundle_id, runs, method, max_ms, stable", msg("Cold launch time over several runs: fastest, median, slowest")],
+  ["record_trace", "template, seconds, bundle_id, launch, path", msg("An Instruments trace (iPhones, simulators) or a Perfetto trace (Android), with a short summary")],
+  ["device_load", "count", msg("The whole device: busiest processes by CPU and memory, memory used, thermal state")],
   ["reload_app", "port", msg("Reload a React Native or Expo app through Metro, else through its developer menu")],
   ["dev_menu", "port", msg("Open a React Native or Expo app’s developer menu")],
 ];
@@ -492,9 +494,21 @@ function Docs() {
                 <p>
                   <code className={code}>performance</code> samples a running app for up to a minute,
                   and <code className={code}>measure_launch</code> times cold launches the way Xcode and Android report
-                  them. Both work on simulators and Android; on an iPhone, <code className={code}>measure_launch</code> times
-                  the screen until it stays still. Budgets such as <code className={code}>max_ms</code> fail the step, so a
-                  test catches an app that got slower or heavier.
+                  them. On an iPhone, <code className={code}>performance</code> records Instruments’ Activity Monitor,
+                  which takes 10 to 20 seconds longer, and <code className={code}>measure_launch</code> times the screen
+                  until it stays still. Budgets such as <code className={code}>max_ms</code> fail the step, so a test
+                  catches an app that got slower or heavier.
+                </p>
+              </T>
+              <T>
+                <p>
+                  <code className={code}>record_trace</code> records any Instruments template on iPhones and simulators,
+                  such as Time Profiler, Allocations, Leaks, Network, SwiftUI or App Launch, attached to a running app,
+                  launching it, or for every process. On Android it records a Perfetto trace. The trace goes into the
+                  project’s <code className={code}>output/traces</code>, and the answer summarizes it where that is cheap:
+                  the heaviest functions and hangs, hitches, CPU and memory. Open it in Instruments, or at
+                  ui.perfetto.dev. <code className={code}>device_load</code> shows the whole device: its busiest processes,
+                  memory and thermal state. The device inspector in the app has the same under Performance.
                 </p>
               </T>
               <ToolTable rows={performanceTools} />
