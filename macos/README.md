@@ -165,8 +165,8 @@ only device, or the connected iPhone when simulators or Android devices run next
 | `scroll_until_visible` | `text`, `id`, `direction`, `max_scrolls` | Scrolls until it shows, stops at the end of the list |
 | `wait_for_idle` | `timeout`, `stable` | Until the screen stops changing, status bar ignored |
 | `ui_tree` | `contains`, `all` | Elements from the accessibility tree: role, label, identifier, value, position. Simulators, Android, and iPhones with the UI tree on |
-| `tap_element` | `id`, `text`, `index`, `timeout`, `double`, `hold` | Taps an element by identifier or label, waiting up to 5 s for it |
-| `wait_for_element` | `id`, `text`, `timeout`, `gone` | Like `wait_for_text`, from the tree |
+| `tap_element` | `id`, `text`, `regex`, `role`, `value`, `enabled`, `region`, `near`, `index`, `timeout`, `double`, `hold` | Taps an element by identifier, label, role, state or the label next to it, waiting up to 5 s for it |
+| `wait_for_element` | `id`, `text`, `regex`, `role`, `value`, `enabled`, `region`, `near`, `timeout`, `gone` | Like `wait_for_text`, from the tree |
 | `assert_screenshot` | `name` or `path`, `threshold`, `mask`, `compare_status_bar`, `update` | Compares the screen with a baseline picture and fails with a diff; records the baseline when there is none (see [Checks](#checks)) |
 | `accessibility_audit` | `image`, `fail_on`, `ignore` | Missing labels, small tap targets, low text contrast, duplicate and unclear labels, from the UI tree |
 | `assert_with_ai` | `question`, `expect` | Asks Apple Intelligence on the Mac a yes/no question about the screen |
@@ -456,7 +456,22 @@ On simulators and Android, `ui_tree` lists the elements on screen from the acces
 role, label, identifier, value and position in screenshot pixels. `tap_element` and
 `wait_for_element` find an element by identifier (`accessibilityIdentifier`, or the resource id on
 Android, whole or its last part) or by label. That is steadier than OCR and finds buttons that show
-only an icon. Simulators are read through macOS's accessibility translation, as idb does; Android
+only an icon. Every field given must hold, so they narrow each other down:
+
+| Arguments | Finds |
+|---|---|
+| `{"role": "textfield", "near": {"text": "Email", "direction": "below"}}` | The field under the label Email, the nearest when several are below it; `direction` is `below`, `above`, `left`, `right` or `any` (the default, also as `"near": "Email"`) |
+| `{"role": "button", "text": "Sign In", "enabled": true}` | The button once it can be tapped; with `wait_for_element`, wait until then |
+| `{"role": "switch", "value": "on"}` | A switch that is on; a switch's value is `on` or `off` on every platform, and `""` finds an empty field |
+| `{"regex": "^\\d+ items$"}` | A label or value that matches, case-insensitive |
+| `{"text": "Delete", "region": "bottom_half"}` | Only where the element's center is: `top_half`, `bottom_half`, `left_half`, `right_half`, `center` |
+
+`role` names a kind of element the same way on both platforms: `button` (also `ImageButton`),
+`switch` (the simulator's tree lists switches as `CheckBox`), `checkbox`, `textfield` (also
+`SecureTextField`, `SearchField` and Android's `EditText`), `text` (`StaticText`, `TextView`),
+`image`, `cell` and `link`; other names match roles that contain them. When nothing matches, the
+error lists the elements on screen, so the agent can correct the query without calling `ui_tree`.
+Simulators are read through macOS's accessibility translation, as idb does; Android
 through `uiautomator dump`, which takes about two seconds. An iPhone needs the UI tree turned on
 (below); until then the tools say how, and `read_screen` and `tap_text` work instead.
 

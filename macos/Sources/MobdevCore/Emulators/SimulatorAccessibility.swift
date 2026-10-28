@@ -192,7 +192,7 @@ public final class SimulatorAccessibility: @unchecked Sendable {
         "DisclosureTriangle", "Toggle",
     ]
 
-    private static func element(_ element: NSAccessibilityElement, in screen: CGRect) -> UIElement? {
+    static func element(_ element: NSAccessibilityElement, in screen: CGRect) -> UIElement? {
         let frame = element.accessibilityFrame()
         guard frame.width > 0, frame.height > 0 else { return nil }
         var role = element.accessibilityRole()?.rawValue ?? "Element"
@@ -200,10 +200,13 @@ public final class SimulatorAccessibility: @unchecked Sendable {
         var value = ""
         switch element.accessibilityValue() {
         case let text as String: value = text
-        case let number as NSNumber:
-            value = role == "CheckBox" || role == "Switch" || role == "Toggle"
-                ? (number.boolValue ? "on" : "off") : number.stringValue
+        case let number as NSNumber: value = number.stringValue
         default: break
+        }
+        // A switch is on or off, as the runner on iPhones and Android say. iOS 27's translation
+        // gives its value as the text "1" or "0", not as a number.
+        if role == "CheckBox" || role == "Switch" || role == "Toggle" {
+            value = value == "1" ? "on" : value == "0" ? "off" : value
         }
         return UIElement(
             role: role, label: element.accessibilityLabel() ?? "", identifier: element.accessibilityIdentifier() ?? "",

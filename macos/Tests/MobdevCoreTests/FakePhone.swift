@@ -38,6 +38,8 @@ class FakePhone: PhoneBackend, @unchecked Sendable {
     /// must hold up on a CI runner that starves the test process.
     let treeFrom = Locked<(date: Date, tree: [UIElement])?>(nil)
     private let treeReads = Locked(0)
+    /// What `status()` says about the screen instead of the picture's size, e.g. `.searching`.
+    let screen = Locked<ScreenState?>(nil)
     let settings: DeviceSettings?
     let networkProxy: NetworkProxyBackend?
 
@@ -74,7 +76,7 @@ class FakePhone: PhoneBackend, @unchecked Sendable {
 
     func status() -> PhoneStatus {
         PhoneStatus(
-            screen: .connected(name: "Fake iPhone", width: image.width, height: image.height),
+            screen: screen.get() ?? .connected(name: "Fake iPhone", width: image.width, height: image.height),
             bluetooth: bluetoothConnected ? .connected(hosts: 1) : .advertising, keyboardLayout: layout,
             pointer: pointer.get())
     }
