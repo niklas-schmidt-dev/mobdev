@@ -100,23 +100,32 @@ public final class SimulatorDevice: Device, @unchecked Sendable {
     }
 
     public func tap(at point: NormalizedPoint, hold: TimeInterval) async throws {
-        try kit.touch(id, .down, at: point)
+        try kit.touch(id, .down, at: [point])
         await pause(hold)
-        try kit.touch(id, .up, at: point)
+        try kit.touch(id, .up, at: [point])
     }
 
     public func swipe(from start: NormalizedPoint, to end: NormalizedPoint, duration: TimeInterval) async throws {
+        try await touch([(start, end)], duration: duration)
+    }
+
+    /// One or two fingers that touch down together, move in straight lines over `duration` and
+    /// lift together. Two are a pinch, as Simulator.app sends it while Option is held.
+    public func touch(_ fingers: [(from: NormalizedPoint, to: NormalizedPoint)], duration: TimeInterval) async throws {
+        guard (1...2).contains(fingers.count) else { throw DeveloperError("A simulator takes one or two fingers.") }
         // SimulatorKit keeps drags at least 16 ms apart.
         let steps = max(Int(duration / 0.02), 4)
         let interval = max(duration / Double(steps), 0.017)
-        try kit.touch(id, .down, at: start)
-        var last = start
+        try kit.touch(id, .down, at: fingers.map(\.from))
+        var last = fingers.map(\.from)
         do {
             // A cancelled swipe ends where it got to instead of leaving the finger down.
             for step in 1...steps where !Task.isCancelled {
                 await pause(interval)
                 let t = Double(step) / Double(steps)
-                last = NormalizedPoint(x: start.x + (end.x - start.x) * t, y: start.y + (end.y - start.y) * t)
+                last = fingers.map {
+                    NormalizedPoint(x: $0.from.x + ($0.to.x - $0.from.x) * t, y: $0.from.y + ($0.to.y - $0.from.y) * t)
+                }
                 try kit.touch(id, .drag, at: last)
             }
             await pause(interval)

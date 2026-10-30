@@ -4,11 +4,11 @@ Mobile development, all in one app. Free and open source.
 
 Mobdev is a small native Mac app that puts your iPhones, iOS simulators and Android devices in one
 list and gives you and your AI agent everything to work with them. Claude Code, Codex, Cursor or
-any MCP client get the same 87 tools on every device, and scripts get them on the command line.
+any MCP client get the same 88 tools on every device, and scripts get them on the command line.
 
 | | |
 |---|---|
-| AI control | Screenshots, taps, swipes, typing, opening apps, tapping visible text (on-device OCR); the UI tree and tapping by accessibility identifier on simulators, Android and Developer Mode iPhones. `observe` lists the screen as numbered marks to tap; agents scroll until something shows and wait until the screen settles instead of guessing |
+| AI control | Screenshots, taps, swipes, pinches, typing, opening apps, tapping visible text (on-device OCR); the UI tree and tapping by accessibility identifier on simulators, Android and Developer Mode iPhones. `observe` lists the screen as numbered marks to tap; agents scroll until something shows and wait until the screen settles instead of guessing |
 | Device state | Location and routes, permissions, push notifications, dark mode and text size, language, a clean status bar, Face ID, an app's data, the clipboard and orientation, set by a tool instead of in Settings (simulators and Android, some on iPhones) |
 | Simulators and emulators | Start and shut down iOS simulators and Android emulators, and create simulators, from the sidebar or by agent |
 | Build and run | Install builds, launch apps with arguments and environment, open deep links, by agent or in the app's Apps area |
@@ -24,7 +24,7 @@ any MCP client get the same 87 tools on every device, and scripts get them on th
 
 Mobdev reads the iPhone screen over the USB cable. With Developer Mode on the iPhone and Xcode on
 the Mac, it builds Mobdev Runner, a small UI test, and keeps it running on the iPhone: it taps,
-swipes, types any text and reads the UI tree over the same cable, and every app works. iPhones
+swipes, pinches, types any text and reads the UI tree over the same cable, and every app works. iPhones
 without Developer Mode are driven over Bluetooth instead, with the Mac posing as a keyboard and
 pointer, and nothing is installed on them. Booted simulators need Xcode, Android emulators and
 phones need adb. Keep building with Xcode, Gradle or XcodeBuildMCP; Mobdev takes over once there is

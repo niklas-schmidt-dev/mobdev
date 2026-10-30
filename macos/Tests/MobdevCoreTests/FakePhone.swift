@@ -8,6 +8,8 @@ class FakePhone: PhoneBackend, @unchecked Sendable {
     enum Event: Equatable {
         case tap(NormalizedPoint, TimeInterval)
         case swipe(NormalizedPoint, NormalizedPoint)
+        /// Each finger as its start and end.
+        case touch([[NormalizedPoint]])
         case scroll(Int)
         case pan(Int)
         case type([KeyStroke])
@@ -106,6 +108,10 @@ class FakePhone: PhoneBackend, @unchecked Sendable {
 
     func swipe(from start: NormalizedPoint, to end: NormalizedPoint, duration: TimeInterval) async throws {
         events.withLock { $0.append(.swipe(start, end)) }
+    }
+
+    func touch(_ fingers: [(from: NormalizedPoint, to: NormalizedPoint)], duration: TimeInterval) async throws {
+        events.withLock { $0.append(.touch(fingers.map { [$0.from, $0.to] })) }
     }
 
     func scroll(at point: NormalizedPoint, ticks: Int) async throws {

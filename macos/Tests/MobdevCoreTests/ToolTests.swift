@@ -139,6 +139,70 @@ extension Trait where Self == ConditionTrait {
         #expect(following.events.get() == [.checkPointer(start), .swipe(start, end), .swipe(start, end)])
     }
 
+    @Test func pinchZoomsAroundAPointOrTheCenter() async throws {
+        let phone = FakePhone(lines: [])
+        let (tools, _) = tools(phone)
+        let zoomIn = try await tools.call(
+            "pinch", arguments: ["x": 295, "y": 320, "scale": 2], source: "test", screenshotByDefault: false)
+        #expect(zoomIn.text == "Pinched around (295, 320) to zoom in, scale 2.")
+        let zoomOut = try await tools.call("pinch", arguments: ["scale": 0.5], source: "test", screenshotByDefault: false)
+        #expect(zoomOut.text == "Pinched around (295, 640) to zoom out, scale 0.5.")
+        for scale in [1, 0.05, 20] {
+            let wrong = try await tools.call("pinch", arguments: ["scale": .number(scale)], source: "test", screenshotByDefault: false)
+            #expect(wrong.isError && wrong.text.contains("scale must be between 0.1 and 10"))
+        }
+        // The screen is higher than wide: the fingers move up and down.
+        func fingers(_ x: Double, _ y: Double, _ scale: Double) throws -> FakePhone.Event {
+            .touch(try pinchFingers(at: NormalizedPoint(x: x, y: y), scale: scale, alongWidth: false).map { [$0.from, $0.to] })
+        }
+        #expect(try phone.events.get() == [fingers(0.5, 0.25, 2), fingers(0.5, 0.5, 0.5)])
+    }
+
+    @Test func pinchFingersSpreadByTheScaleAlongTheLongerSide() throws {
+        for (center, scale, alongWidth) in [
+            (NormalizedPoint(x: 0.5, y: 0.3), 2.0, false), (NormalizedPoint(x: 0.4, y: 0.7), 0.25, true),
+        ] {
+            let fingers = try pinchFingers(at: center, scale: scale, alongWidth: alongWidth)
+            #expect(fingers.count == 2)
+            func span(_ a: NormalizedPoint, _ b: NormalizedPoint) -> Double { alongWidth ? b.x - a.x : b.y - a.y }
+            let start = span(fingers[0].from, fingers[1].from), end = span(fingers[0].to, fingers[1].to)
+            #expect(abs(end / start - scale) < 1e-9)
+            #expect(abs(max(start, end) - 0.4) < 1e-9)
+            // Around the center, on its line.
+            for finger in fingers {
+                #expect(alongWidth ? finger.from.y == center.y && finger.to.y == center.y : finger.from.x == center.x && finger.to.x == center.x)
+            }
+            let middle = alongWidth ? (fingers[0].from.x + fingers[1].from.x) / 2 : (fingers[0].from.y + fingers[1].from.y) / 2
+            #expect(abs(middle - (alongWidth ? center.x : center.y)) < 1e-9)
+        }
+    }
+
+    @Test(arguments: [0.05, 0.9, 0.95], [0.1, 0.5, 2.0, 10.0])
+    func pinchNearAnEdgePreservesCenterAndScale(position: Double, scale: Double) throws {
+        for alongWidth in [false, true] {
+            let center = alongWidth ? NormalizedPoint(x: position, y: 0.5) : NormalizedPoint(x: 0.5, y: position)
+            let fingers = try pinchFingers(at: center, scale: scale, alongWidth: alongWidth)
+            func axis(_ point: NormalizedPoint) -> Double { alongWidth ? point.x : point.y }
+            let start = fingers.map { axis($0.from) }, end = fingers.map { axis($0.to) }
+            #expect(abs((end[1] - end[0]) / (start[1] - start[0]) - scale) < 1e-9)
+            for points in [start, end] {
+                #expect(abs((points[0] + points[1]) / 2 - position) < 1e-9)
+                #expect(points.allSatisfy { $0 >= 0.01 - 1e-9 && $0 <= 0.99 + 1e-9 })
+            }
+        }
+    }
+
+    @Test func pinchRejectsACenterWithoutRoomForTwoFingers() async throws {
+        let phone = FakePhone(lines: [])
+        let (tools, _) = tools(phone)
+        for y in ["0%", "1%", "99%", "100%"] {
+            let output = try await tools.call(
+                "pinch", arguments: ["x": "50%", "y": .string(y), "scale": 2], source: "test", screenshotByDefault: false)
+            #expect(output.isError && output.text.contains("too close to the screen edge"))
+        }
+        #expect(phone.events.get().isEmpty)
+    }
+
     /// Positive wheel ticks reveal content further down on an iPhone.
     @Test func scrollDirectionMatchesTheContent() async throws {
         let (tools, _) = tools()

@@ -55,6 +55,30 @@ import Testing
         #expect(left.x < leftEnd.x && left.y == leftEnd.y)
     }
 
+    @Test func severalFingersGoThroughTheRunnerOnly() async throws {
+        let runner = FakeRunner()
+        let input = IPhoneInput(runner: runner, bluetooth: { throw HIDError.notConnected }, layout: .us)
+        let fingers = try pinchFingers(at: NormalizedPoint(x: 0.5, y: 0.4), scale: 2, alongWidth: false)
+        try await input.touch(fingers, duration: 0.5)
+        #expect(runner.events.get() == [.touch(fingers.map { [$0.from, $0.to] }, 0.5)])
+
+        // The Bluetooth pointer is one finger: nothing is sent.
+        let bluetooth = FakeBluetooth()
+        await #expect(throws: ToolFailure.self) {
+            try await IPhoneInput(runner: nil, bluetooth: { bluetooth }, layout: .us).touch(fingers, duration: 0.5)
+        }
+        #expect(bluetooth.events.get().isEmpty)
+    }
+
+    @Test func fingersTravelAsFractionsOfTheScreen() {
+        let body = RunnerClient.fingersBody(
+            [(NormalizedPoint(x: 0.4, y: 0.5), NormalizedPoint(x: 0.3, y: 0.5)), (NormalizedPoint(x: 0.6, y: 0.5), NormalizedPoint(x: 0.7, y: 0.5))],
+            duration: 0.5)
+        #expect(body == [
+            "fingers": [["from": [0.4, 0.5], "to": [0.3, 0.5]], ["from": [0.6, 0.5], "to": [0.7, 0.5]]], "duration": 0.5,
+        ])
+    }
+
     @Test func withoutTheRunnerInputGoesOverBluetooth() async throws {
         let bluetooth = FakeBluetooth()
         let input = IPhoneInput(runner: nil, bluetooth: { bluetooth }, layout: .us)
@@ -256,6 +280,8 @@ final class FakeRunner: RunnerControl, @unchecked Sendable {
         case tap(NormalizedPoint, TimeInterval)
         case doubleTap(NormalizedPoint)
         case drag(NormalizedPoint, NormalizedPoint, TimeInterval)
+        /// Each finger as its start and end.
+        case touch([[NormalizedPoint]], TimeInterval)
         case type(String)
         case key(String, [String])
         case button(String)
@@ -269,6 +295,9 @@ final class FakeRunner: RunnerControl, @unchecked Sendable {
     func doubleTap(at point: NormalizedPoint) async throws { events.withLock { $0.append(.doubleTap(point)) } }
     func drag(from start: NormalizedPoint, to end: NormalizedPoint, duration: TimeInterval) async throws {
         events.withLock { $0.append(.drag(start, end, duration)) }
+    }
+    func touch(_ fingers: [(from: NormalizedPoint, to: NormalizedPoint)], duration: TimeInterval) async throws {
+        events.withLock { $0.append(.touch(fingers.map { [$0.from, $0.to] }, duration)) }
     }
     func type(_ text: String) async throws { events.withLock { $0.append(.type(text)) } }
     func press(key: String, modifiers: [String]) async throws { events.withLock { $0.append(.key(key, modifiers)) } }

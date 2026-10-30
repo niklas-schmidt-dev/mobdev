@@ -11,7 +11,7 @@ struct RunnerClient: Sendable {
 
     /// The runner's API version this Mac speaks. Mobdev builds the runner from its own copy of
     /// `Runner/` on every start, so a runner of another version means an old build is still running.
-    static let protocolVersion = 2
+    static let protocolVersion = 3
 
     var route: Route
     var port: UInt16
@@ -59,6 +59,12 @@ struct RunnerClient: Sendable {
         _ = try await call("POST", "/drag", body: body, timeout: 30 + duration + press + hold)
     }
 
+    /// Fingers that touch down together, move to their ends in `duration` seconds and lift
+    /// together, e.g. two for a pinch.
+    func touch(_ fingers: [(from: NormalizedPoint, to: NormalizedPoint)], duration: TimeInterval) async throws {
+        _ = try await call("POST", "/fingers", body: Self.fingersBody(fingers, duration: duration), timeout: 30 + duration)
+    }
+
     /// Types into the focused element. XCTest types about ten characters a second.
     func type(_ text: String) async throws {
         _ = try await call("POST", "/type", body: ["text": .string(text)], timeout: 30 + Double(text.count) / 5)
@@ -92,6 +98,14 @@ struct RunnerClient: Sendable {
         [
             "from": [.number(start.x), .number(start.y)], "to": [.number(end.x), .number(end.y)],
             "duration": .number(duration), "press": .number(press), "hold": .number(hold),
+        ]
+    }
+
+    static func fingersBody(_ fingers: [(from: NormalizedPoint, to: NormalizedPoint)], duration: TimeInterval) -> JSONValue {
+        [
+            "fingers": .array(
+                fingers.map { ["from": [.number($0.from.x), .number($0.from.y)], "to": [.number($0.to.x), .number($0.to.y)]] }),
+            "duration": .number(duration),
         ]
     }
 

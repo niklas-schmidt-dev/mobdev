@@ -662,6 +662,7 @@ struct ToolIcon: View {
         case "tap": "hand.tap.fill"
         case "long_press": "hand.point.up.left.fill"
         case "swipe": "hand.draw.fill"
+        case "pinch": "arrow.up.left.and.arrow.down.right"
         case "scroll": "arrow.up.arrow.down"
         case "tap_text": "text.cursor"
         case "type_text": "keyboard.fill"
@@ -707,7 +708,7 @@ struct ToolIcon: View {
 
     static func color(for tool: String) -> Color {
         switch tool {
-        case "tap", "long_press", "swipe", "scroll": .blue
+        case "tap", "long_press", "swipe", "pinch", "scroll": .blue
         case "tap_text", "tap_element": .purple
         case "type_text", "press_key": .indigo
         case "home", "open_app": .green

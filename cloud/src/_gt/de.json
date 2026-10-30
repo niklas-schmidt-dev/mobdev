@@ -181,7 +181,7 @@
   "a23cdd89efb441fa": "Download für Mac",
   "53ea457ed050c196": "Was alles drinsteckt ›",
   "fb29bc8562fc5588": "Kostenlos. Aktualisiert sich selbst. Erfordert macOS 26.",
-  "e32f9bff5aef9581": "Alle Geräte in einer Liste, und alle verstehen dieselben 87 Tools.",
+  "67e75127590f935f": "Alle Geräte in einer Liste, und alle verstehen dieselben 88 Tools.",
   "6e3a1ad8ecdae7b4": "Dein Agent steuert.",
   "38b4bfda87fcb470": "Claude Code, Codex, Cursor oder jeder andere MCP-Client sieht, tippt und schreibt auf jedem Smartphone. Du siehst dabei zu.",
   "d4615a60ce29cf83": "Von überall.",
@@ -436,6 +436,7 @@
   "0d1004b02722af60": "Auf einen Punkt des Screenshots tippen",
   "c07ba3a4069bbf8b": "Berühren und halten",
   "20e86a2df1b039bb": "Ziehen, z. B. zum Scrollen",
+  "ae43518be9887643": "Zwei Finger auseinander oder zusammen, z. B. zum Zoomen einer Karte oder eines Fotos",
   "8ba5b645cde2f75d": "Mausrad",
   "1c05592420abed0b": "Text in das fokussierte Feld eingeben (bis zu 1000 Zeichen pro Aufruf)",
   "55550b5f4e09f03f": "Ein gespeichertes Passwort oder einen Code tippen, ohne dass der Agent den Wert sieht",
@@ -1087,7 +1088,7 @@
       " beziehen sich auf den Mac, auf dem Mobdev läuft, auch über ein Relay. Mobdev entfernt nie Apps aus dem App Store oder System-Apps."
     ]
   },
-  "e439d6e049e1cda1": {
+  "c60f0d2635426263": {
     "t": "p",
     "i": 1,
     "c": [
@@ -1096,7 +1097,7 @@
         "i": 2,
         "c": "Steuerung im Entwicklermodus."
       },
-      " Mobdev Runner wird mit Xcode gebaut, mit deinem Entwicklerteam signiert und auf dem iPhone am Laufen gehalten, so wie WebDriverAgent. Solange er läuft, geht jedes Tippen, Wischen, jede Taste und jeder Text durch ihn, ",
+      " Mobdev Runner wird mit Xcode gebaut, mit deinem Entwicklerteam signiert und auf dem iPhone am Laufen gehalten, so wie WebDriverAgent. Solange er läuft, geht jedes Tippen, Wischen, Zoomen mit zwei Fingern, jede Taste und jeder Text durch ihn, ",
       {
         "t": "code",
         "i": 3,
@@ -2201,7 +2202,7 @@
       "c": "Mobdev deckt alles ab, was auf dem Gerät passiert, für dich und für deinen Agenten. Bau weiter wie bisher, ab da übernimmt Mobdev."
     }
   ],
-  "8a48245140cd7bda": [
+  "1f62d4f16b3eafb8": [
     {
       "t": "h2",
       "i": 1,
@@ -2217,7 +2218,7 @@
     {
       "t": "p",
       "i": 3,
-      "c": "Schließ ein iPhone an, starte einen Simulator oder einen Emulator, und das Gerät erscheint in Mobdev. Jedes Gerät versteht dieselben 87 Tools, so kann ein Agent in einer Sitzung auf allen testen."
+      "c": "Schließ ein iPhone an, starte einen Simulator oder einen Emulator, und das Gerät erscheint in Mobdev. Jedes Gerät versteht dieselben 88 Tools, so kann ein Agent in einer Sitzung auf allen testen."
     }
   ],
   "0e93ea2eb9c558d4": [

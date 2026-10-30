@@ -47,6 +47,7 @@ const tools = [
   ["tap", "x, y", msg("Tap a point of the screenshot")],
   ["long_press", "x, y, seconds", msg("Touch and hold")],
   ["swipe", "from_x, from_y, to_x, to_y, duration", msg("Drag, e.g. to scroll")],
+  ["pinch", "scale, x, y, duration", msg("Two fingers apart or together, e.g. to zoom a map or photo")],
   ["scroll", "direction, amount, x, y", msg("Mouse wheel")],
   ["type_text", "text, submit", msg("Type into the focused field (up to 1000 characters per call)")],
   ["type_secret", "name, submit", msg("Type a stored password or code without the agent seeing it")],
@@ -486,7 +487,7 @@ function Docs() {
                 <p>
                   <strong>Developer Mode Control.</strong> Mobdev Runner is built with Xcode, signed with your
                   development team and kept running on the iPhone, as WebDriverAgent does. While it runs, every tap,
-                  swipe, key and text goes through it, <code className={code}>type_text</code> types emoji
+                  swipe, pinch, key and text goes through it, <code className={code}>type_text</code> types emoji
                   too, and <code className={code}>ui_tree</code>, <code className={code}>tap_element</code> and <code className={code}>wait_for_element</code> work
                   as on simulators. Turn it off for one iPhone in its info in Mobdev; that iPhone then uses Bluetooth.
                 </p>

@@ -149,6 +149,10 @@ public final class HardwareDevice: PhoneBackend, @unchecked Sendable {
         try await routes.swipe(from: start, to: end, duration: duration)
     }
 
+    public func touch(_ fingers: [(from: NormalizedPoint, to: NormalizedPoint)], duration: TimeInterval) async throws {
+        try await routes.touch(fingers, duration: duration)
+    }
+
     public func scroll(at point: NormalizedPoint, ticks: Int) async throws {
         try await routes.scroll(at: point, ticks: ticks)
     }

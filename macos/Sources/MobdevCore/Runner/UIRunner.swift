@@ -122,6 +122,10 @@ public final class UIRunner: @unchecked Sendable {
         try await client().drag(from: start, to: end, duration: duration)
     }
 
+    public func touch(_ fingers: [(from: NormalizedPoint, to: NormalizedPoint)], duration: TimeInterval) async throws {
+        try await client().touch(fingers, duration: duration)
+    }
+
     public func press(key: String, modifiers: [String]) async throws { try await client().key(key, modifiers: modifiers) }
 
     public func press(button: String) async throws { try await client().button(button) }

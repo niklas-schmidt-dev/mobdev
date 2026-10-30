@@ -185,6 +185,7 @@ only device, or the connected iPhone when simulators or Android devices run next
 | `tap` | `x`, `y`, `double` | `x` and `y` may also be shares of the screen such as `"50%"`, as in every tool with coordinates |
 | `long_press` | `x`, `y`, `seconds` | |
 | `swipe` | `from_x`, `from_y`, `to_x`, `to_y`, `duration` | |
+| `pinch` | `scale`, `x`, `y`, `duration` | Two fingers around a point (default the center) along the screen's longer side, e.g. to zoom a map, photo or plan: `scale` 2 spreads them to twice their distance and zooms in, 0.5 zooms out. Simulators, Android with scrcpy and iPhones and iPads with Mobdev Runner; not over Bluetooth, which has one pointer |
 | `scroll` | `direction` (`up`/`down`/`left`/`right`), `amount`, `x`, `y` | Mouse wheel over Bluetooth, a swipe elsewhere; `right` reveals content further right |
 | `type_text` | `text`, `submit` | Into the focused field, at most 1000 characters per call |
 | `type_secret` | `name`, `submit` | Types a stored password or code without the agent seeing it (see [Secrets](#secrets)) |
@@ -581,7 +582,7 @@ iOS lets only a UI test running on the phone read an app's accessibility tree an
 without a pointer. With **Developer Mode** on the iPhone and **Xcode** on the Mac, Mobdev builds
 Mobdev Runner, a small XCUITest (`Runner/`), signs it with your team and keeps it running on the
 iPhone, the way WebDriverAgent does. It starts by itself when such an iPhone connects. While it
-runs, taps, long presses, double taps, swipes, scrolls, keys, typed text, the Home and volume
+runs, taps, long presses, double taps, swipes, pinches, scrolls, keys, typed text, the Home and volume
 buttons, `open_app` and the app's live mirror go through it instead of Bluetooth, and `status` says
 `Input: Mobdev Runner (Developer Mode)`. Coordinates stay pixels of the screenshot. `ui_tree`,
 `tap_element` and `wait_for_element` work as on simulators, and Record names clicked elements.
