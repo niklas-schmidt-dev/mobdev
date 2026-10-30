@@ -111,6 +111,7 @@ public final class PhoneTools: Sendable {
         Runner (Developer Mode)". Without Developer Mode, Mobdev taps and types as a Bluetooth keyboard \
         and pointer: swipes then need AssistiveTouch with Snap to Item off and Perform Touch Gestures on, \
         `status` shows what the pointer does once it has been checked, and `swipe` refuses when it snaps. \
+        `pinch` zooms with two fingers, on every device but an iPhone over Bluetooth. \
         Coordinates are pixels of the image returned by `screenshot` (origin top-left); the size never \
         changes while the phone keeps its orientation. Prefer `tap_text` and `find_text` for visible \
         labels, and `open_app` to launch an app by name. Actions return a fresh screenshot unless \
@@ -225,6 +226,15 @@ public final class PhoneTools: Sendable {
                         "direction": ["type": "string", "enum": ["up", "down", "left", "right"]],
                         "amount": ["type": "integer", "description": "Wheel steps, default 5"],
                     ]) { $1 }, required: ["direction"]), readOnly: false),
+            ToolDefinition(
+                name: "pinch", title: "Pinch",
+                description:
+                    "Pinch with two fingers around a point (default: screen center), e.g. to zoom a map, photo or plan. scale above 1 spreads the fingers and zooms in (2: to twice their distance), below 1 brings them together and zooms out. On simulators, Android and iPhones and iPads with Mobdev Runner; over Bluetooth there is one finger.",
+                inputSchema: schema(
+                    point.merging([
+                        "scale": ["type": "number", "description": "Finger distance at the end over the start: above 1 zooms in, below 1 out (0.1 to 10)"],
+                        "duration": ["type": "number", "description": "Seconds, default 0.5"],
+                    ]) { $1 }, required: ["scale"]), readOnly: false),
             ToolDefinition(
                 name: "type_text", title: "Type text",
                 description:
@@ -399,6 +409,18 @@ public final class PhoneTools: Sendable {
             default: try await phone.scroll(at: point, ticks: direction == "down" ? amount : -amount)
             }
             return ToolOutput(text: "Scrolled \(direction) by \(amount).")
+        case "pinch":
+            let center =
+                args.has("x") || args.has("y") ? try self.point(args, "x", "y") : NormalizedPoint(x: 0.5, y: 0.5)
+            let scale = try args.number("scale")
+            guard (0.1...10).contains(scale), scale != 1 else {
+                throw ToolFailure("scale must be between 0.1 and 10 and not 1: above 1 zooms in, below 1 zooms out.")
+            }
+            let duration = try args.number("duration", default: 0.5, range: 0.1...5)
+            try requireTouch()
+            try await phone.pinch(at: center, scale: scale, duration: duration)
+            return ToolOutput(
+                text: "Pinched around \(try describe(center)) to zoom \(scale > 1 ? "in" : "out"), scale \(format(scale)).")
         case "type_text":
             let text = try args.string("text", maxLength: Self.maxTypedCharacters)
             let submit = args.bool("submit") == true

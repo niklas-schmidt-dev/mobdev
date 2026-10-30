@@ -264,7 +264,7 @@ function Home() {
             </h2>
             <p className="text-balance mt-6 max-w-2xl text-[19px] leading-[1.45] text-muted">
               Plug in an iPhone, boot a simulator or start an emulator, and it shows up in Mobdev. Every device takes the
-              same 87 tools, so one agent can test on all of them in one session.
+              same 88 tools, so one agent can test on all of them in one session.
             </p>
           </T>
           <div className="mt-14 grid grid-cols-1 gap-5 md:grid-cols-3">

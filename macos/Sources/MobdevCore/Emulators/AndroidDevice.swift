@@ -275,24 +275,13 @@ public final class AndroidDevice: Device, @unchecked Sendable {
         try await swipe(from: start, to: end, duration: 0.35)
     }
 
-    /// Two fingers side by side moving apart (`scale` above 1, zooming in) or together around
-    /// `center`, the wider span 60% of the screen's width. Needs scrcpy: `input` has one finger.
-    public func pinch(at center: NormalizedPoint, scale: Double, duration: TimeInterval = 0.5) async throws {
-        guard scale > 0, scale != 1 else { throw DeveloperError("scale must be above 0 and not 1.") }
-        let wide = 0.6
-        let spans = scale > 1 ? (from: max(wide / scale, 0.04), to: wide) : (from: wide, to: max(wide * scale, 0.04))
-        func fingers(_ span: Double) -> (NormalizedPoint, NormalizedPoint) {
-            (
-                NormalizedPoint(x: min(max(center.x - span / 2, 0.01), 0.99), y: center.y),
-                NormalizedPoint(x: min(max(center.x + span / 2, 0.01), 0.99), y: center.y)
-            )
-        }
-        let (start, end) = (fingers(spans.from), fingers(spans.to))
+    /// Several fingers at once, e.g. for `pinch`. Needs scrcpy: `input` has one finger.
+    public func touch(_ fingers: [(from: NormalizedPoint, to: NormalizedPoint)], duration: TimeInterval) async throws {
         guard let connection = await scrcpy?.connection() else {
             throw DeveloperError(
-                "A pinch needs two fingers, which Mobdev sends through scrcpy, and scrcpy is not running: \(scrcpyProblem).")
+                "Several fingers, as in a pinch, go through scrcpy, and scrcpy is not running: \(scrcpyProblem).")
         }
-        try await connection.drag([(start.0, end.0), (start.1, end.1)], duration: duration)
+        try await connection.drag(fingers, duration: duration)
     }
 
     public func type(_ strokes: [KeyStroke]) async throws {

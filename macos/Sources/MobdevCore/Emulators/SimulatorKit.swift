@@ -237,18 +237,24 @@ final class SimulatorKit: @unchecked Sendable {
 
     enum Touch { case down, drag, up }
 
-    /// One touch event at a point given as fractions of the screen.
-    func touch(_ udid: String, _ phase: Touch, at point: NormalizedPoint) throws {
+    /// One touch event of one finger, or of two as Simulator.app sends them while Option is held,
+    /// at points given as fractions of the screen.
+    func touch(_ udid: String, _ phase: Touch, at points: [NormalizedPoint]) throws {
         let type: NSEvent.EventType = switch phase {
         case .down: .leftMouseDown
         case .drag: .leftMouseDragged
         case .up: .leftMouseUp
         }
-        var location = CGPoint(x: min(max(point.x, 0), 1), y: min(max(point.y, 0), 1))
-        // 0x32 is the digitizer. SimulatorKit drops drags less than 16 ms apart and returns nil.
-        guard let message = mouse(&location, nil, 0x32, UInt(type.rawValue), CGSize(width: 1, height: 1), 0) else {
-            return
+        func location(_ point: NormalizedPoint) -> CGPoint {
+            CGPoint(x: min(max(point.x, 0), 1), y: min(max(point.y, 0), 1))
         }
+        var first = location(points[0])
+        var second = location(points.count > 1 ? points[1] : points[0])
+        // 0x32 is the digitizer. SimulatorKit drops drags less than 16 ms apart and returns nil.
+        let message = points.count > 1
+            ? mouse(&first, &second, 0x32, UInt(type.rawValue), CGSize(width: 1, height: 1), 0)
+            : mouse(&first, nil, 0x32, UInt(type.rawValue), CGSize(width: 1, height: 1), 0)
+        guard let message else { return }
         try send(udid, message)
     }
 

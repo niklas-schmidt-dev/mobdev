@@ -8,7 +8,7 @@ import XCTest
 /// `MOBDEV_RUNNER_TOKEN` arrive as `TEST_RUNNER_…` variables of xcodebuild. Points are fractions of
 /// the screen, from the top-left corner.
 ///
-///     GET  /health               {"ok": true, "version": 2}
+///     GET  /health               {"ok": true, "version": 3}
 ///     GET  /tree[?bundle=<id>]   {"screen": {"width", "height"}, "apps": [names], "elements": [...]}
 ///                                each element: type, label, identifier, value, placeholder,
 ///                                frame [x, y, width, height] in points, enabled, selected
@@ -17,6 +17,9 @@ import XCTest
 ///     POST /drag     {"from": [x, y], "to": [x, y], "duration", "press"?, "hold"?}
 ///                                a swipe or drag: press seconds before it moves (default 0.05), move
 ///                                in duration seconds, hold seconds at the end before lifting
+///     POST /fingers  {"fingers": [{"from": [x, y], "to": [x, y]}, ...], "duration"}
+///                                one to five fingers that touch down together, move in straight
+///                                lines in duration seconds and lift together: two for a pinch
 ///     POST /type     {"text"}    into the focused element; any characters, emoji included
 ///     POST /key      {"key", "modifiers"?}
 ///                                one key: a name (return, escape, backspace, tab, space, up, down,
@@ -26,7 +29,7 @@ import XCTest
 ///     POST /button   {"name"}    home, volume_up or volume_down (the last two on iPhones only)
 ///     POST /activate {"bundle"}  brings an app to the front, launching it when it is not running
 final class RunnerTests: XCTestCase {
-    static let protocolVersion = 2
+    static let protocolVersion = 3
     /// Failures XCTest records during a request, such as typing with no field focused.
     private var issues: [String] = []
 
@@ -86,6 +89,15 @@ final class RunnerTests: XCTestCase {
                 coordinate(at: from).press(
                     forDuration: press, thenDragTo: coordinate(at: to),
                     withVelocity: XCUIGestureVelocity(rawValue: max(distance / duration, 1)), thenHoldForDuration: hold)
+                return outcome()
+            case ("POST", "/fingers"):
+                let body = try request.json()
+                guard let fingers = body["fingers"] as? [[String: Any]], (1...5).contains(fingers.count) else {
+                    return .error("Pass fingers: one to five, each with from and to.", status: 400)
+                }
+                let paths = try fingers.map { (from: try Self.point($0["from"]), to: try Self.point($0["to"])) }
+                let duration = min(max((body["duration"] as? NSNumber)?.doubleValue ?? 0.5, 0.05), 10)
+                try touch(paths, duration: duration)
                 return outcome()
             case ("POST", "/type"):
                 guard let text = try request.json()["text"] as? String, !text.isEmpty else {
@@ -165,6 +177,77 @@ final class RunnerTests: XCTestCase {
     /// A point of the app in front, which covers the screen.
     private func coordinate(at point: CGVector) -> XCUICoordinate {
         frontmost()[0].coordinate(withNormalizedOffset: point)
+    }
+
+    /// Fingers that touch down together, move in straight lines and lift together. XCTest's public
+    /// API moves one finger, or pinches only around an element's center, so this builds the event
+    /// as XCTest's own pinch and WebDriverAgent's actions do, with XCTest's private
+    /// XCPointerEventPath and XCSynthesizedEventRecord (Xcode 27). Their points are the screen's in
+    /// portrait, whatever orientation the record names, so the app's points (those of `/tree`)
+    /// are turned the way WebDriverAgent's FBInvertPointForApplication turns them: an iPad
+    /// simulator in landscape tapped elsewhere without (iOS 27, 2026-10-30).
+    private func touch(_ fingers: [(from: CGVector, to: CGVector)], duration: Double) throws {
+        typealias InitPath = @convention(c) (AnyObject, Selector, CGPoint, Double) -> Unmanaged<AnyObject>?
+        typealias Move = @convention(c) (AnyObject, Selector, CGPoint, Double) -> Void
+        typealias Lift = @convention(c) (AnyObject, Selector, Double) -> Void
+        typealias InitRecord = @convention(c) (AnyObject, Selector, NSString, Int) -> Unmanaged<AnyObject>?
+        typealias Add = @convention(c) (AnyObject, Selector, AnyObject) -> Void
+        typealias Synthesize = @convention(c) (AnyObject, Selector, AutoreleasingUnsafeMutablePointer<NSError?>) -> Bool
+        let initPath = NSSelectorFromString("initForTouchAtPoint:offset:"), move = NSSelectorFromString("moveToPoint:atOffset:")
+        let lift = NSSelectorFromString("liftUpAtOffset:"), add = NSSelectorFromString("addPointerEventPath:")
+        let initRecord = NSSelectorFromString("initWithName:interfaceOrientation:")
+        let synthesize = NSSelectorFromString("synthesizeWithError:")
+        guard let pathClass = NSClassFromString("XCPointerEventPath"),
+            let recordClass = NSClassFromString("XCSynthesizedEventRecord"),
+            [initPath, move, lift].allSatisfy({ class_respondsToSelector(pathClass, $0) }),
+            [initRecord, add, synthesize].allSatisfy({ class_respondsToSelector(recordClass, $0) }),
+            let initPathIMP = class_getMethodImplementation(pathClass, initPath),
+            let moveIMP = class_getMethodImplementation(pathClass, move),
+            let liftIMP = class_getMethodImplementation(pathClass, lift),
+            let initRecordIMP = class_getMethodImplementation(recordClass, initRecord),
+            let addIMP = class_getMethodImplementation(recordClass, add),
+            let synthesizeIMP = class_getMethodImplementation(recordClass, synthesize)
+        else { throw RunnerError("This Xcode's XCTest cannot touch with several fingers.") }
+        // `init…` takes the allocated object and returns its object retained, as in SimulatorKit.
+        func allocate(_ type: AnyClass) -> AnyObject? {
+            (type as? NSObject.Type)?.perform(NSSelectorFromString("alloc"))?.takeUnretainedValue()
+        }
+        let app = frontmost()[0]
+        let frame = app.frame
+        // A UIInterfaceOrientation; unknown (0) is taken as portrait.
+        let orientation =
+            app.responds(to: NSSelectorFromString("interfaceOrientation"))
+            ? (app.value(forKey: "interfaceOrientation") as? NSNumber)?.intValue ?? 1 : 1
+        let short = min(frame.width, frame.height), long = max(frame.width, frame.height)
+        func point(_ vector: CGVector) -> CGPoint {
+            let x = frame.minX + vector.dx * frame.width, y = frame.minY + vector.dy * frame.height
+            switch orientation {
+            case 2: return CGPoint(x: frame.width - x, y: frame.height - y)  // portrait upside down
+            case 3: return CGPoint(x: short - y, y: x)  // landscape right: the home side on the right
+            case 4: return CGPoint(x: y, y: long - x)  // landscape left
+            default: return CGPoint(x: x, y: y)
+            }
+        }
+        guard let allocatedRecord = allocate(recordClass),
+            let record = unsafeBitCast(initRecordIMP, to: InitRecord.self)(
+                allocatedRecord, initRecord, "Mobdev fingers" as NSString, max(orientation, 1))?.takeRetainedValue()
+        else { throw RunnerError("Could not build a touch event.") }
+        // One move to the end: the device moves the finger there over the time between, about 60
+        // times a second, and the call returns when it is done. Moves every 16 ms instead all
+        // arrived within a few milliseconds, too fast for a pinch to register (iOS 27).
+        for finger in fingers {
+            guard let allocated = allocate(pathClass),
+                let path = unsafeBitCast(initPathIMP, to: InitPath.self)(allocated, initPath, point(finger.from), 0)?
+                    .takeRetainedValue()
+            else { throw RunnerError("Could not build a touch event.") }
+            unsafeBitCast(moveIMP, to: Move.self)(path, move, point(finger.to), duration)
+            unsafeBitCast(liftIMP, to: Lift.self)(path, lift, duration)
+            unsafeBitCast(addIMP, to: Add.self)(record, add, path)
+        }
+        var error: NSError?
+        guard unsafeBitCast(synthesizeIMP, to: Synthesize.self)(record, synthesize, &error) else {
+            throw RunnerError("The touch failed: \(error?.localizedDescription ?? "XCTest gave no reason").")
+        }
     }
 
     /// x and y as fractions of the screen, from two numbers or one [x, y] array.

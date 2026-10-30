@@ -59,6 +59,7 @@ Use the cheapest view that answers your question:
 | Find a row further down | `scroll_until_visible` with its `text` or `id`; it stops at the end of the list |
 | Scroll a list down | `swipe` from a larger y to a smaller y, or `scroll` with `direction: "down"` |
 | Scroll sideways | `scroll` with `direction: "right"` or `"left"`, or `swipe` horizontally |
+| Zoom a map, photo or plan | `pinch` around the spot with `scale` 2 to zoom in, 0.5 to zoom out (not on an iPhone over Bluetooth) |
 | Go back | `tap_text` the back button's label, or `tap` the chevron at the top left |
 | Home screen | `home` |
 | Wait for something | `wait_for_text` or `wait_for_element` (or `gone: true`) for a particular thing; `wait_for_idle` when the screen only has to settle after an animation or loading. Never sleep a fixed time |

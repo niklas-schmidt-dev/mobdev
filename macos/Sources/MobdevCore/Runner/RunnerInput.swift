@@ -8,6 +8,9 @@ public protocol RunnerControl: Sendable {
     func doubleTap(at point: NormalizedPoint) async throws
     /// A swipe from `start` to `end` in `duration` seconds.
     func drag(from start: NormalizedPoint, to end: NormalizedPoint, duration: TimeInterval) async throws
+    /// Fingers that touch down together, move in straight lines in `duration` seconds and lift
+    /// together, e.g. two for a pinch.
+    func touch(_ fingers: [(from: NormalizedPoint, to: NormalizedPoint)], duration: TimeInterval) async throws
     /// Types into the focused field; any characters, emoji included.
     func type(_ text: String) async throws
     /// One key by the runner's name for it (`RunnerKeys`) or its character, with modifiers.
@@ -63,6 +66,15 @@ struct IPhoneInput {
     func swipe(from start: NormalizedPoint, to end: NormalizedPoint, duration: TimeInterval) async throws {
         if let runner { return try await runner.drag(from: start, to: end, duration: duration) }
         try await bluetooth().swipe(from: start, to: end, duration: duration)
+    }
+
+    /// Several fingers through the runner, e.g. for `pinch`. The Bluetooth pointer is one finger.
+    func touch(_ fingers: [(from: NormalizedPoint, to: NormalizedPoint)], duration: TimeInterval) async throws {
+        guard let runner else {
+            throw ToolFailure(
+                "Several fingers, as in a pinch, need Mobdev Runner: over Bluetooth Mobdev has one pointer. With Developer Mode on the device and Xcode on this Mac, the runner starts by itself; status shows when it runs.")
+        }
+        try await runner.touch(fingers, duration: duration)
     }
 
     /// A wheel: a swipe through the runner (see `wheelSwipe`), wheel reports over Bluetooth.

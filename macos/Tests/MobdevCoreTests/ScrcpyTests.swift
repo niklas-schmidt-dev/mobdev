@@ -434,9 +434,10 @@ final class FakeScrcpyServer: @unchecked Sendable {
         try await android.pinch(at: NormalizedPoint(x: 0.5, y: 0.5), scale: 2, duration: 0.05)
         await waitFor { server.messages.get().filter { $0[1] == 1 }.count >= 2 }
         let pinch = server.messages.get()
-        #expect(pinch.first == touch(.down, ScrcpyProtocol.finger, 198, 636))  // 0.35 × 567
-        #expect(pinch[1] == touch(.down, ScrcpyProtocol.secondFinger, 369, 636))  // 0.65 × 567
-        #expect(pinch.suffix(2) == [touch(.up, ScrcpyProtocol.secondFinger, 454, 636), touch(.up, ScrcpyProtocol.finger, 113, 636)])
+        // Along the longer side, up and down on a phone held upright.
+        #expect(pinch.first == touch(.down, ScrcpyProtocol.finger, 284, 508))  // 0.4 × 1271
+        #expect(pinch[1] == touch(.down, ScrcpyProtocol.secondFinger, 284, 763))  // 0.6 × 1271
+        #expect(pinch.suffix(2) == [touch(.up, ScrcpyProtocol.secondFinger, 284, 890), touch(.up, ScrcpyProtocol.finger, 284, 381)])
         #expect(pinch.dropFirst(2).dropLast(2).allSatisfy { $0[1] == ScrcpyProtocol.TouchAction.move.rawValue })
 
         if encoded != nil {

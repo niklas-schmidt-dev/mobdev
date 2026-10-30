@@ -75,6 +75,9 @@ public protocol PhoneBackend: Sendable {
     func scroll(at point: NormalizedPoint, ticks: Int) async throws
     /// Scrolls sideways; positive `ticks` reveal content further right.
     func pan(at point: NormalizedPoint, ticks: Int) async throws
+    /// Fingers that touch down together, move in straight lines in `duration` seconds and lift
+    /// together, e.g. two for `pinch`. By default it fails: Mobdev has one finger on the device.
+    func touch(_ fingers: [(from: NormalizedPoint, to: NormalizedPoint)], duration: TimeInterval) async throws
     func type(_ strokes: [KeyStroke]) async throws
     func press(_ stroke: KeyStroke) async throws
     func press(_ button: ConsumerUsage) async throws
@@ -118,7 +121,43 @@ func wheelSwipe(at point: NormalizedPoint, ticks: Int, sideways: Bool = false) -
         : (NormalizedPoint(x: point.x, y: start), NormalizedPoint(x: point.x, y: end))
 }
 
+/// The two fingers of a pinch around `center`, each from where it touches down to where it lifts:
+/// side by side along the screen's longer side (`alongWidth` when the screen is wider than high),
+/// the wider span up to 40% of that side, apart by the ratio `scale`. Near an edge both spans
+/// shrink together, keeping the center fixed and fingers 1% inside the screen. Reject a center
+/// without room for both fingers. On an iPad (iPadOS 27), Photos' grid ignored fingers that moved
+/// 40% of the shorter side, and in landscape fingers 60% of the width apart started in the sidebar.
+func pinchFingers(at center: NormalizedPoint, scale: Double, alongWidth: Bool) throws -> [(from: NormalizedPoint, to: NormalizedPoint)] {
+    let position = alongWidth ? center.x : center.y
+    let wide = min(0.4, 2 * min(position - 0.01, 0.99 - position))
+    guard wide > 0 else {
+        throw ToolFailure("The pinch center is too close to the screen edge. Move it more than 1% inward along the screen's longer side.")
+    }
+    let spans = scale > 1 ? (from: wide / scale, to: wide) : (from: wide, to: wide * scale)
+    func finger(_ side: Double) -> (from: NormalizedPoint, to: NormalizedPoint) {
+        func at(_ span: Double) -> NormalizedPoint {
+            let offset = side * span / 2
+            return alongWidth
+                ? NormalizedPoint(x: center.x + offset, y: center.y)
+                : NormalizedPoint(x: center.x, y: center.y + offset)
+        }
+        return (at(spans.from), at(spans.to))
+    }
+    return [finger(-1), finger(1)]
+}
+
 extension PhoneBackend {
+    public func touch(_ fingers: [(from: NormalizedPoint, to: NormalizedPoint)], duration: TimeInterval) async throws {
+        throw ToolFailure("Mobdev touches this device with one finger only.")
+    }
+
+    /// Two fingers moving apart around `center` (`scale` above 1, zooming in) or together (below 1)
+    /// in `duration` seconds (see `pinchFingers`).
+    public func pinch(at center: NormalizedPoint, scale: Double, duration: TimeInterval = 0.5) async throws {
+        let wide = status().frameSize.map { $0.width > $0.height } ?? false
+        try await touch(pinchFingers(at: center, scale: scale, alongWidth: wide), duration: duration)
+    }
+
     public func doubleTap(at point: NormalizedPoint) async throws {
         try await tap(at: point, hold: 0.05)
         try await tap(at: point, hold: 0.05)

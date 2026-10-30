@@ -181,7 +181,7 @@
   "a23cdd89efb441fa": "Download for Mac",
   "53ea457ed050c196": "See what’s inside ›",
   "fb29bc8562fc5588": "Free. Updates itself. Requires macOS 26.",
-  "e32f9bff5aef9581": "Every device in one list, and every device takes the same 87 tools.",
+  "67e75127590f935f": "Every device in one list, and every device takes the same 88 tools.",
   "6e3a1ad8ecdae7b4": "Your agent drives.",
   "38b4bfda87fcb470": "Claude Code, Codex, Cursor or any MCP client sees, taps and types on every phone. You watch it happen.",
   "d4615a60ce29cf83": "From anywhere.",
@@ -436,6 +436,7 @@
   "0d1004b02722af60": "Tap a point of the screenshot",
   "c07ba3a4069bbf8b": "Touch and hold",
   "20e86a2df1b039bb": "Drag, e.g. to scroll",
+  "ae43518be9887643": "Two fingers apart or together, e.g. to zoom a map or photo",
   "8ba5b645cde2f75d": "Mouse wheel",
   "1c05592420abed0b": "Type into the focused field (up to 1000 characters per call)",
   "55550b5f4e09f03f": "Type a stored password or code without the agent seeing it",
@@ -1086,7 +1087,7 @@
       " are on the Mac that runs Mobdev, also through a relay. Mobdev never removes App Store or system apps."
     ]
   },
-  "e439d6e049e1cda1": {
+  "c60f0d2635426263": {
     "t": "p",
     "i": 1,
     "c": [
@@ -1095,7 +1096,7 @@
         "i": 2,
         "c": "Developer Mode Control."
       },
-      " Mobdev Runner is built with Xcode, signed with your development team and kept running on the iPhone, as WebDriverAgent does. While it runs, every tap, swipe, key and text goes through it, ",
+      " Mobdev Runner is built with Xcode, signed with your development team and kept running on the iPhone, as WebDriverAgent does. While it runs, every tap, swipe, pinch, key and text goes through it, ",
       {
         "t": "code",
         "i": 3,
@@ -2199,7 +2200,7 @@
       "c": "Mobdev covers everything that happens on the device, for you and for your agent. Keep building the way you do; Mobdev takes it from there."
     }
   ],
-  "8a48245140cd7bda": [
+  "1f62d4f16b3eafb8": [
     {
       "t": "h2",
       "i": 1,
@@ -2215,7 +2216,7 @@
     {
       "t": "p",
       "i": 3,
-      "c": "Plug in an iPhone, boot a simulator or start an emulator, and it shows up in Mobdev. Every device takes the same 87 tools, so one agent can test on all of them in one session."
+      "c": "Plug in an iPhone, boot a simulator or start an emulator, and it shows up in Mobdev. Every device takes the same 88 tools, so one agent can test on all of them in one session."
     }
   ],
   "0e93ea2eb9c558d4": [
