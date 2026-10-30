@@ -280,7 +280,7 @@ import Testing
         #expect(commands.calls.get().isEmpty)
     }
 
-    @Test func runnerBuildsWithTheTeamAndGivesUpAfterThreeQuickFailures() async throws {
+    @Test(.timeLimit(.minutes(1))) func runnerBuildsWithTheTeamAndGivesUpAfterThreeQuickFailures() async throws {
         let folder = temporaryFolder()
         defer { try? FileManager.default.removeItem(at: folder) }
         let products = folder.appendingPathComponent("build/Build/Products")
@@ -290,14 +290,22 @@ import Testing
                 atPath: products.appendingPathComponent("MobdevRunner_iphoneos27.0-arm64.xctestrun").path, contents: Data())
         }
         commands.testOutput = ["Testing failed:", "\tDevice is locked (Unlock the device to continue)", "", "** TEST EXECUTE FAILED **"]
+        let changes = AsyncStream<Void>.makeStream()
+        defer { changes.continuation.finish() }
         let runner = UIRunner(
-            udid: "00008110-00AB12CD34EF5678", simulator: false, folder: folder, port: 47999, commands: commands)
+            udid: "00008110-00AB12CD34EF5678", simulator: false, folder: folder, port: 47999, commands: commands,
+            onChange: { changes.continuation.yield() })
+        defer { runner.stop() }
         runner.start(team: "Q1W2E3R4T5")
-        let state = await wait(for: runner, timeout: 30) { if case .failed = $0 { true } else { false } }
+        // Observe completion instead of assuming three restarts finish within a wall-clock budget.
+        for await _ in changes.stream {
+            if case .failed = runner.state { break }
+        }
+        let state = runner.state
         #expect(state == .failed("Device is locked (Unlock the device to continue) Unlock the iPhone and try again."))
 
         let calls = commands.calls.get()
-        #expect(calls.count == 4)
+        try #require(calls.count == 4)
         let build = calls[0]
         #expect(build.first == "build-for-testing")
         #expect(build.contains("-allowProvisioningUpdates"))

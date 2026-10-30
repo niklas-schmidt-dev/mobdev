@@ -178,18 +178,27 @@ import Testing
     /// Typing that nobody waits for any more (the relay timed out, the agent hung up) stops, and
     /// leaves no key held.
     @Test func cancelledTypingStopsBetweenKeys() async throws {
-        let sink = RecordingSink()
-        let input = HIDInput(sink: sink, step: 0.005, wakeAfterIdle: nil)
-        let strokes = Array(repeating: KeyStroke(0x04), count: 400)  // About 4 seconds.
-        let typing = Task { try await input.type(strokes) }
-        try await Task.sleep(for: .milliseconds(150))
-        typing.cancel()
+        // Cancel on the first key-down report, even if the test task is not scheduled for a while.
+        let task = Locked<Task<Void, Error>?>(nil)
+        let sink = RecordingSink { id, bytes in
+            if id == .keyboard, bytes[2] == 0x04 { task.get()?.cancel() }
+        }
+        let input = HIDInput(sink: sink, step: 0, wakeAfterIdle: nil)
+        let strokes = [KeyStroke(0x04), KeyStroke(0x05)]
+        // The sender cannot read the task until its handle is stored.
+        let typing = task.withLock {
+            let typing = Task { try await input.type(strokes) }
+            $0 = typing
+            return typing
+        }
+        defer { task.set(nil) }
         await #expect(throws: CancellationError.self) { try await typing.value }
         let keyboard = sink.reports.get().filter { $0.0 == .keyboard }.map(\.1)
-        #expect(keyboard.count < strokes.count)
+        #expect(keyboard.filter { $0[2] != 0 }.map { $0[2] } == [0x04])
         #expect(keyboard.last == [0, 0, 0, 0, 0, 0, 0, 0])
         // The queue is free for the next input right away.
-        try await input.press(KeyStroke(0x05))
+        try await input.press(KeyStroke(0x06))
+        #expect(sink.reports.get().filter { $0.0 == .keyboard }.suffix(2).map { $0.1[2] } == [0x06, 0])
     }
 }
 

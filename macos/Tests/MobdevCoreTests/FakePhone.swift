@@ -212,13 +212,19 @@ final class FakeApps: AppBackend, @unchecked Sendable {
 /// Records HID reports without Bluetooth.
 final class RecordingSink: ReportSink, @unchecked Sendable {
     let reports = Locked<[(ReportID, [UInt8])]>([])
+    private let onSend: @Sendable (ReportID, [UInt8]) -> Void
     var connected = true
     /// Reports the iPhone has not subscribed to yet.
     var unsubscribed: Set<ReportID> = []
+
+    init(onSend: @escaping @Sendable (ReportID, [UInt8]) -> Void = { _, _ in }) {
+        self.onSend = onSend
+    }
 
     func send(_ id: ReportID, _ bytes: [UInt8]) throws {
         guard connected else { throw HIDError.notConnected }
         guard !unsubscribed.contains(id) else { throw HIDError.notSubscribed(id) }
         reports.withLock { $0.append((id, bytes)) }
+        onSend(id, bytes)
     }
 }
