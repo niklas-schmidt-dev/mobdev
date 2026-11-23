@@ -513,6 +513,7 @@
   "146352292b4cf39c": "List crash reports, or read one: exception, reason, crashed thread",
   "ae874cb857cc7e94": "Start recording an app’s requests",
   "4f236cf8d119eb43": "The recorded requests: method, URL, status, bytes and time",
+  "f115912930174eb6": "Wait until the app makes a matching request; fails after the timeout",
   "a27804ea948898da": "Stop recording; on Android this removes the proxy again",
   "d40f8ab5d7cf415d": "Android: a fixed answer for plain HTTP requests, e.g. an error from your API",
   "93fae913627ba671": "CPU, memory and, on Android, frames of a running app; budgets fail the call",
@@ -1269,6 +1270,24 @@
       "c": "The network tools show which requests an app makes, for debugging, for checking analytics and API calls, and for privacy audits. Nothing is installed on the device, and HTTPS is never decrypted. On iOS, Mobdev relaunches the app with Apple’s network diagnostics on and reads its log: method, host, status, bytes and time, but iOS hides paths and queries. On Android, Mobdev points the device at a proxy on the Mac: plain HTTP in full, HTTPS as host, bytes and time. Stopping the capture removes the proxy again, and a dev server on the Mac stays reachable as 10.0.2.2."
     }
   ],
+  "5ab479b6c66762af": {
+    "t": "p",
+    "i": 1,
+    "c": [
+      {
+        "t": "code",
+        "i": 2,
+        "c": "wait_for_request"
+      },
+      " waits until the capture records a request whose URL contains a text, optionally with its method and status, so a flow or test proves that the app called its API. It counts the requests since the last tap, typing or launch, or since a cursor from ",
+      {
+        "t": "code",
+        "i": 3,
+        "c": "network_log"
+      },
+      ", and fails after a timeout. Wait for a host on iOS, which hides paths; Android shows the path, method and status of plain HTTP only."
+    ]
+  },
   "e4b8eecebcdef156": {
     "t": "p",
     "i": 1,

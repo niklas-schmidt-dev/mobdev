@@ -153,7 +153,8 @@ public final class PhoneTools: Sendable {
         busiest processes, memory and thermal state; `reload_app` and `dev_menu` reload a React Native \
         or Expo app and open its developer menu. \
         `start_network_capture`, `network_log` and `stop_network_capture` show which requests an app makes \
-        (Android through Mobdev's proxy, iOS from the app's own CFNetwork log; HTTPS is not decrypted). \
+        (Android through Mobdev's proxy, iOS from the app's own CFNetwork log; HTTPS is not decrypted); \
+        `wait_for_request` fails a flow or test step unless the app made a matching request. \
         Checks fail a flow or test step when the screen does not pass: `assert_screenshot` compares it with \
         a baseline picture, `accessibility_audit` finds missing labels, small targets and low contrast, and \
         `assert_with_ai` asks Apple Intelligence on the Mac a yes/no question about it. \
@@ -344,7 +345,10 @@ public final class PhoneTools: Sendable {
                     }
                 }
             } else {
-                if !definition.readOnly { try checkNotHeld() }
+                if !definition.readOnly {
+                    try checkNotHeld()
+                    markNetworkAction()
+                }
                 switch name {
                 case "type_secret": output = try await typeSecret(args, source: source)
                 case "type_text": output = try await typeText(args, source: source)

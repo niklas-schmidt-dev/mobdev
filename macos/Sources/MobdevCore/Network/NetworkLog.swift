@@ -236,6 +236,10 @@ public final class NetworkLog: Sendable {
         state.get().entries.filter(matches)
     }
 
+    /// The number of the newest finished entry, 0 before the first: what `read` returns as its
+    /// cursor when nothing more is waiting.
+    public var cursor: Int { state.get().next - 1 }
+
     /// Requests and tunnels still running, oldest first.
     public var openEntries: [NetworkEntry] {
         state.get().open.sorted { $0.key < $1.key }.map(\.value)

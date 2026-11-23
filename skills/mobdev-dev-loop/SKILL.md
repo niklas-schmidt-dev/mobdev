@@ -121,6 +121,11 @@ The loop is the same; only the build differs.
   `network_log` (keep its `cursor` for `after`) and `stop_network_capture`. iOS lists method, host,
   status, size and time but hides paths; Android shows plain HTTP in full and HTTPS as host and bytes.
   Always stop it on Android, which otherwise keeps the proxy until Mobdev quits.
+- Prove a call instead of reading for it: right after the step that should send it,
+  `wait_for_request` with `url` (the host on iOS; a path only for plain HTTP on Android), and
+  `method` and `status` where they matter. It counts the requests since that step began, so a fast
+  one is not missed, fails after `timeout`, and works as a step in flows and tests while a capture
+  runs.
 - Report what you checked on the phone and what you could not, such as push notifications on an
   iPhone (a simulator takes `send_push`) or purchases that need real accounts.
 - Once a path works, offer to keep it as a test with `save_test` in the app's project (see Projects

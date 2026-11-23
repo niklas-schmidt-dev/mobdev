@@ -141,6 +141,7 @@ const developerTools = [
 const networkTools = [
   ["start_network_capture", "bundle_id", msg("Start recording an app’s requests")],
   ["network_log", "bundle_id, contains, after, query, headers", msg("The recorded requests: method, URL, status, bytes and time")],
+  ["wait_for_request", "url, method, status, after, timeout", msg("Wait until the app makes a matching request; fails after the timeout")],
   ["stop_network_capture", "bundle_id", msg("Stop recording; on Android this removes the proxy again")],
   ["mock_response", "url, status, body, content_type, clear", msg("Android: a fixed answer for plain HTTP requests, e.g. an error from your API")],
 ];
@@ -589,6 +590,16 @@ function Docs() {
                 </p>
               </T>
               <ToolTable rows={networkTools} />
+              <T>
+                <p>
+                  <code className={code}>wait_for_request</code> waits until the capture records a request whose URL
+                  contains a text, optionally with its method and status, so a flow or test proves that the app called
+                  its API. It counts the requests since the last tap, typing or launch, or since a cursor
+                  from <code className={code}>network_log</code>, and fails after a timeout. Wait for a host on iOS,
+                  which hides paths; Android shows the path, method and status of plain HTTP only.
+                </p>
+              </T>
+              <Code>{'{"tap_element": {"id": "sign-in"}}\n{"wait_for_request": {"url": "api.example.com", "method": "POST", "status": 200}}'}</Code>
             </Section>
 
             <Section id="flows">

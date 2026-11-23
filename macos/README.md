@@ -268,6 +268,7 @@ only device, or the connected iPhone when simulators or Android devices run next
 | `crash_reports` | `app`, `name`, `limit` | Lists reports; `name` reads one |
 | `start_network_capture` | `bundle_id` | Records which requests an app makes (see [Network](#network)) |
 | `network_log` | `bundle_id`, `contains`, `after`, `limit`, `query`, `headers` | The recorded requests: method, URL, status, bytes each way, duration and where it was seen |
+| `wait_for_request` | `url`, `method`, `status`, `after`, `timeout` | Waits until the capture records a matching request and returns it; fails after `timeout` |
 | `stop_network_capture` | `bundle_id` | Ends the capture; on Android it removes Mobdev's proxy from the device |
 | `mock_response` | `url`, `status`, `body`, `content_type`, `clear` | Android: a fixed answer for plain HTTP requests through the proxy |
 | `set_location` | `latitude`, `longitude`, `route`, `speed`, `clear` | A simulated position, or a route the device follows |
@@ -539,6 +540,19 @@ on the device, and HTTPS is never decrypted, so each platform shows what it can:
   proxy connects to the Mac's `127.0.0.1` for it and logs the address the app used.
 - `mock_response` (Android) answers plain HTTP requests whose URL contains `url` with a fixed status
   and body, e.g. to try an error state against a dev server at `http://10.0.2.2:3000`.
+- `wait_for_request` proves that the app called its API: it waits until the capture records a
+  request whose URL contains `url`, optionally with `method` and `status`, and returns it with its
+  cursor, or fails after `timeout` (default 10 s, at most 60) like `wait_for_text`. It counts the
+  requests that finished after `after` (a cursor from `network_log` or an earlier wait), else those
+  since the last action on the device began (a tap, typing, `launch_app`…), so in a flow or test
+  `tap_element` followed by `{"wait_for_request": {"url": "api.example.com", "method": "POST",
+  "status": 201}}` passes even when the request finished before the wait started. It fails at once
+  when no capture runs, and when the filter can never match what the device shows: on iOS a path or
+  query (wait for the host); on Android a path, method or status of an `https://` URL. On Android an
+  HTTPS connection counts once it opens, and a request sent over a connection that was already open
+  shows no new one. A timeout lists requests to the same URL with another method or status, those
+  still running, and how many others finished. Maestro has no such command, so a flow with it does
+  not export to Maestro.
 - A capture lives in the running app; a flow (`run_flow`, `Mobdev flow`) can start and stop one too.
 
 ### Simulators and Android
@@ -949,7 +963,7 @@ subflow next to the test or relative to the project folder, so shared flows can 
 Every key of `mobdev.json` is optional. A run installs the build for the device's platform
 (`iphone`, `simulator` or `android`) once, then plays `before_each` and the test's steps. A test
 passes when every step does, so end it with a `wait_for_element` or `wait_for_text` that proves the
-result; when the launched app crashes during a test, the test fails with the crash. `${NAME}` takes
+result (`wait_for_request` for a call the app must make, with a network capture running); when the launched app crashes during a test, the test fails with the crash. `${NAME}` takes
 a variable from the file, the environment or the run; a secret's value comes from the run, the
 environment or a [stored secret](#secrets) of the same name and never appears in results. A test with `"platforms": ["android"]` is skipped on
 iOS, and the other way round.
