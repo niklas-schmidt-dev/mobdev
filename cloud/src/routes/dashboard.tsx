@@ -117,12 +117,16 @@ function Card({ title, subtitle, children }: { title: string; subtitle?: string;
 
 const destructive = "text-[15px] text-danger transition-opacity hover:opacity-70 disabled:opacity-40";
 
-/** The label is registered with msg; translate it with useMessages. */
+/**
+ * What the device has and lacks, in the Mac app's words for the same states (DeviceViews.swift).
+ * `bluetooth` means input is connected, by Mobdev Runner or Bluetooth. The label is registered with
+ * msg; translate it with useMessages.
+ */
 function deviceStatus(device: Device, macOnline: boolean): { label: string; dot: string } {
   if (!macOnline) return { label: msg("Offline"), dot: "bg-line" };
   if (device.ready) return { label: msg("Ready"), dot: "bg-[#34c759]" };
-  if (device.screen && !device.bluetooth) return { label: msg("Screen only"), dot: "bg-[#ff9500]" };
-  if (device.bluetooth && !device.screen) return { label: msg("Bluetooth only"), dot: "bg-[#ff9500]" };
+  if (device.screen && !device.bluetooth) return { label: msg("Input not ready"), dot: "bg-[#ff9500]" };
+  if (device.bluetooth && !device.screen) return { label: msg("Screen not connected"), dot: "bg-[#ff9500]" };
   return { label: msg("Not ready"), dot: "bg-[#ff9500]" };
 }
 
