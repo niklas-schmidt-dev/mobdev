@@ -52,7 +52,11 @@ struct ToolFailure: Error, CustomStringConvertible {
 public final class PhoneTools: Sendable {
     let phone: PhoneBackend
     let activity: ActivityLog
-    private let settleDelay: TimeInterval
+    /// How an action waits for the screenshot it returns (see `settledFrame`).
+    let settle: Settle
+    /// How long this device's last picture took, which tells whether waiting for a still screen
+    /// pays; nil until one was timed.
+    let frameCost = Locked<TimeInterval?>(nil)
     /// Every line of an image (query nil) or where a query is; Vision unless a test replaces it.
     let readText: @Sendable (CGImage, String?) throws -> [TextMatch]
     /// How long past its timeout an element wait keeps trying a tree that cannot be read yet.
@@ -87,14 +91,14 @@ public final class PhoneTools: Sendable {
     }
 
     init(
-        phone: PhoneBackend, activity: ActivityLog, settleDelay: TimeInterval,
+        phone: PhoneBackend, activity: ActivityLog, settleDelay: TimeInterval, settle: Settle? = nil,
         unreadableGrace: TimeInterval = PhoneTools.unreadableGrace, judge: any ScreenJudge = AppleIntelligenceJudge(),
         uploads: UploadStore = .shared, projects: ProjectList = ProjectList(),
         readText: @escaping @Sendable (CGImage, String?) throws -> [TextMatch]
     ) {
         self.phone = phone
         self.activity = activity
-        self.settleDelay = settleDelay
+        self.settle = settle ?? .standard(settleDelay)
         self.unreadableGrace = unreadableGrace
         self.judge = judge
         self.uploads = uploads
@@ -341,8 +345,7 @@ public final class PhoneTools: Sendable {
             let wantsScreenshot = args.bool("screenshot") ?? screenshotByDefault
             let offersScreenshot = definition.inputSchema["properties"]?["screenshot"] != nil && !definition.readOnly
             if wantsScreenshot, output.image == nil, offersScreenshot {
-                try await Task.sleep(nanoseconds: UInt64(settleDelay * 1_000_000_000))
-                output.image = phone.frame().flatMap(ImageTools.screenshot)
+                output.image = try await settledFrame().flatMap(ImageTools.screenshot)
             }
             activity.record(
                 source: source, tool: name, summary: summary(name, args, output), failed: output.isError,

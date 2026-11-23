@@ -363,6 +363,77 @@ extension PhoneTools {
             try await pause(0.1)
         }
     }
+
+    /// The picture an action returns: once the screen stayed the same for `settle.still`, looking
+    /// first after `settle.first` so the action's effect can reach the picture, and at the latest
+    /// after `settle.limit` on a screen that keeps moving. Where a picture is slow, as Android's
+    /// `screencap` without scrcpy is, or missing, and before one was timed: `settle.fixed`, then one
+    /// picture, as before.
+    func settledFrame() async throws -> CGImage? {
+        let settle = self.settle
+        guard settle.fixed > 0 else { return phone.frame() }
+        let started = Date()
+        func look() -> (image: CGImage, fast: Bool)? {
+            let clock = Date()
+            guard let image = phone.frame() else { return nil }
+            let cost = Date().timeIntervalSince(clock)
+            frameCost.set(cost)
+            return (image, cost <= settle.slowFrame)
+        }
+        func asBefore() async throws -> CGImage? {
+            try await pause(max(settle.fixed - Date().timeIntervalSince(started), 0))
+            return look()?.image
+        }
+        guard let cost = frameCost.get(), cost <= settle.slowFrame else { return try await asBefore() }
+        try await pause(settle.first)
+        guard var newest = look(), newest.fast, var reference = FrameSignature(newest.image) else {
+            return try await asBefore()
+        }
+        var stillSince = Date()
+        while true {
+            let still = Date().timeIntervalSince(stillSince)
+            let left = settle.limit - Date().timeIntervalSince(started)
+            if still >= settle.still || left <= 0 { return newest.image }
+            try await pause(min(settle.poll, settle.still - still, left))
+            guard let next = look(), next.fast, let signature = FrameSignature(next.image) else {
+                return try await asBefore()
+            }
+            newest = next
+            // As wait_for_idle: the status bar and tiny changes such as a blinking cursor do not count.
+            if signature.changed(from: reference) >= 0.002 {
+                reference = signature
+                stillSince = Date()
+            }
+        }
+    }
+}
+
+/// How an action waits for the screenshot it returns (see `settledFrame`).
+struct Settle: Sendable {
+    /// Where pictures are slow or missing: this long, then one picture. 0 takes it at once.
+    var fixed: TimeInterval
+    /// The first look. Taps through Mobdev Runner return once the app settled, but over Bluetooth,
+    /// on Android and in the iPhone's USB picture an effect takes a moment to show.
+    var first: TimeInterval = 0.15
+    /// How long the screen has to stay the same.
+    var still: TimeInterval = 0.25
+    /// The longest wait for a screen that keeps moving, such as a video or a spinner.
+    var limit: TimeInterval = 1.5
+    /// Between looks. A look costs about 10 ms on a simulator or an iPhone (2026-11).
+    var poll: TimeInterval = 0.08
+    /// Pictures that take longer cost more than waiting for a still screen saves: Android's
+    /// `screencap` without scrcpy takes 0.25 to 1 s.
+    var slowFrame: TimeInterval = 0.15
+
+    /// The wait for a `settleDelay`, which becomes the fixed wait (0.6 s in the app). A shorter delay
+    /// shortens the first look and the stillness with it, so a still screen never waits longer.
+    static func standard(_ settleDelay: TimeInterval) -> Settle {
+        var settle = Settle(fixed: settleDelay)
+        let scale = min(1, settleDelay / (settle.first + settle.still))
+        settle.first *= scale
+        settle.still *= scale
+        return settle
+    }
 }
 
 /// A screen boiled down to a small grayscale picture, to tell whether it changed. The top 7%, where
