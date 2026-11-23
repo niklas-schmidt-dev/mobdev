@@ -44,6 +44,9 @@ extension PhoneTools {
     func runTestsTool(_ args: Arguments, source: String) async throws -> ToolOutput {
         var wait = try args.number("wait", default: 2 * 3600, range: 0...(2 * 3600))
         if source == "relay" { wait = min(wait, Self.relayWait) }
+        // The command line without the app: the run is that process's and ends with it, so the call
+        // waits for the end however long it takes (it refuses wait and stop, see CallCommand).
+        if source == "cli" { wait = .infinity }
         let device = testDevice.device
         if args.bool("stop") == true { return await stopTests(on: device, wait: wait) }
 

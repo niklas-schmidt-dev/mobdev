@@ -721,7 +721,9 @@ extension PhoneTools {
                 break
             }
         }
-        await restoreLanguage?()
+        // In a task of its own: a stopped run is cancelled, and a cancelled task's commands are killed,
+        // which would leave the device in the run's language.
+        if let restoreLanguage { await Task { await restoreLanguage() }.value }
         return finished(result)
     }
 
