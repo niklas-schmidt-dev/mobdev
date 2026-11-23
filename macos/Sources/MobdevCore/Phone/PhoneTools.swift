@@ -7,6 +7,9 @@ public struct ToolDefinition: Sendable {
     public let description: String
     public let inputSchema: JSONValue
     public let readOnly: Bool
+    /// The toolset that lists the tool when an MCP client asks for some: its definition list's,
+    /// set where the lists are put together (`inToolset`).
+    public internal(set) var toolset: Toolset = .core
 
     /// The tool as listed by MCP `tools/list`.
     public var mcpJSON: JSONValue {
@@ -49,7 +52,11 @@ struct ToolFailure: Error, CustomStringConvertible {
 public final class PhoneTools: Sendable {
     let phone: PhoneBackend
     let activity: ActivityLog
-    private let settleDelay: TimeInterval
+    /// How an action waits for the screenshot it returns (see `settledFrame`).
+    let settle: Settle
+    /// How long this device's last picture took, which tells whether waiting for a still screen
+    /// pays; nil until one was timed.
+    let frameCost = Locked<TimeInterval?>(nil)
     /// Every line of an image (query nil) or where a query is; Vision unless a test replaces it.
     let readText: @Sendable (CGImage, String?) throws -> [TextMatch]
     /// How long past its timeout an element wait keeps trying a tree that cannot be read yet.
@@ -84,14 +91,14 @@ public final class PhoneTools: Sendable {
     }
 
     init(
-        phone: PhoneBackend, activity: ActivityLog, settleDelay: TimeInterval,
+        phone: PhoneBackend, activity: ActivityLog, settleDelay: TimeInterval, settle: Settle? = nil,
         unreadableGrace: TimeInterval = PhoneTools.unreadableGrace, judge: any ScreenJudge = AppleIntelligenceJudge(),
         uploads: UploadStore = .shared, projects: ProjectList = ProjectList(),
         readText: @escaping @Sendable (CGImage, String?) throws -> [TextMatch]
     ) {
         self.phone = phone
         self.activity = activity
-        self.settleDelay = settleDelay
+        self.settle = settle ?? .standard(settleDelay)
         self.unreadableGrace = unreadableGrace
         self.judge = judge
         self.uploads = uploads
@@ -100,9 +107,18 @@ public final class PhoneTools: Sendable {
         history.start()
     }
 
-    /// Typing takes about 60 ms per character and holds the phone's input until done, so one call
-    /// stays well within the relays' 90-second limit.
+    /// Typing holds the device's input until the text is in, at speeds that differ a lot: Mobdev
+    /// Runner types about ten characters a second (XCTest), the Bluetooth keyboard takes 60 ms a key
+    /// and 120 ms with Shift or Option (an accent is two keys), a simulator about 25 ms a key, and
+    /// Android hands the text to scrcpy at once or to adb's `input text` 200 characters at a time.
+    /// A call from this Mac may type this many characters, which over Bluetooth can take two
+    /// minutes; a call through a relay only what fits in its time (see `relayTypingLimit`).
     static let maxTypedCharacters = 1000
+
+    /// What a character costs through Mobdev Runner when a relay call's typing is counted. XCTest
+    /// typed about ten a second on a simulator and waits for the app to settle in between, so an
+    /// iPhone or a busy app can be slower: at two thirds of that speed, 500 characters still fit.
+    static let runnerSecondsPerCharacter: TimeInterval = 0.15
 
     public static let instructions = """
         Mobdev controls a real iPhone connected to this Mac: it reads the screen over USB. With Developer \
@@ -137,7 +153,8 @@ public final class PhoneTools: Sendable {
         busiest processes, memory and thermal state; `reload_app` and `dev_menu` reload a React Native \
         or Expo app and open its developer menu. \
         `start_network_capture`, `network_log` and `stop_network_capture` show which requests an app makes \
-        (Android through Mobdev's proxy, iOS from the app's own CFNetwork log; HTTPS is not decrypted). \
+        (Android through Mobdev's proxy, iOS from the app's own CFNetwork log; HTTPS is not decrypted); \
+        `wait_for_request` fails a flow or test step unless the app made a matching request. \
         Checks fail a flow or test step when the screen does not pass: `assert_screenshot` compares it with \
         a baseline picture, `accessibility_audit` finds missing labels, small targets and low contrast, and \
         `assert_with_ai` asks Apple Intelligence on the Mac a yes/no question about it. \
@@ -149,8 +166,9 @@ public final class PhoneTools: Sendable {
         Without a path, recordings, screenshots, baselines, crawls and runs go into the project: the one \
         of your working folder, else the active one (`list_projects`, `open_project`, `create_project`; ask \
         before creating one). `list_tests` shows its tests, `save_test` and `save_flow` write one, \
-        `run_tests` runs them on a device with a video and a screenshot of each failure, and \
-        `test_result` returns the newest results. `run_native_tests` runs the app's own XCTest or \
+        `run_tests` runs them on a device with a video and a screenshot of each failure, in the \
+        background when the caller cannot wait for the end, and `test_result` says how the run is doing \
+        and returns the newest results. `run_native_tests` runs the app's own XCTest or \
         Gradle suite on the device in the background and `native_test_result` reads its failures with \
         file and line. \
         With an App Store Connect key in Mobdev's settings, `appstore_apps`, `appstore_builds`, \
@@ -238,7 +256,7 @@ public final class PhoneTools: Sendable {
             ToolDefinition(
                 name: "type_text", title: "Type text",
                 description:
-                    "Type text into the focused field. Tap the field first. Set submit to press Return afterwards. At most 1000 characters per call; send longer text in several calls.",
+                    "Type text into the focused field. Tap the field first. Set submit to press Return afterwards. At most 1000 characters per call; send longer text in several calls. Through a relay an iPhone takes fewer, and the error says how many.",
                 inputSchema: schema(
                     ["text": ["type": "string"], "submit": ["type": "boolean", "description": "Press Return after typing"]],
                     required: ["text"]), readOnly: false),
@@ -293,9 +311,13 @@ public final class PhoneTools: Sendable {
                         "timeout": ["type": "number", "description": "Seconds, default 10, at most 60"],
                         "gone": ["type": "boolean"],
                     ], required: ["text"]), readOnly: true),
-        ] + secretDefinitions + observeDefinitions + treeDefinitions + appDefinitions + settingsDefinitions + recordingDefinitions
-            + sessionDefinitions + crawlDefinitions + checkDefinitions + flowDefinitions + testDefinitions
-            + nativeTestDefinitions + devLoopDefinitions + profilingDefinitions + networkDefinitions
+        ].inToolset(.core) + secretDefinitions.inToolset(.secrets) + observeDefinitions.inToolset(.core)
+            + treeDefinitions.inToolset(.core) + appDefinitions.inToolset(.apps)
+            + settingsDefinitions.inToolset(.settings) + recordingDefinitions.inToolset(.recording)
+            + sessionDefinitions.inToolset(.settings) + crawlDefinitions.inToolset(.tests)
+            + checkDefinitions.inToolset(.tests) + flowDefinitions.inToolset(.tests) + testDefinitions.inToolset(.tests)
+            + nativeTestDefinitions.inToolset(.tests) + devLoopDefinitions.inToolset(.performance)
+            + profilingDefinitions.inToolset(.performance) + networkDefinitions.inToolset(.network)
     }()
 
     public static func definition(named name: String) -> ToolDefinition? {
@@ -313,27 +335,35 @@ public final class PhoneTools: Sendable {
         do {
             try AppBlocklist.check(name, args)
             var output: ToolOutput
-            if let what = Self.holdingTools[name] {
+            let wantsScreenshot = args.bool("screenshot") ?? screenshotByDefault
+            let offersScreenshot = definition.inputSchema["properties"]?["screenshot"] != nil && !definition.readOnly
+            // The screen before the action, for the screenshot the action returns (see settledFrame).
+            var before: FrameSignature?
+            if name == "run_tests" {
+                // Its run holds the device itself, past this call when the caller cannot wait.
+                output = try await runTestsTool(args, source: source)
+            } else if let what = Self.holdingTools[name] {
                 output = try await holding(what, source: source) {
                     switch name {
                     case "run_flow": try await runFlowTool(args, source: source)
-                    case "run_tests": try await runTestsTool(args, source: source)
                     default: try await runCrawlTool(name, args, source: source)!
                     }
                 }
             } else {
-                if !definition.readOnly { try checkNotHeld() }
+                if !definition.readOnly {
+                    try checkNotHeld()
+                    markNetworkAction()
+                }
+                if wantsScreenshot, offersScreenshot { before = screenBeforeAction() }
                 switch name {
                 case "type_secret": output = try await typeSecret(args, source: source)
+                case "type_text": output = try await typeText(args, source: source)
                 case "run_native_tests": output = try await runNativeTestsTool(args, source: source)
                 default: output = try await run(name, args)
                 }
             }
-            let wantsScreenshot = args.bool("screenshot") ?? screenshotByDefault
-            let offersScreenshot = definition.inputSchema["properties"]?["screenshot"] != nil && !definition.readOnly
             if wantsScreenshot, output.image == nil, offersScreenshot {
-                try await Task.sleep(nanoseconds: UInt64(settleDelay * 1_000_000_000))
-                output.image = phone.frame().flatMap(ImageTools.screenshot)
+                output.image = try await settledFrame(after: before).flatMap(ImageTools.screenshot)
             }
             activity.record(
                 source: source, tool: name, summary: summary(name, args, output), failed: output.isError,
@@ -421,18 +451,6 @@ public final class PhoneTools: Sendable {
             try await phone.pinch(at: center, scale: scale, duration: duration)
             return ToolOutput(
                 text: "Pinched around \(try describe(center)) to zoom \(scale > 1 ? "in" : "out"), scale \(format(scale)).")
-        case "type_text":
-            let text = try args.string("text", maxLength: Self.maxTypedCharacters)
-            let submit = args.bool("submit") == true
-            try requireTouch()
-            if try await phone.typeText(text) {
-                if submit { try await phone.press(KeyStroke(0x28)) }
-            } else {
-                var strokes = try phone.status().keyboardLayout.strokes(typing: text)
-                if submit { strokes.append(KeyStroke(0x28)) }
-                try await phone.type(strokes)
-            }
-            return ToolOutput(text: "Typed \(text.count) characters\(submit ? " and pressed Return" : "").")
         case "press_key":
             let key = try args.string("key")
             let modifiers = args.strings("modifiers")
@@ -536,22 +554,30 @@ public final class PhoneTools: Sendable {
             let deadline = Date().addingTimeInterval(timeout)
             // Once recognition failed, the rest of the wait reads the UI tree.
             var fromTree = false
+            // The picture recognition last read without finding what it waits for. Each recognition
+            // pipes the whole frame to a helper process, about 14 MB on an iPhone Pro, and the same
+            // pixels again would give the same answer.
+            var recognized: FramePixels?
             while true {
                 let (frame, _) = try currentFrame()
-                let found: ScreenText
-                do {
-                    found = try await screenText(query, in: frame, treeOnly: fromTree)
-                } catch where fromTree && Date() < deadline {
-                    // A tree that cannot be read yet, as while an app launches, counts as not visible.
-                    try await pause(0.5)
-                    continue
-                }
-                fromTree = found.fromTree
-                let visible = !found.matches.isEmpty
-                if visible != gone {
-                    return ToolOutput(
-                        text: (gone ? "\"\(query)\" is gone." : "\"\(query)\" is visible.")
-                            + (fromTree ? " " + Self.fromTreeNote : ""))
+                let pixels = fromTree ? nil : FramePixels(frame)
+                if pixels == nil || pixels != recognized {
+                    let found: ScreenText
+                    do {
+                        found = try await screenText(query, in: frame, treeOnly: fromTree)
+                    } catch where fromTree && Date() < deadline {
+                        // A tree that cannot be read yet, as while an app launches, counts as not visible.
+                        try await pause(0.5)
+                        continue
+                    }
+                    fromTree = found.fromTree
+                    recognized = fromTree ? nil : pixels
+                    let visible = !found.matches.isEmpty
+                    if visible != gone {
+                        return ToolOutput(
+                            text: (gone ? "\"\(query)\" is gone." : "\"\(query)\" is visible.")
+                                + (fromTree ? " " + Self.fromTreeNote : ""))
+                    }
                 }
                 if Date() >= deadline {
                     throw ToolFailure(
@@ -572,6 +598,62 @@ public final class PhoneTools: Sendable {
             if let output = try await runNetworkTool(name, args) { return output }
             return try await runAppTool(name, args)
         }
+    }
+
+    // MARK: Typing
+
+    func typeText(_ args: Arguments, source: String) async throws -> ToolOutput {
+        let text = try args.string("text", maxLength: Self.maxTypedCharacters)
+        let submit = args.bool("submit") == true
+        try requireTouch()
+        // The relay gives up on a call after 90 seconds, also in the middle of the text. A flow's or
+        // test run's steps are not calls of their own.
+        if source == "relay", DeviceHold.current == nil, let limit = relayTypingLimit(text) {
+            throw ToolFailure(
+                "Through a relay a call has 90 seconds, and \(limit.why), so one call types at most \(limit.characters) characters of this text. Send it in parts of up to \(limit.characters) characters, one type_text call each."
+            )
+        }
+        if try await phone.typeText(text) {
+            if submit { try await phone.press(KeyStroke(0x28)) }
+        } else {
+            var strokes = try phone.status().keyboardLayout.strokes(typing: text)
+            if submit { strokes.append(KeyStroke(0x28)) }
+            try await phone.type(strokes)
+        }
+        return ToolOutput(text: "Typed \(text.count) characters\(submit ? " and pressed Return" : "").")
+    }
+
+    /// How many characters of `text` this device types within `relayWait`, which leaves a relay
+    /// call time for Return and the screenshot, and why; nil when all of them fit. Simulators and
+    /// Android type 1000 characters well within it.
+    func relayTypingLimit(_ text: String) -> (characters: Int, why: String)? {
+        let status = phone.status()
+        // In whole milliseconds, so that 500 times 0.15 s is not a little more than 75 s.
+        let milliseconds: (Character) -> Int
+        let why: String
+        switch status.input {
+        case .runner:
+            let each = Int((Self.runnerSecondsPerCharacter * 1000).rounded())
+            milliseconds = { _ in each }
+            why = "Mobdev Runner types about ten characters a second, fewer in a busy app"
+        case .bluetooth:
+            // HIDInput's reports are 30 ms apart: key down and up, plus modifiers down and up.
+            let layout = status.keyboardLayout
+            milliseconds = { character in
+                let strokes = layout.strokes(for: character == "\r\n" || character == "\r" ? "\n" : character) ?? []
+                return strokes.reduce(0) { $0 + ($1.modifiers == 0 ? 60 : 120) }
+            }
+            why = "the Bluetooth keyboard takes 60 ms a key and 120 ms with Shift or Option"
+        case .direct:
+            return nil
+        }
+        let budget = Int((Self.relayWait * 1000).rounded())
+        var total = 0
+        for (index, character) in text.enumerated() {
+            total += milliseconds(character)
+            if total > budget { return (index, why) }
+        }
+        return nil
     }
 
     // MARK: Helpers

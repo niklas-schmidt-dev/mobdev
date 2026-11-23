@@ -2,6 +2,7 @@ import { env, runDurableObjectAlarm, runInDurableObject } from "cloudflare:test"
 import { exports } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
 import { exhausted, type Quota } from "../relay/src/billing";
+import { USAGE_FLUSH_MS, USAGE_RECHECK_MS } from "../relay/src/protocol";
 import { carryOverUsage, removeAccount } from "../shared/accounts";
 import { Autumn } from "../shared/autumn";
 import { listAccessTokens, listHosts, upsertAccount } from "../shared/db";
@@ -14,6 +15,11 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function space(hostSecret: string) {
   return env.RELAY_SPACE.getByName(await spaceForSecret(hostSecret));
+}
+
+/** When the space's alarm goes off next. */
+async function alarmAt(hostSecret: string): Promise<number | null> {
+  return runInDurableObject(await space(hostSecret), (_, state) => state.storage.getAlarm());
 }
 
 /** Runs the usage flush the relay scheduled after the last request. */
@@ -50,6 +56,8 @@ async function macsAllowed(accountId: string): Promise<number | null> {
 beforeEach(() => {
   fakeAutumn.down = false;
   fakeAutumn.loseNextTrackResponse = false;
+  fakeAutumn.trackDelayMs = 0;
+  fakeAutumn.mostTracksAtOnce = 0;
   fakeAutumn.deleteAnswer = null;
   fakeAutumn.beforeCustomer = null;
 });
@@ -138,6 +146,41 @@ describe("metering", () => {
     expect(fakeAutumn.trackedFor(id, FEATURES.requests)).toBe(5);
   });
 
+  it("sends usage two minutes after the Mac got busy, both features at once", async () => {
+    const { id, token } = await account();
+    const hostSecret = secret();
+    await fakeMac(hostSecret, token);
+    const key = await clientKeyForSecret(hostSecret);
+
+    const before = Date.now();
+    expect((await agent("/v1/slow", key)).status).toBe(200);
+    const alarm = await alarmAt(hostSecret);
+    expect(alarm).toBeGreaterThanOrEqual(before + USAGE_FLUSH_MS);
+    expect(alarm).toBeLessThanOrEqual(Date.now() + USAGE_FLUSH_MS);
+
+    fakeAutumn.trackDelayMs = 200;
+    await flush(hostSecret);
+    expect(fakeAutumn.trackedFor(id, FEATURES.requests)).toBe(1);
+    expect(fakeAutumn.trackedFor(id, FEATURES.activeSeconds)).toBe(1);
+    expect(fakeAutumn.mostTracksAtOnce).toBe(2);
+  });
+
+  it("asks Autumn again within 30 seconds once the allowance is used up", async () => {
+    const { id, token } = await account();
+    fakeAutumn.setPlan(id, { ...FREE_PLAN, requests: 1 });
+    const hostSecret = secret();
+    await fakeMac(hostSecret, token);
+    const key = await clientKeyForSecret(hostSecret);
+
+    expect((await agent("/v1/status", key)).status).toBe(200);
+    expect(await alarmAt(hostSecret)).toBeGreaterThan(Date.now() + USAGE_RECHECK_MS); // The regular flush.
+    const before = Date.now();
+    expect((await agent("/v1/status", key)).status).toBe(429);
+    const recheck = await alarmAt(hostSecret);
+    expect(recheck).toBeGreaterThanOrEqual(before + USAGE_RECHECK_MS);
+    expect(recheck).toBeLessThanOrEqual(Date.now() + USAGE_RECHECK_MS);
+  });
+
   it("stops at the monthly allowance and picks up an upgrade", async () => {
     const { id, token } = await account();
     fakeAutumn.setPlan(id, { ...FREE_PLAN, requests: 3 });
@@ -190,6 +233,32 @@ describe("metering", () => {
     await agent("/v1/status", key);
     await flush(hostSecret);
     expect(fakeAutumn.trackedFor(id, FEATURES.requests)).toBe(3);
+  });
+
+  it("asks for the allowance again when Autumn confirms usage without a balance", async () => {
+    const { id, token } = await account();
+    fakeAutumn.setPlan(id, { ...FREE_PLAN, requests: 2 });
+    const hostSecret = secret();
+    await fakeMac(hostSecret, token);
+    const key = await clientKeyForSecret(hostSecret);
+
+    for (let i = 0; i < 2; i++) expect((await agent("/v1/status", key)).status).toBe(200);
+    // Autumn counts the two requests, but its answer with the balance is lost. The retry is a
+    // duplicate, which has no balance: the one from before the requests must not count as current.
+    fakeAutumn.loseNextTrackResponse = true;
+    await flush(hostSecret);
+    // The account cannot be read either: the two requests stay counted here until it can.
+    fakeAutumn.beforeCustomer = async () => {
+      throw new Error("Autumn does not answer");
+    };
+    await flush(hostSecret);
+    expect(fakeAutumn.trackedFor(id, FEATURES.requests)).toBe(2);
+    expect((await agent("/v1/status", key)).status).toBe(429);
+
+    fakeAutumn.beforeCustomer = null;
+    await flush(hostSecret);
+    expect(fakeAutumn.trackedFor(id, FEATURES.requests)).toBe(2);
+    expect((await agent("/v1/status", key)).status).toBe(429);
   });
 
   it("keeps the usage of a Mac that disconnects until Autumn has it", async () => {

@@ -46,12 +46,17 @@ What keeps cost bounded, cheapest check first:
 How usage gets to Autumn: each Mac connection has a meter in its WebSocket attachment (so it
 survives hibernation) that counts forwarded requests and the time with at least one request in
 flight. That time is what Durable Object duration costs, and requests still in flight count
-against the allowance too. About 30 s after a Mac starts on a request, and every 30 s while it
-stays busy, a Durable Object alarm sends one batch per connection with `balances.track`.
-Idempotency keys make retries safe. The answer carries the remaining balance, which the
-connection enforces locally without calling Autumn per request. A Mac that disconnects leaves its
+against the allowance too. About 2 minutes after a Mac starts on a request or someone starts
+watching it, and every 2 minutes while it stays busy (`USAGE_FLUSH_MS`), a Durable Object alarm
+sends one batch per connection: a `balances.track` call for requests and one for active seconds,
+both at once. Idempotency keys make retries safe. The answer carries the remaining balance, which
+the connection enforces locally, with what it counted since, without calling Autumn per request.
+So the wait lets no Mac use more than the balance; several Macs of one account see each other's
+use once it reached Autumn. When a request finds the allowance used up, the flush comes within
+30 s instead (`USAGE_RECHECK_MS`), so an upgrade applies soon. A Mac that disconnects leaves its
 meter in storage until all of it is confirmed. If Autumn is unreachable, requests pass, usage
-waits, and the relay retries every minute. Relay deploys can lose up to 30 s of uncounted usage.
+waits, and the relay retries every minute. Relay deploys can lose up to 2 minutes of uncounted
+usage per Mac.
 
 Deleting an account deletes nothing until Autumn has deleted the customer. Before that, the
 month's usage goes to `deleted_usage` under a SHA-256 hash of the WorkOS user ID, until the
@@ -122,6 +127,11 @@ the website checks who may watch what and asks the relay over the `RelayAdmin` s
 Durable Object for 60 s. The browser presents `mdv_<space><secret>` as a subprotocol; the relay uses
 it once. So no secret is shared between the workers.
 
+A page whose tab has been hidden for 30 s closes its view and says it is paused, so the Mac stops
+streaming and the account's active time stops; it opens the view again when the tab shows. While
+the Mac is offline the page asks for a ticket again after 5 s, then twice as long each time up to a
+minute, and at once when its tab shows again (`src/lib/live-view.ts`).
+
 Share links are created and revoked on the live page and listed in the dashboard. D1 keeps them in
 `live_shares` with the token's SHA-256 hash, a label, the Mac (and device, or all of them), the
 mode and the expiry (an hour, a day or a week; at most 20 per account). Revoking deletes the row and
@@ -135,11 +145,12 @@ in flight, and each input counts as one request. Frames count as neither. Openin
 once against the key's `AGENT_LIMIT`. Viewers are refused (429) and closed (4029) when the
 account's allowance is used up. The space's alarm runs every 30 s while someone watches: it renews
 each stream on the Mac (`live_start`) and ends views whose Mac left, whose link expired or was
-revoked, or whose viewer went silent.
+revoked, or whose viewer went silent. It sends usage to Autumn only when the 2-minute flush is due.
 
-Tested in `test/live.test.ts` against the relay worker and D1. The website's pages and server
-functions (`src/routes/live.*.tsx`, `src/server/live.ts`, `src/components/live.tsx`) have no unit
-tests; check them in the browser (Local development).
+Tested in `test/live.test.ts` against the relay worker and D1, and the page's pause and retry
+timing in `test/live-view.test.ts`. The website's pages and server functions
+(`src/routes/live.*.tsx`, `src/server/live.ts`, `src/components/live.tsx`) have no unit tests;
+check them in the browser (Local development).
 
 ## Local development
 

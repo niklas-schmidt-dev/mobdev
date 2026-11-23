@@ -86,19 +86,21 @@ final class AppModel {
     var relayState: RelayState = .off
     /// Every loaded action across all devices (each device loads its newest 1000), newest first.
     private(set) var activity: [ActivityItem] = []
-    /// Small live pictures of each connected device and the average colors of its screen.
+    /// Small live pictures of each connected device and the average colors of its screen, taken
+    /// while the main window can be seen.
     private(set) var thumbnails: [String: CGImage] = [:]
     private(set) var ambient: [String: [Color]] = [:]
-    /// Your other Macs and their iPhones, from the hosted relay. Empty without Remote Access.
+    /// Your other Macs and their iPhones, from the hosted relay, read while the main window can be
+    /// seen. Empty without Remote Access.
     private(set) var otherMacs: [RemoteMac] = []
     /// Every simulator and AVD on this Mac, running or not, while simulators and Android are shown.
+    /// Listed while the main window can be seen.
     private(set) var virtualDevices: [VirtualDevice] = []
     /// Simulators and AVDs being started, shut down or deleted from the sidebar.
     private(set) var virtualBusy: Set<String> = []
     /// What went wrong with the last of them, for an alert.
     var virtualProblem: String?
     var showsNewSimulator = false
-    @ObservationIgnored private var listingVirtualDevices = false
     /// Devices watched through the relay's live view right now, with who watches.
     private(set) var liveSessions: [LiveStreams.Session] = []
     /// The setup assistant. It opens by itself until macOS has asked for camera and Bluetooth
@@ -193,7 +195,7 @@ final class AppModel {
             Task { @MainActor in
                 guard let self else { return }
                 self.relayState = self.relay.state
-                if self.relayState == .connected { await self.refreshOtherMacs() }
+                if self.relayState == .connected { await self.runChore(.otherMacs) }
             }
         }
         liveSignal.connect { [weak self] in
@@ -234,32 +236,63 @@ final class AppModel {
         if settings.relayEnabled { startRelay() }
         if settings.emulatorsEnabled { emulators.start() }
         refresh()
-        Task { [weak self] in
-            while let self {
-                await self.refreshVirtualDevices()
-                try? await Task.sleep(for: .seconds(30))
-            }
-        }
         Task.detached(priority: .utility) { TextRecognizer.warmUp() }
         // Builds agents uploaded and left unused for a day; a new upload also clears them.
         Task.detached(priority: .utility) { UploadStore.shared.removeExpired() }
-        Task { [weak self] in
-            while let self {
-                await self.samplePictures()
-                self.checkPointersByThemselves()
-                try? await Task.sleep(for: .seconds(2))
-            }
-        }
-        Task { [weak self] in
-            while let self {
-                await self.refreshOtherMacs()
-                try? await Task.sleep(for: .seconds(30))
+        runDueChores()
+    }
+
+    // MARK: Chores
+
+    /// When the thumbnails, other Macs, simulator list and pointer checks run. All but the pointer
+    /// checks only feed the main window, and wait while it cannot be seen.
+    @ObservationIgnored private var chores = ChoreSchedule()
+    @ObservationIgnored private var choreTimer: Task<Void, Never>?
+    /// Windows that report through `WindowVisibility` and can be seen now.
+    @ObservationIgnored private var visibleWindows: Set<ObjectIdentifier> = []
+
+    /// Whether a window showing the thumbnails, other Macs and simulator list can be seen: one that
+    /// is open, not minimized, not entirely covered, on this Space, and the app not hidden.
+    func setWindow(_ window: ObjectIdentifier, visible: Bool) {
+        if visible { visibleWindows.insert(window) } else { visibleWindows.remove(window) }
+        if chores.setWindowVisible(!visibleWindows.isEmpty) { runDueChores() }
+    }
+
+    /// Runs a chore out of turn, such as the simulator list after one started, and waits for it.
+    /// While it runs already, or needs the window and that cannot be seen, it runs as soon as it can.
+    private func runChore(_ chore: AppChore) async {
+        guard chores.request(chore) else { return }
+        await perform(chore)
+    }
+
+    /// Starts the chores that are due and sets the timer for the next one.
+    private func runDueChores() {
+        guard started else { return }
+        let now = ContinuousClock.now
+        for chore in chores.start(at: now) { Task { await perform(chore) } }
+        choreTimer?.cancel()
+        choreTimer = chores.nextDue(after: now).map { due in
+            Task { [weak self] in
+                try? await Task.sleep(until: due, clock: .continuous)
+                guard !Task.isCancelled else { return }
+                self?.runDueChores()
             }
         }
     }
 
+    private func perform(_ chore: AppChore) async {
+        switch chore {
+        case .pictures: await samplePictures()
+        case .pointerChecks: checkPointersByThemselves()
+        case .otherMacs: await refreshOtherMacs()
+        case .virtualDevices: await refreshVirtualDevices()
+        }
+        chores.finished(chore, at: .now)
+        runDueChores()
+    }
+
     /// Asks the relay which Macs and devices the account has, using this Mac's access token.
-    func refreshOtherMacs() async {
+    private func refreshOtherMacs() async {
         let token = settings.relayAccessToken.trimmingCharacters(in: .whitespaces)
         guard settings.relayEnabled, !token.isEmpty, let base = try? RelayClient.validatedURL(settings.relayURL) else {
             if !otherMacs.isEmpty { otherMacs = [] }
@@ -310,7 +343,7 @@ final class AppModel {
         if states != devices {
             // A simulator or emulator started or stopped, maybe outside Mobdev.
             if states.filter(\.isEmulated).map(\.id) != devices.filter(\.isEmulated).map(\.id) {
-                Task { await refreshVirtualDevices() }
+                Task { await runChore(.virtualDevices) }
             }
             devices = states
         }
@@ -415,21 +448,19 @@ final class AppModel {
         settings.emulatorsEnabled = enabled
         save()
         if enabled { emulators.start() } else { emulators.stop() }
-        Task { await refreshVirtualDevices() }
+        Task { await runChore(.virtualDevices) }
     }
 
     // MARK: Simulators and AVDs
 
-    func refreshVirtualDevices() async {
+    /// Runs as a chore, so one list at a time: reading the AVD folder can block until macOS has
+    /// asked for access to the volume it is on, and every list would otherwise hold another thread
+    /// meanwhile.
+    private func refreshVirtualDevices() async {
         guard settings.emulatorsEnabled else {
             virtualDevices = []
             return
         }
-        // One list at a time: reading the AVD folder can block until macOS has asked for access to
-        // the volume it is on, and every refresh would otherwise hold another thread meanwhile.
-        guard !listingVirtualDevices else { return }
-        listingVirtualDevices = true
-        defer { listingVirtualDevices = false }
         let list = await tools.virtualDevices.list().devices
         if list != virtualDevices { virtualDevices = list }
     }
@@ -472,7 +503,7 @@ final class AppModel {
         } catch {
             virtualProblem = String(describing: error)
         }
-        await refreshVirtualDevices()
+        await runChore(.virtualDevices)
     }
 
     /// Apps agents may not open, by name or bundle ID. Empty entries are dropped.

@@ -17,7 +17,10 @@ export interface Device {
   device_class: string;
   /** The Mac has the device's picture over USB. */
   screen: boolean;
-  /** Input reaches it: the Mac's Bluetooth keyboard and mouse for iPhones, always for simulators and Android. */
+  /**
+   * Input reaches it: Mobdev Runner or the Mac's Bluetooth keyboard and mouse for iPhones, always for
+   * simulators and Android. Named before Mobdev Runner existed; the Mac app sends it under this name.
+   */
   bluetooth: boolean;
   ready: boolean;
 }

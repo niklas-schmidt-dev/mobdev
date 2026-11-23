@@ -18,6 +18,7 @@ const sameInGerman = new Set([
   "Tests",
   "Tool",
   "Tools",
+  "Toolset",
 ]);
 
 type Entries = Record<string, unknown>;

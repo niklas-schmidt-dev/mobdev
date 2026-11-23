@@ -10,12 +10,14 @@ import {
   type ReactNode,
 } from "react";
 import { LIVE_AUTH_PREFIX, LIVE_CLOSE, LIVE_MAX_TEXT, LIVE_SUBPROTOCOL, type LiveMode } from "../../shared/live";
+import { PAUSE_HIDDEN_MS, offlineRetryDelay, watchVisibility } from "../lib/live-view";
 import type { TicketResult } from "../server/live";
 
 // A device's screen in the browser through the relay's live view (shared/live.ts): frames are drawn
 // on a canvas and acknowledged once drawn, so a slow browser gets fewer frames instead of a backlog.
 // Click taps, a long press holds, a drag swipes, the wheel scrolls, and typing goes to the device
-// while the screen has keyboard focus. View-only links send nothing.
+// while the screen has keyboard focus. View-only links send nothing. A tab hidden for half a minute
+// closes the view, so the Mac stops streaming, and opens it again when it shows (lib/live-view.ts).
 
 type Status =
   | { kind: "connecting" }
@@ -25,7 +27,11 @@ type Status =
   | { kind: "expired" }
   | { kind: "revoked" }
   | { kind: "limit" }
-  | { kind: "failed" };
+  | { kind: "failed" }
+  | { kind: "paused" };
+
+/** Statuses with a socket open or a retry on its way, which a hidden tab pauses. */
+const RUNNING: Status["kind"][] = ["connecting", "live", "offline", "failed"];
 
 interface Frame {
   seq: number;
@@ -84,13 +90,24 @@ export function LiveScreen({
 
   useEffect(() => {
     let stopped = false;
+    /** Closed while the tab is hidden; see PAUSE_HIDDEN_MS. */
+    let paused = false;
     let socket: WebSocket | null = null;
     let retryTimer: ReturnType<typeof setTimeout> | undefined;
+    /** Counts calls of connect, so one overtaken while it waited for its ticket lets go. */
+    let connects = 0;
     let failures = 0;
+    /** Answers that the Mac is offline since the view was last live, for offlineRetryDelay. */
+    let offline = 0;
     let frames = 0;
     let lastFrameAt = 0;
     let ended: string | null = null;
+    let shown: Status = { kind: "connecting" };
 
+    const show = (next: Status) => {
+      shown = next;
+      setStatus(next);
+    };
     const retry = (delay: number) => {
       if (!stopped) retryTimer = setTimeout(connect, delay);
     };
@@ -120,28 +137,33 @@ export function LiveScreen({
     }
 
     async function connect() {
-      if (stopped) return;
+      retryTimer = undefined;
+      if (stopped || paused) return;
+      const mine = ++connects;
+      const current = () => !stopped && !paused && mine === connects;
       let ticket: TicketResult;
       try {
         ticket = await getTicket();
       } catch {
+        if (!current()) return;
         failures++;
-        setStatus({ kind: "failed" });
+        show({ kind: "failed" });
         retry(Math.min(30_000, 2000 * failures));
         return;
       }
-      if (stopped) return;
+      if (!current()) return;
       if ("error" in ticket) {
         if (ticket.error === "offline") {
-          setStatus({ kind: "offline" });
-          retry(5000);
+          offline++;
+          show({ kind: "offline" });
+          retry(offlineRetryDelay(offline));
         } else if (ticket.error === "expired") {
-          setStatus({ kind: "expired" });
+          show({ kind: "expired" });
         } else if (ticket.error === "invalid") {
-          setStatus({ kind: "revoked" });
+          show({ kind: "revoked" });
         } else {
           failures++;
-          setStatus({ kind: "failed" });
+          show({ kind: "failed" });
           retry(Math.min(30_000, 2000 * failures));
         }
         return;
@@ -150,10 +172,12 @@ export function LiveScreen({
       url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
       url.searchParams.set("fps", String(FPS));
       ended = null;
-      socket = new WebSocket(url, [LIVE_SUBPROTOCOL, LIVE_AUTH_PREFIX + ticket.ticket]);
-      socketRef.current = socket;
-      socket.onmessage = (event) => {
-        if (typeof event.data !== "string" || event.data === "pong") return;
+      const ws = new WebSocket(url, [LIVE_SUBPROTOCOL, LIVE_AUTH_PREFIX + ticket.ticket]);
+      socket = ws;
+      socketRef.current = ws;
+      ws.onmessage = (event) => {
+        // A paused view's socket may still deliver what was on its way.
+        if (socket !== ws || typeof event.data !== "string" || event.data === "pong") return;
         let message: { type?: string; mode?: LiveMode; code?: string; message?: string } & Partial<Frame>;
         try {
           message = JSON.parse(event.data);
@@ -162,9 +186,10 @@ export function LiveScreen({
         }
         if (message.type === "live") {
           failures = 0;
+          offline = 0;
           lastFrameAt = Date.now();
           setMode(message.mode ?? "view");
-          setStatus({ kind: "live" });
+          show({ kind: "live" });
         } else if (message.type === "live_frame" && typeof message.jpeg === "string" && typeof message.seq === "number") {
           draw(message as Frame);
         } else if (message.type === "live_error" && message.message) {
@@ -173,37 +198,65 @@ export function LiveScreen({
           ended = message.code ?? "ended";
         }
       };
-      socket.onclose = (event) => {
-        if (socketRef.current === socket) socketRef.current = null;
+      ws.onclose = (event) => {
+        if (socket !== ws) return; // Paused, or replaced by a newer one.
+        socket = null;
+        socketRef.current = null;
         if (stopped) return;
         switch (event.code) {
           case LIVE_CLOSE.macGone:
-            setStatus({ kind: "offline" });
+            show({ kind: "offline" });
             retry(3000);
             break;
           case LIVE_CLOSE.ended:
-            setStatus({ kind: "ended", code: ended ?? "ended" });
+            show({ kind: "ended", code: ended ?? "ended" });
             break;
           case LIVE_CLOSE.expired:
-            setStatus({ kind: "expired" });
+            show({ kind: "expired" });
             break;
           case LIVE_CLOSE.revoked:
-            setStatus({ kind: "revoked" });
+            show({ kind: "revoked" });
             break;
           case LIVE_CLOSE.allowance:
-            setStatus({ kind: "limit" });
+            show({ kind: "limit" });
             break;
           default:
             // Network trouble, a relay deploy or a closed laptop lid: try again, slower each time.
             failures++;
-            setStatus({ kind: "connecting" });
+            show({ kind: "connecting" });
             retry(Math.min(30_000, 1000 * 2 ** Math.min(failures, 5)));
         }
       };
     }
 
-    setStatus({ kind: "connecting" });
+    show({ kind: "connecting" });
     void connect();
+    // A hidden tab keeps nobody watching, but the stream would run on and count as active time.
+    const stopWatching = watchVisibility(document, PAUSE_HIDDEN_MS, {
+      hidden() {
+        if (!RUNNING.includes(shown.kind)) return; // Ended, expired and the like stay as they are.
+        paused = true;
+        connects++; // A ticket on its way goes unused.
+        clearTimeout(retryTimer);
+        retryTimer = undefined;
+        const open = socket;
+        socket = null;
+        socketRef.current = null;
+        open?.close(1000, "paused");
+        show({ kind: "paused" });
+      },
+      visible() {
+        if (paused) {
+          paused = false;
+          show({ kind: "connecting" });
+          void connect();
+        } else if (retryTimer !== undefined) {
+          // Someone looks again: no need to wait out the backoff.
+          clearTimeout(retryTimer);
+          void connect();
+        }
+      },
+    });
     const ping = setInterval(() => {
       if (socket?.readyState === WebSocket.OPEN) socket.send("ping");
     }, 20_000);
@@ -214,6 +267,7 @@ export function LiveScreen({
     }, 1000);
     return () => {
       stopped = true;
+      stopWatching();
       clearTimeout(retryTimer);
       clearInterval(ping);
       clearInterval(meter);
@@ -497,6 +551,8 @@ function shortStatus(status: Status, gt: Translate, fps: number, quiet: number):
       return gt("Not connected");
     case "ended":
       return status.code === "disabled" ? gt("Live view off") : gt("Live view ended");
+    case "paused":
+      return gt("Live view paused");
   }
 }
 
@@ -516,6 +572,8 @@ function statusText(status: Status, gt: Translate): string | null {
       return gt("This account has used up its hosted relay time for this month.");
     case "failed":
       return gt("Could not connect. Trying again…");
+    case "paused":
+      return gt("Paused while this tab is in the background. It continues when you come back.");
     case "ended":
       switch (status.code) {
         case "disabled":

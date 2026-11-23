@@ -36,6 +36,7 @@ import {
   REQUEST_TIMEOUT_MS,
   TOKEN_RECHECK_MS,
   USAGE_FLUSH_MS,
+  USAGE_RECHECK_MS,
   USAGE_RETRY_MS,
   errorResponse,
   jsonError,
@@ -191,7 +192,12 @@ export class RelaySpace extends DurableObject<RelayEnv> {
   private flows = new Map<WebSocket, Flow>();
   /** Viewers already let go, so a close the relay started is not handled twice. */
   private left = new WeakSet<WebSocket>();
-  private flushScheduled = false;
+  /**
+   * When the usage flush and the live view housekeeping are next due; they share the one alarm.
+   * Null when none is scheduled, or when the object was evicted and forgot.
+   */
+  private flushAt: number | null = null;
+  private liveAt: number | null = null;
   /** How long an agent waits for the Mac's answer. Tests shorten it. */
   requestTimeoutMs = REQUEST_TIMEOUT_MS;
 
@@ -303,7 +309,7 @@ export class RelaySpace extends DurableObject<RelayEnv> {
       const busyMs = busySince === undefined ? 0 : Date.now() - busySince;
       const limit = exhausted(attachment.quota, unconfirmed(attachment.meter, busyMs));
       if (limit) {
-        await this.scheduleFlush(); // Asks Autumn again, so an upgrade takes effect.
+        await this.scheduleFlush(USAGE_RECHECK_MS); // Asks Autumn again soon, so an upgrade takes effect.
         return errorResponse(429, limit.message, { "Retry-After": String(limit.retryAfter) });
       }
       attachment.meter.requests++;
@@ -422,9 +428,13 @@ export class RelaySpace extends DurableObject<RelayEnv> {
    * used up.
    */
   async alarm(): Promise<void> {
-    this.flushScheduled = false;
+    // While someone watches, the alarm also comes every LIVE_RENEW_MS. Those turns leave the usage
+    // to its own flush, unless that is due too; when the schedule is forgotten, it flushes.
+    const due = this.flushAt === null || this.liveAt === null || this.flushAt <= Math.max(this.liveAt, Date.now());
+    this.liveAt = null;
+    if (due) this.flushAt = null;
     const nextLive = await this.liveHousekeeping();
-    const autumn = autumnFor(this.env);
+    const autumn = due ? autumnFor(this.env) : null;
     let failed = false;
     if (autumn) {
       for (const socket of this.ctx.getWebSockets()) {
@@ -449,8 +459,9 @@ export class RelaySpace extends DurableObject<RelayEnv> {
       }
     }
     if (failed) await this.scheduleFlush(USAGE_RETRY_MS);
-    else if (this.busySince.size > 0) await this.scheduleFlush(); // Macs still busy keep being counted.
-    if (nextLive !== null) await this.scheduleAlarmAt(nextLive);
+    else if (due && this.busySince.size > 0) await this.scheduleFlush(); // Macs still busy keep being counted.
+    else if (this.flushAt !== null) await this.scheduleAlarmAt(this.flushAt); // This turn used up the alarm.
+    if (nextLive !== null) await this.scheduleLive(nextLive);
   }
 
   /** Sends one connected Mac's usage. Agent requests keep running while Autumn answers. */
@@ -469,13 +480,21 @@ export class RelaySpace extends DurableObject<RelayEnv> {
       if (takeBatch(before.meter)) {
         socket.serializeAttachment(before);
         const seq = before.meter.seq;
+        const batch = before.meter.batch;
+        const tracked = (batch && batch.requests > 0 ? 1 : 0) + (batch && batch.seconds > 0 ? 1 : 0);
         const balances = await this.send(autumn, before.meter);
+        // Autumn confirmed usage without saying what is left: it already had the call, from a try
+        // whose answer got lost or whose other half failed, so the balance here is from before the
+        // batch. The account says what is left. Until it has, the batch stays and keeps counting;
+        // if the read fails, the retry sends the batch again, which Autumn ignores, and reads again.
+        const customer = balances.length < tracked ? await autumn.customer(before.accountId) : null;
         const after = socket.deserializeAttachment() as Attachment;
         if (after.meter?.seq === seq) {
           after.meter.batch = null;
           after.meter.seq++;
         }
-        for (const balance of balances) after.quota = withBalance(after.quota, balance);
+        if (customer) after.quota = hasRelayPlan(customer) ? quotaFromCustomer(customer) : null;
+        else for (const balance of balances) after.quota = withBalance(after.quota, balance);
         socket.serializeAttachment(after);
       }
       const current = socket.deserializeAttachment() as Attachment;
@@ -493,27 +512,34 @@ export class RelaySpace extends DurableObject<RelayEnv> {
     }
   }
 
-  /** Tracks a meter's batch in Autumn and returns the balances it reported. */
+  /**
+   * Tracks a meter's batch in Autumn, both features at once, and returns the balances it reported.
+   * Fails if either call failed, after both ended; the retry sends both again under the same keys,
+   * and Autumn ignores the one it already has.
+   */
   private async send(autumn: Autumn, meter: Meter): Promise<Balance[]> {
     const batch = meter.batch;
     if (!batch) return [];
-    const balances: Balance[] = [];
     const key = `${meter.id}-${meter.seq}`;
-    if (batch.requests > 0) {
-      const balance = await autumn.track(meter.accountId, FEATURES.requests, batch.requests, `${key}-requests`);
-      if (balance) balances.push(balance);
-    }
-    if (batch.seconds > 0) {
-      const balance = await autumn.track(meter.accountId, FEATURES.activeSeconds, batch.seconds, `${key}-seconds`);
-      if (balance) balances.push(balance);
+    const results = await Promise.allSettled([
+      batch.requests > 0 ? autumn.track(meter.accountId, FEATURES.requests, batch.requests, `${key}-requests`) : null,
+      batch.seconds > 0 ? autumn.track(meter.accountId, FEATURES.activeSeconds, batch.seconds, `${key}-seconds`) : null,
+    ]);
+    const balances: Balance[] = [];
+    for (const result of results) {
+      if (result.status === "rejected") throw result.reason;
+      if (result.value) balances.push(result.value);
     }
     return balances;
   }
 
+  /** Sends usage to Autumn in `delay`, or sooner if a flush is already due sooner. */
   private async scheduleFlush(delay = USAGE_FLUSH_MS): Promise<void> {
-    if (this.flushScheduled || !this.env.AUTUMN_SECRET_KEY) return;
-    this.flushScheduled = true;
-    if ((await this.ctx.storage.getAlarm()) === null) await this.ctx.storage.setAlarm(Date.now() + delay);
+    if (!this.env.AUTUMN_SECRET_KEY) return;
+    const at = Date.now() + delay;
+    if (this.flushAt !== null && this.flushAt <= at) return;
+    this.flushAt = at;
+    await this.scheduleAlarmAt(at);
   }
 
   private inFlight(socket: WebSocket): number {
@@ -728,7 +754,7 @@ export class RelaySpace extends DurableObject<RelayEnv> {
       this.busySince.set(mac, now);
       if (macAttachment.meter) await this.scheduleFlush();
     }
-    await this.scheduleAlarmAt(Math.min(now + LIVE_RENEW_MS, attachment.endsAt ?? Number.POSITIVE_INFINITY));
+    await this.scheduleLive(Math.min(now + LIVE_RENEW_MS, attachment.endsAt ?? Number.POSITIVE_INFINITY));
     const headers: HeadersInit = connect.protocol ? { "Sec-WebSocket-Protocol": LIVE_SUBPROTOCOL } : {};
     return new Response(null, { status: 101, webSocket: client, headers });
   }
@@ -948,6 +974,12 @@ export class RelaySpace extends DurableObject<RelayEnv> {
     }
     for (const [stream, mac] of streams) this.sendStart(mac, stream);
     return streams.size > 0 ? next : null;
+  }
+
+  /** Looks after live views at `at`, or sooner if that is already due sooner. */
+  private async scheduleLive(at: number): Promise<void> {
+    this.liveAt = Math.min(this.liveAt ?? at, at);
+    await this.scheduleAlarmAt(at);
   }
 
   /** Sets the alarm to `at` unless it already goes off earlier. */

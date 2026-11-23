@@ -10,6 +10,8 @@ import {
   listHosts,
   MAX_TOKENS_PER_ACCOUNT,
   recordHostOffline,
+  TOKEN_USE_INTERVAL_MS,
+  touchAccessToken,
 } from "../shared/db";
 import type { MacDevices } from "../shared/devices";
 import { clientKeyForSecret, randomHex, spaceForSecret } from "../shared/keys";
@@ -188,6 +190,20 @@ describe("hosted relay", () => {
     );
     expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
     expect(await listAccessTokens(env.DB, id)).toHaveLength(MAX_TOKENS_PER_ACCOUNT);
+  });
+
+  it("writes a token's last use at most once an hour", async () => {
+    const { id, tokenId } = await account();
+    const lastUsed = async () => (await listAccessTokens(env.DB, id))[0]?.last_used_at;
+    const start = Date.now();
+    expect(await touchAccessToken(env.DB, tokenId, start)).toBe(true);
+    // Every 30 seconds for the rest of the hour, like a Mac app listing its devices: no row changes.
+    for (let at = start + 30_000; at < start + TOKEN_USE_INTERVAL_MS; at += 30_000) {
+      expect(await touchAccessToken(env.DB, tokenId, at)).toBe(false);
+    }
+    expect(await lastUsed()).toBe(start);
+    expect(await touchAccessToken(env.DB, tokenId, start + TOKEN_USE_INTERVAL_MS)).toBe(true);
+    expect(await lastUsed()).toBe(start + TOKEN_USE_INTERVAL_MS);
   });
 
   it("disconnects Macs of a revoked token that D1 thinks are offline", async () => {

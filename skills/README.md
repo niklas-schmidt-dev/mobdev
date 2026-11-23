@@ -11,6 +11,10 @@ must be in `/Applications`):
 /plugin install mobdev@mobdev
 ```
 
+Its MCP server lists every tool, which the skills use. If you connect Mobdev yourself with fewer
+tools (`Mobdev mcp --tools core`), an agent still reaches the others by name or with the `Mobdev`
+command.
+
 For other agents:
 
 ```sh

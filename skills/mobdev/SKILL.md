@@ -150,7 +150,9 @@ A recording stops by itself after 30 minutes.
 ## From a terminal
 
 Agents without MCP, and scripts, call the same tools with the `Mobdev` command, which is
-`/Applications/Mobdev.app/Contents/MacOS/Mobdev` (`mobdev` when installed with Homebrew):
+`/Applications/Mobdev.app/Contents/MacOS/Mobdev` (`mobdev` when installed with Homebrew). It also
+runs the tools your MCP connection leaves out when it loads only some toolsets (`?tools=` or
+`--tools`; the server's instructions then name the rest):
 
 ```sh
 Mobdev tools                                     # every tool, one line each
@@ -207,6 +209,10 @@ A project's tests are `tests/*.json`, each a flow with a `name`, a `description`
 `list_tests` shows the tests with their newest results, `save_test` writes a test, `run_tests` runs
 the tests on a device and returns every result with the first failure's screen, and `test_result`
 returns the newest results again. Each takes `project`, by default the project your calls use.
+A run goes on in the background and holds the device. When `run_tests` answers "Started" (through
+a relay it answers after 75 seconds at the latest, or earlier with `wait`), the tests are still
+running: read how far they are, and later every result, with `test_result`, and do not call
+`run_tests` again to wait. `run_tests` with `stop: true` stops the run and cancels the step it is at.
 
 To add a test, drive the app with the tools above until the path works, then save the calls that
 mattered: `tap_element` and `wait_for_element` over coordinates, `${NAME}` for data such as an

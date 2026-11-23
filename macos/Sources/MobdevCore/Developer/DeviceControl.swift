@@ -197,13 +197,20 @@ public final class DeviceControl: AppBackend, @unchecked Sendable {
     let usesSimctl: Bool
     /// The console of each app launched with log capture, by bundle ID.
     private let consoles = Locked<[String: (command: RunningCommand, launch: ConsoleLaunch)]>([:])
+    /// Names a crash report's frames from the dSYMs and builds on this Mac.
+    private let symbolicator: CrashSymbolicator
+    /// The folders apps were installed from, newest first: a build made with -derivedDataPath
+    /// outside DerivedData has its binary and any dSYM there.
+    private let buildFolders: Locked<[URL]>
 
-    /// `devicectl` is found through `xcode-select` unless given.
+    /// `devicectl` is found through `xcode-select` unless given. Crash reports are symbolicated
+    /// with builds in `developerFolder` (`~/Library/Developer`: DerivedData, simulator apps).
     public init(
         udid: String, runner: CommandRunning = ProcessRunner(), devicectl: URL? = nil, reportsFolder: URL,
         simulator: Bool = false, simctl: Bool? = nil,
         localReports: URL = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Logs/DiagnosticReports")
+            .appendingPathComponent("Library/Logs/DiagnosticReports"),
+        developerFolder: URL = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Developer")
     ) {
         self.udid = udid
         self.runner = runner
@@ -212,6 +219,12 @@ public final class DeviceControl: AppBackend, @unchecked Sendable {
         usesSimctl = simulator && (simctl ?? !Self.devicectlDrivesSimulators)
         self.localReports = localReports
         executable = Locked(devicectl)
+        let simulatorID = simulator ? udid.filter { $0.isLetter || $0.isNumber || $0 == "-" } : nil
+        let builds = Locked<[URL]>([])
+        buildFolders = builds
+        symbolicator = CrashSymbolicator(runner: runner) {
+            builds.get() + CrashSymbolicator.productFolders(developer: developerFolder, simulator: simulatorID)
+        }
     }
 
     public var platform: AppPlatform { isSimulator ? .simulator : .iPhone }
@@ -281,6 +294,10 @@ public final class DeviceControl: AppBackend, @unchecked Sendable {
     }
 
     public func install(at path: URL) async throws -> InstalledApp {
+        if path.pathExtension == "app" {
+            let folder = path.deletingLastPathComponent()
+            buildFolders.withLock { $0 = Array(([folder] + $0.filter { $0 != folder }).prefix(10)) }
+        }
         if usesSimctl {
             guard let info = NSDictionary(contentsOf: path.appendingPathComponent("Info.plist")),
                 let bundleID = info["CFBundleIdentifier"] as? String
@@ -674,7 +691,7 @@ public final class DeviceControl: AppBackend, @unchecked Sendable {
         }
         if isSimulator {
             let file = localReports.appendingPathComponent(name)
-            return (CrashReport.parse((try? String(contentsOf: file, encoding: .utf8)) ?? ""), file)
+            return (await symbolicated(CrashReport.parse((try? String(contentsOf: file, encoding: .utf8)) ?? "")), file)
         }
         let folder = reportsFolder.appendingPathComponent(udid.filter { $0.isLetter || $0.isNumber || $0 == "-" })
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
@@ -684,7 +701,12 @@ public final class DeviceControl: AppBackend, @unchecked Sendable {
             ["device", "copy", "from"],
             options: ["--domain-type", "systemCrashLogs", "--source", name, "--destination", file.path])
         let text = (try? String(contentsOf: file, encoding: .utf8)) ?? ""
-        return (CrashReport.parse(text), file)
+        return (await symbolicated(CrashReport.parse(text)), file)
+    }
+
+    private func symbolicated(_ report: CrashReport?) async -> CrashReport? {
+        guard let report else { return nil }
+        return await symbolicator.symbolicate(report)
     }
 
     // MARK: devicectl

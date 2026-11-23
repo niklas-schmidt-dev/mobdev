@@ -3,10 +3,25 @@ import Foundation
 /// `Mobdev mcp`: an MCP stdio server for clients that launch servers as subprocesses. Each
 /// line is forwarded with the local token to the running app over its Unix socket, which only
 /// this user can serve, so the MCP config needs no secret and no other user can collect it.
+/// `--tools core,tests` lists only those toolsets' tools, as `/mcp?tools=core,tests` does over HTTP.
 public enum MCPStdioBridge {
-    public static func run(launchApp: @escaping @Sendable () -> Void) -> Never {
+    static let usage = "Usage: Mobdev mcp [--tools <toolsets>]  (toolsets: \(Toolset.names))"
+
+    public static func run(
+        arguments: [String] = Array(CommandLine.arguments.dropFirst(2)), launchApp: @escaping @Sendable () -> Void
+    ) -> Never {
+        let toolsets: Set<Toolset>?
+        do {
+            toolsets = try options(arguments)
+        } catch {
+            // The client shows this when the server fails to start.
+            FileHandle.standardError.write(Data("mobdev mcp: \(error)\n\(usage)\n".utf8))
+            exit(2)
+        }
         Task {
-            let bridge = Bridge(socket: MobdevPaths.socketFile, tokenFile: MobdevPaths.tokenFile, launchApp: launchApp)
+            let bridge = Bridge(
+                socket: MobdevPaths.socketFile, tokenFile: MobdevPaths.tokenFile, toolsets: toolsets,
+                launchApp: launchApp)
             do {
                 for try await line in FileHandle.standardInput.bytes.lines {
                     if let reply = await bridge.forward(line) {
@@ -21,6 +36,29 @@ public enum MCPStdioBridge {
         dispatchMain()
     }
 
+    struct UsageError: Error, CustomStringConvertible {
+        let description: String
+    }
+
+    /// The toolsets `--tools core,tests` or `--tools=core,tests` names; nil without it, for every tool.
+    static func options(_ arguments: [String]) throws -> Set<Toolset>? {
+        var toolsets: Set<Toolset>?
+        var rest = arguments[...]
+        while let argument = rest.popFirst() {
+            let list: String
+            if argument == "--tools" {
+                guard let value = rest.popFirst() else { throw UsageError(description: "--tools needs toolsets, e.g. --tools core,tests.") }
+                list = value
+            } else if argument.hasPrefix("--tools=") {
+                list = String(argument.dropFirst("--tools=".count))
+            } else {
+                throw UsageError(description: "Unknown argument \(argument).")
+            }
+            if let named = try Toolset.selection(list) { toolsets = (toolsets ?? []).union(named) }
+        }
+        return toolsets
+    }
+
     public actor Bridge {
         private let socket: URL
         private let tokenFile: URL
@@ -29,17 +67,21 @@ public enum MCPStdioBridge {
         private let timeout: TimeInterval
         /// The project of the folder the agent started this bridge in, sent with every request.
         private let project: URL?
+        /// Where requests go: `/mcp`, with the toolsets to list as `?tools=`.
+        private let path: String
         private var launched = false
 
         public init(
             socket: URL, tokenFile: URL, launchWait: TimeInterval = 10, timeout: TimeInterval = 300,
-            project: URL? = AgentProject.discover(), launchApp: @escaping @Sendable () -> Void
+            project: URL? = AgentProject.discover(), toolsets: Set<Toolset>? = nil,
+            launchApp: @escaping @Sendable () -> Void
         ) {
             self.socket = socket
             self.tokenFile = tokenFile
             self.launchWait = launchWait
             self.timeout = timeout
             self.project = project
+            self.path = toolsets.map { "/mcp?tools=\(Toolset.query($0))" } ?? "/mcp"
             self.launchApp = launchApp
         }
 
@@ -98,7 +140,7 @@ public enum MCPStdioBridge {
                 headers["Mcp-Method"] = Self.headerValue(method)
                 if let name = message?["params"]?["name"]?.stringValue { headers["Mcp-Name"] = Self.headerValue(name) }
             }
-            return try Self.parse(try await exchange(Self.request("POST", "/mcp", headers: headers, body: Data(body.utf8))))
+            return try Self.parse(try await exchange(Self.request("POST", path, headers: headers, body: Data(body.utf8))))
         }
 
         /// Blocking socket work runs off the actor.

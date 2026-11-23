@@ -391,6 +391,162 @@ public enum TestRuns {
         }
         return nil
     }
+
+    /// The runs going on in this process, each holding its device until it ends.
+    private static let active = Locked<[TestRun]>([])
+
+    /// A project's runs going on, on any device, the newest first.
+    public static func running(for project: URL) -> [TestRun] {
+        let folder = ProjectList.normalized(project)
+        return active.get().filter { $0.project == folder }.reversed()
+    }
+
+    /// The run that holds a device with `hold`, if a test run does. Else the one going on on the
+    /// device with that id: when a device is found anew, as after its cable was pulled, its tools and
+    /// their hold are new while the run started before still goes on.
+    static func running(hold: UUID?, device: String) -> TestRun? {
+        let runs = active.get()
+        if let hold, let run = runs.first(where: { $0.hold == hold }) { return run }
+        return device.isEmpty ? nil : runs.first { $0.device.id == device }
+    }
+
+    static func register(_ run: TestRun) { active.withLock { $0.append(run) } }
+
+    static func unregister(_ run: TestRun) { active.withLock { $0.removeAll { $0 === run } } }
+}
+
+/// A run of a project's tests that goes on by itself and holds its device until it ends. A suite
+/// can take longer than a caller waits and longer than the relays' 90 seconds, so `run_tests`
+/// returns while it runs, `test_result` reads how it is doing, and `cancel` stops it after the
+/// current step. Callers that stop waiting, or hang up, leave it running.
+public final class TestRun: Sendable {
+    /// The project folder, normalized.
+    public let project: URL
+    public let projectName: String
+    public let device: TestRunResult.Device
+    public let output: URL
+    /// Who started it, as the activity names callers.
+    public let source: String
+    public let started: Date
+    /// The device's hold, which the run keeps until it ends.
+    let hold: UUID
+    /// The names of the tests it runs, in order.
+    let planned: [String]
+    private let finished = Locked<[TestRunResult.Test]>([])
+    private let final = Locked<TestRunResult?>(nil)
+    private let work = Locked<Task<TestRunResult, Never>?>(nil)
+    private let stopped = Locked(false)
+
+    /// The results before the first test, which the progress fills in.
+    private let base: TestRunResult
+
+    init(project: TestProject, device: TestRunResult.Device, options: TestRunOptions, source: String, hold: UUID) {
+        self.project = ProjectList.normalized(project.folder)
+        projectName = project.name
+        self.device = device
+        output = options.output
+        self.source = source
+        self.hold = hold
+        var planned: [TestCase] = []
+        for test in options.tests.isEmpty ? project.tests : options.tests.compactMap(project.test)
+        where !planned.contains(where: { $0.slug == test.slug }) {
+            planned.append(test)
+        }
+        self.planned = planned.map(\.name)
+        var base = TestRunResult(project: project, device: device, output: options.output)
+        base.language = options.language
+        started = base.started
+        self.base = base
+    }
+
+    /// The results once it ended.
+    public var result: TestRunResult? { final.get() }
+    public var isFinished: Bool { result != nil }
+    var isStopping: Bool { stopped.get() }
+
+    /// Stops it: the step it is at is cancelled, and the tests that finished keep their results.
+    public func cancel() {
+        stopped.set(true)
+        work.get()?.cancel()
+    }
+
+    /// Waits until it ends or `timeout` passes, whichever is first; a cancelled caller stops
+    /// waiting at once. The run goes on either way. Nil while it runs.
+    public func wait(timeout: TimeInterval) async -> TestRunResult? {
+        let deadline = Date().addingTimeInterval(timeout)
+        while result == nil, Date() < deadline, !Task.isCancelled {
+            try? await Task.sleep(nanoseconds: 100_000_000)
+        }
+        return result
+    }
+
+    /// Its results, however long it takes.
+    var value: TestRunResult {
+        get async {
+            if let task = work.get() { return await task.value }
+            return await wait(timeout: .infinity) ?? base
+        }
+    }
+
+    func attach(_ task: Task<TestRunResult, Never>) {
+        work.set(task)
+        if stopped.get() { task.cancel() }
+    }
+
+    func add(_ test: TestRunResult.Test) { finished.withLock { $0.append(test) } }
+
+    /// It ended: no longer going on, and its results are what readers get.
+    func end(_ result: TestRunResult) {
+        final.set(result)
+        TestRuns.unregister(self)
+    }
+
+    /// "Tests \"App\" on iPhone 17, started by relay: 3 of 7 done (2 passed, 1 failed) after 80.2 s;
+    /// now Checkout.", then each finished test as the results show it, and the run's folder.
+    public var progressText: String {
+        let tests = finished.get()
+        let passed = tests.filter { $0.status == .passed }.count
+        let failed = tests.filter { $0.status == .failed }.count
+        let skipped = tests.filter { $0.status == .skipped }.count
+        var counts = ["\(passed) passed"]
+        if failed > 0 { counts.append("\(failed) failed") }
+        if skipped > 0 { counts.append("\(skipped) skipped") }
+        var line = "Tests \"\(projectName)\" on \(device.name), started by \(source): \(tests.count) of \(planned.count) done"
+        if !tests.isEmpty { line += " (\(counts.joined(separator: ", ")))" }
+        line += String(format: " after %.1f s", Date().timeIntervalSince(started))
+        if isStopping {
+            line += ", stopping."
+        } else if let next = next(after: tests.count) {
+            line += "; now \(next)."
+        } else {
+            line += "."
+        }
+        var lines = [line]
+        for test in tests {
+            lines.append(test.line)
+            lines += test.detailLines
+        }
+        lines.append("Run folder: \(output.path)")
+        return lines.joined(separator: "\n")
+    }
+
+    /// The results so far as `results.json` will have them, and `running`, `total`, `finished`,
+    /// `next`, `stopping` and `source`.
+    public var progressJSON: JSONValue {
+        var partial = base
+        partial.seconds = (Date().timeIntervalSince(started) * 10).rounded() / 10
+        partial.tests = finished.get()
+        guard case .object(var object) = partial.json else { return partial.json }
+        object["running"] = true
+        object["total"] = .number(Double(planned.count))
+        object["finished"] = .number(Double(partial.tests.count))
+        object["next"] = isStopping ? .null : next(after: partial.tests.count).map(JSONValue.string) ?? .null
+        object["stopping"] = .bool(isStopping)
+        object["source"] = .string(source)
+        return .object(object)
+    }
+
+    private func next(after count: Int) -> String? { count < planned.count ? planned[count] : nil }
 }
 
 // MARK: - Running
@@ -399,38 +555,92 @@ extension PhoneTools {
     /// Runs a project's tests on this device: installs its build for the device once, then plays
     /// `before_each` and each test's steps as a flow, records a video per test, keeps a screenshot
     /// of each failure, notices when the app crashed, and writes results.json and junit.xml.
-    /// Every step shows in the device's activity. Stops after the current test once cancelled.
+    /// Every step shows in the device's activity. The run is a `TestRun` that `test_result` and
+    /// `run_tests` see; cancelling the caller stops it at the step it is at.
     public func runTests(
         _ project: TestProject, options: TestRunOptions, source: String,
         progress: (@Sendable (TestRunResult.Test) -> Void)? = nil
     ) async -> TestRunResult {
+        let hold: TestHold
+        do {
+            hold = try takeTestHold(source: source)
+        } catch {
+            // Another caller's run holds the device: a run that says so instead of an empty one.
+            let result = await runTestsInScope(project, options: options, source: source, busy: "\(error)", progress: progress)
+            if TestProject.isProject(project.folder) { projects.notifyOutput(ProjectList.normalized(project.folder), .runs) }
+            return result
+        }
+        let run = startTests(project, options: options, source: source, hold: hold, progress: progress)
+        return await withTaskCancellationHandler { await run.value } onCancel: { run.cancel() }
+    }
+
+    /// The device's hold a test run keeps: the one this task already has, else a new one.
+    struct TestHold: Sendable {
+        let id: UUID
+        /// Taken for the run, which releases it when it ends.
+        let own: Bool
+    }
+
+    /// Takes the device's hold for a test run, or joins the one this task has. Throws "Busy"
+    /// while another caller's run holds it.
+    func takeTestHold(source: String) throws -> TestHold {
+        if let current = DeviceHold.current, hold.get()?.id == current { return TestHold(id: current, own: false) }
+        let mine = DeviceHold(what: "a test run", source: source, advice: DeviceHold.testRunAdvice)
+        let other = hold.withLock { held -> DeviceHold? in
+            if let held { return held }
+            held = mine
+            return nil
+        }
+        if let other { throw ToolFailure(other.busy) }
+        return TestHold(id: mine.id, own: true)
+    }
+
+    /// Starts a project's tests within `hold` and returns at once. The run goes on by itself in a
+    /// task of its own, which callers that stop waiting do not cancel; it frees the device when it
+    /// ends, however it ends, then calls `onEnd`.
+    func startTests(
+        _ project: TestProject, options: TestRunOptions, source: String, hold: TestHold,
+        progress: (@Sendable (TestRunResult.Test) -> Void)? = nil, onEnd: (@Sendable (TestRunResult) -> Void)? = nil
+    ) -> TestRun {
+        let run = TestRun(project: project, device: testDevice.device, options: options, source: source, hold: hold.id)
+        TestRuns.register(run)
         // Everything the steps save without a path lands in this project, whatever becomes active
         // meanwhile.
         let own = TestProject.isProject(project.folder) ? ProjectList.normalized(project.folder) : nil
-        let result: TestRunResult
-        do {
-            result = try await holding("a test run", source: source) {
-                await ProjectScope.$pinned.withValue(own ?? ProjectScope.pinned) {
-                    await runTestsInScope(project, options: options, source: source, progress: progress)
+        let projects = self.projects
+        run.attach(
+            Task {
+                let result = await DeviceHold.$current.withValue(hold.id) {
+                    await ProjectScope.$pinned.withValue(own ?? ProjectScope.pinned) {
+                        await self.runTestsInScope(project, options: options, source: source) { test in
+                            run.add(test)
+                            progress?(test)
+                        }
+                    }
                 }
-            }
-        } catch {
-            // Another caller's run holds the device: a run that says so instead of an empty one.
-            result = await runTestsInScope(project, options: options, source: source, progress: progress, busy: "\(error)")
-        }
-        if let own { projects.notifyOutput(own, .runs) }
-        return result
+                // The device is free before anyone reads the end, so they can act on it at once.
+                if hold.own { self.releaseHold(hold.id) }
+                run.end(result)
+                onEnd?(result)
+                if let own { projects.notifyOutput(own, .runs) }
+                return result
+            })
+        return run
+    }
+
+    /// This device as a run names it, and its kind.
+    var testDevice: (device: TestRunResult.Device, kind: DeviceKind) {
+        let device = phone as? any Device
+        let kind = device?.kind ?? (phone.status().input.isIPhone ? DeviceKind.iPhone : .simulator)
+        return (.init(id: device?.id ?? "", name: device?.name ?? "Device", kind: kind.rawValue), kind)
     }
 
     private func runTestsInScope(
         _ project: TestProject, options: TestRunOptions, source: String,
-        progress: (@Sendable (TestRunResult.Test) -> Void)?, busy: String? = nil
+        busy: String? = nil, progress: (@Sendable (TestRunResult.Test) -> Void)?
     ) async -> TestRunResult {
-        let device = phone as? any Device
-        let kind = device?.kind ?? (phone.status().input.isIPhone ? DeviceKind.iPhone : .simulator)
-        var result = TestRunResult(
-            project: project, device: .init(id: device?.id ?? "", name: device?.name ?? "Device", kind: kind.rawValue),
-            output: options.output)
+        let (device, kind) = testDevice
+        var result = TestRunResult(project: project, device: device, output: options.output)
         result.language = options.language
 
         do {
@@ -511,7 +721,9 @@ extension PhoneTools {
                 break
             }
         }
-        await restoreLanguage?()
+        // In a task of its own: a stopped run is cancelled, and a cancelled task's commands are killed,
+        // which would leave the device in the run's language.
+        if let restoreLanguage { await Task { await restoreLanguage() }.value }
         return finished(result)
     }
 

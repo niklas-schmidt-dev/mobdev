@@ -8,16 +8,24 @@ struct DeviceHold: Sendable {
     /// What holds the device, such as "a flow".
     let what: String
     let source: String
+    /// How to learn more or end it sooner, after "Wait for it to finish".
+    var advice: String? = nil
 
     @TaskLocal static var current: UUID?
 
-    var busy: String { "Busy: \(what) from \(source) is running on this device. Wait for it to finish." }
+    var busy: String {
+        "Busy: \(what) from \(source) is running on this device. Wait for it to finish" + (advice.map { "; \($0)" } ?? "") + "."
+    }
+
+    /// A test run outlives the call that started it, so "Busy" says where it stands and how it stops.
+    static let testRunAdvice = "test_result says how far it is, and run_tests with stop true stops it"
 }
 
 extension PhoneTools {
-    /// The tools that hold the device while they run, and what they are called in "Busy".
+    /// The tools that hold the device while their call runs, and what they are called in "Busy".
+    /// `run_tests` and `run_native_tests` hold it themselves, for as long as their run goes on.
     static let holdingTools: [String: String] = [
-        "run_flow": "a flow", "run_tests": "a test run", "crawl_app": "a crawl", "navigate_to": "navigate_to",
+        "run_flow": "a flow", "crawl_app": "a crawl", "navigate_to": "navigate_to",
     ]
 
     /// Runs `body` holding the device, or within the hold this task already has. Throws "Busy"

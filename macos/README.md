@@ -165,10 +165,47 @@ Clients that speak Streamable HTTP can also use `http://127.0.0.1:4686/mcp` with
 `Authorization: Bearer <token>` (copy it in the app). The server supports MCP 2026-07-28 and the
 earlier `initialize`-based versions from 2024-11-05 to 2025-11-25.
 
+### Load fewer tools
+
+Every tool's definition goes into the agent's context when it connects, about 90 KB for all of
+them. An agent can ask for toolsets instead: `core` alone is enough to see and control a device and
+takes about 25 KB. Name them with `--tools` for `Mobdev mcp`, or with `?tools=` on the HTTP URL and
+on a relay's (`https://relay.mobdev.sh/h/<mac-name>/mcp?tools=core`):
+
+```sh
+claude mcp add --scope user mobdev -- /Applications/Mobdev.app/Contents/MacOS/Mobdev mcp --tools core,tests
+```
+
+In Codex and JSON configurations that is `args = ["mcp", "--tools", "core,tests"]`, and over HTTP
+`http://127.0.0.1:4686/mcp?tools=core,tests`.
+
+The selection only shortens `tools/list`. Every tool still runs when called by name: over MCP
+where the client allows tools it was not shown, and always as `Mobdev <tool>` in a terminal (see
+[From the terminal](#from-the-terminal)). The server's instructions tell the agent which toolsets
+it left out, with their tools. Without a selection every tool is listed, as before. An unknown name
+is an error that lists the valid ones; `Mobdev mcp` then exits with it. The REST API always lists
+every tool.
+
+| Toolset | Tools |
+|---|---|
+| `core` | `list_devices`, `status`, `screenshot`, `observe`, `tap_mark`, `read_screen`, `find_text`, `ui_tree`, `tap`, `tap_text`, `tap_element`, `long_press`, `swipe`, `scroll`, `scroll_until_visible`, `pinch`, `type_text`, `press_key`, `home`, `wait_for_text`, `wait_for_element`, `wait_for_idle`, `open_app`, `install_app`, `launch_app`, `logs` |
+| `apps` | `list_apps`, `uninstall_app`, `stop_app`, `open_url`, `crash_reports`, `reload_app`, `dev_menu` |
+| `settings` | `set_location`, `set_permission`, `send_push`, `set_appearance`, `set_language`, `set_status_bar`, `biometrics`, `reset_app`, `clipboard`, `set_orientation`, `press_button`, `run_shortcut` |
+| `simulators` | `list_virtual_devices`, `boot_device`, `shutdown_device`, `create_simulator`, `delete_simulator` |
+| `recording` | `start_recording`, `stop_recording`, `save_screenshot` |
+| `tests` | `list_projects`, `create_project`, `open_project`, `list_tests`, `save_test`, `save_flow`, `run_tests`, `test_result`, `run_flow`, `run_native_tests`, `native_test_result`, `assert_screenshot`, `accessibility_audit`, `assert_with_ai`, `crawl_app`, `navigate_to`, `recent_steps` |
+| `performance` | `performance`, `measure_launch`, `record_trace`, `device_load` |
+| `network` | `start_network_capture`, `network_log`, `wait_for_request`, `stop_network_capture`, `mock_response` |
+| `secrets` | `list_secrets`, `type_secret` |
+| `appstore` | `appstore_apps`, `appstore_builds`, `appstore_testflight`, `appstore_versions`, `appstore_reviews`, `appstore_add_build_to_group`, `appstore_set_what_to_test`, `appstore_reply_to_review` |
+
 ### Tools
 
 Coordinates are pixels of the image `screenshot` returns (long edge 1280 px, origin top-left).
-Actions return a fresh screenshot over MCP unless `screenshot` is `false`. With more than one
+Actions return a fresh screenshot over MCP unless `screenshot` is `false`. Once the screen has
+changed, it is taken when the screen has then stayed the same for a quarter of a second, at most
+1.5 seconds after the action; while nothing changes, after 0.6 seconds. Where pictures are slow, as
+`screencap` is on Android without scrcpy, Mobdev waits 0.6 seconds and takes one picture. With more than one
 device, pass `device` (an id or name from `list_devices`) to pick one. Without it, Mobdev uses the
 only device, or the connected iPhone when simulators or Android devices run next to it.
 
@@ -187,7 +224,7 @@ only device, or the connected iPhone when simulators or Android devices run next
 | `swipe` | `from_x`, `from_y`, `to_x`, `to_y`, `duration` | |
 | `pinch` | `scale`, `x`, `y`, `duration` | Two fingers around a point (default the center) along the screen's longer side, e.g. to zoom a map, photo or plan: `scale` 2 spreads them to twice their distance and zooms in, 0.5 zooms out. Simulators, Android with scrcpy and iPhones and iPads with Mobdev Runner; not over Bluetooth, which has one pointer |
 | `scroll` | `direction` (`up`/`down`/`left`/`right`), `amount`, `x`, `y` | Mouse wheel over Bluetooth, a swipe elsewhere; `right` reveals content further right |
-| `type_text` | `text`, `submit` | Into the focused field, at most 1000 characters per call |
+| `type_text` | `text`, `submit` | Into the focused field, at most 1000 characters per call; through a relay, what fits in its 90 seconds (see [Limits](#limits)) |
 | `type_secret` | `name`, `submit` | Types a stored password or code without the agent seeing it (see [Secrets](#secrets)) |
 | `list_secrets` | | The names of the stored secrets, never their values |
 | `press_key` | `key`, `modifiers`, `count` | e.g. `space` + `cmd` for Spotlight; `volume_up` and `volume_down` press the buttons (iPhones, Android) |
@@ -208,14 +245,14 @@ only device, or the connected iPhone when simulators or Android devices run next
 | `accessibility_audit` | `image`, `fail_on`, `ignore` | Missing labels, small tap targets, low text contrast, duplicate and unclear labels, from the UI tree |
 | `assert_with_ai` | `question`, `expect` | Asks Apple Intelligence on the Mac a yes/no question about the screen |
 | `run_flow` | `path`, `steps`, `variables`, `video` | Replays a flow (JSON or Maestro YAML) and stops at the first failing step; `video` saves a recording (.mp4) |
-| `run_tests` | `project`, `tests`, `variables`, `video`, `language` | Runs a project's tests on this device: every result, the first failure's screen, results.json and junit.xml |
+| `run_tests` | `project`, `tests`, `variables`, `video`, `language`, `wait`, `stop` | Runs a project's tests on this device in the background (see [Tests](#tests)): every result, the first failure's screen, results.json and junit.xml; `stop` ends a run |
 | `list_projects` | | The projects Mobdev knows, which is active, and which one your calls use |
 | `create_project` | `path`, `name`, `bundle_id`, `builds` | Makes a project, such as `~/code/my-app/mobdev`, and makes it active; without `bundle_id` it takes the repository's only app, or lists them |
 | `open_project` | `project` | Makes a project active: its folder, a repository with `mobdev/`, or its name |
 | `list_tests` | `project` | A project's tests and its newest results |
 | `save_test` | `project`, `name`, `steps`, `description`, `platforms`, `file` | Writes a test into the project, creating it when needed |
 | `save_flow` | `project`, `name`, `steps`, `file` | Writes a flow into the project's `flows/` |
-| `test_result` | `project`, `run` | The newest run's results, with each failure's step, screenshot and video |
+| `test_result` | `project`, `run` | A run's progress while it goes on, else the newest run's results, with each failure's step, screenshot and video |
 | `run_native_tests` | `project`, `platform`, `only`, `workspace`, `xcode_project`, `scheme`, `test_plan`, `build`, `gradle_root`, `task`, `module`, `wait` | Runs the app's own XCTest/Swift Testing or Gradle suite on this device in the background (see [Native tests](#native-tests)) |
 | `native_test_result` | `project`, `run` | A native run's progress, else its results: every failure with message and file:line, attachments, the .xcresult |
 | `save_screenshot` | `path` | The screen as a full-resolution PNG in the project's `screenshots/`, such as `de-DE/iphone-6.9/01-home` |
@@ -228,9 +265,10 @@ only device, or the connected iPhone when simulators or Android devices run next
 | `stop_app` | `bundle_id` | |
 | `open_url` | `url` | Deep links, universal links, web pages; confirms iOS's "Open in …?" where there is a UI tree |
 | `logs` | `bundle_id`, `after`, `lines`, `contains` | Output of launched apps and how they ended |
-| `crash_reports` | `app`, `name`, `limit` | Lists reports; `name` reads one |
+| `crash_reports` | `app`, `name`, `limit` | Lists reports; `name` reads one, with file and line where the Mac has the symbols |
 | `start_network_capture` | `bundle_id` | Records which requests an app makes (see [Network](#network)) |
 | `network_log` | `bundle_id`, `contains`, `after`, `limit`, `query`, `headers` | The recorded requests: method, URL, status, bytes each way, duration and where it was seen |
+| `wait_for_request` | `url`, `method`, `status`, `after`, `timeout` | Waits until the capture records a matching request and returns it; fails after `timeout` |
 | `stop_network_capture` | `bundle_id` | Ends the capture; on Android it removes Mobdev's proxy from the device |
 | `mock_response` | `url`, `status`, `body`, `content_type`, `clear` | Android: a fixed answer for plain HTTP requests through the proxy |
 | `set_location` | `latitude`, `longitude`, `route`, `speed`, `clear` | A simulated position, or a route the device follows |
@@ -380,8 +418,15 @@ xcodebuild -scheme MyApp -destination 'generic/platform=iOS' -derivedDataPath bu
   milliseconds can be missing. `logs` returns a `cursor`; pass it as `after` to get only newer lines. When the app
   exits or crashes, `logs` says so, and `crash_reports` lists the report.
 - `crash_reports` with `name` copies the report to `~/Library/Application Support/dev.mobdev.mac/crash-reports`
-  and returns the exception, the reason and the crashed thread. Frames of your own code carry
-  addresses for `atos` when the report has no symbols.
+  and returns the exception, the reason and the crashed thread. Frames of the app's own code, and
+  any without a symbol, name the function, file and line when the Mac has the build's symbols:
+  a dSYM Spotlight finds by the image's UUID (`mdfind "com_apple_xcode_dsym_uuids == <UUID>"`,
+  which covers Xcode's archives), else a dSYM or the built binary in the folders `install_app`
+  installed from since Mobdev started, in Xcode's DerivedData or, for a simulator, its installed
+  copy of the app. A Debug build has no dSYM; its binary leads `atos` to the object files. A file
+  is used only when its UUID matches, `atos` runs once per image, and all of it takes at most
+  15 seconds; the report then names the files it used (`Symbols from …`). A frame without symbols
+  keeps its offset and load address for `atos`.
 - `install_app` reads `path` on the Mac that runs Mobdev, also when the agent connects through a
   relay. A build made elsewhere, such as in a cloud agent's container, is uploaded first and
   installed with `upload` (see [Install builds from anywhere](#install-builds-from-anywhere)).
@@ -502,6 +547,19 @@ on the device, and HTTPS is never decrypted, so each platform shows what it can:
   proxy connects to the Mac's `127.0.0.1` for it and logs the address the app used.
 - `mock_response` (Android) answers plain HTTP requests whose URL contains `url` with a fixed status
   and body, e.g. to try an error state against a dev server at `http://10.0.2.2:3000`.
+- `wait_for_request` proves that the app called its API: it waits until the capture records a
+  request whose URL contains `url`, optionally with `method` and `status`, and returns it with its
+  cursor, or fails after `timeout` (default 10 s, at most 60) like `wait_for_text`. It counts the
+  requests that finished after `after` (a cursor from `network_log` or an earlier wait), else those
+  since the last action on the device began (a tap, typing, `launch_app`…), so in a flow or test
+  `tap_element` followed by `{"wait_for_request": {"url": "api.example.com", "method": "POST",
+  "status": 201}}` passes even when the request finished before the wait started. It fails at once
+  when no capture runs, and when the filter can never match what the device shows: on iOS a path or
+  query (wait for the host); on Android a path, method or status of an `https://` URL. On Android an
+  HTTPS connection counts once it opens, and a request sent over a connection that was already open
+  shows no new one. A timeout lists requests to the same URL with another method or status, those
+  still running, and how many others finished. Maestro has no such command, so a flow with it does
+  not export to Maestro.
 - A capture lives in the running app; a flow (`run_flow`, `Mobdev flow`) can start and stop one too.
 
 ### Simulators and Android
@@ -549,7 +607,8 @@ boot_device id=Pixel_9_Pro` works from the terminal without the app too.
   text only and no clipboard. `MOBDEV_ANDROID_SCRCPY=0` keeps Mobdev on adb alone. `press_key`
   with `escape` is Back. `open_app` matches launchable package names ("Settings" opens
   `com.android.settings`). `launch_app` follows the app's logcat, `crash_reports` reads the crash
-  buffer, `install_app` takes an `.apk`; `arguments` and `environment` are ignored.
+  buffer, `install_app` takes an `.apk`; `launch_app` refuses `arguments` and
+  `environment`, which Android apps do not take; `open_url` with a deep link can select a state.
 
 ### UI tree
 
@@ -709,7 +768,8 @@ arguments. Maestro's YAML flows run too ([below](#maestro-flows)).
 
 A running flow holds its device, as a test run and `crawl_app` do: actions from other agents, the
 relay or the live view get "Busy" until it ends, so nothing taps into the middle of it. Tools that
-only look, such as `screenshot` and `ui_tree`, still work.
+only look, such as `screenshot` and `ui_tree`, still work. A flow ends with its call; a test run
+goes on in the background until it ends (see [Tests](#tests)).
 
 #### Control steps
 
@@ -910,7 +970,7 @@ subflow next to the test or relative to the project folder, so shared flows can 
 Every key of `mobdev.json` is optional. A run installs the build for the device's platform
 (`iphone`, `simulator` or `android`) once, then plays `before_each` and the test's steps. A test
 passes when every step does, so end it with a `wait_for_element` or `wait_for_text` that proves the
-result; when the launched app crashes during a test, the test fails with the crash. `${NAME}` takes
+result (`wait_for_request` for a call the app must make, with a network capture running); when the launched app crashes during a test, the test fails with the crash. `${NAME}` takes
 a variable from the file, the environment or the run; a secret's value comes from the run, the
 environment or a [stored secret](#secrets) of the same name and never appears in results. A test with `"platforms": ["android"]` is skipped on
 iOS, and the other way round.
@@ -924,6 +984,16 @@ iOS, and the other way round.
   Without `project` they use the agent's or the active project. So an agent drives the
   app with the tools above until a path works, saves the calls that mattered as a test, runs it,
   and fixes it from the failing step.
+- A suite can take longer than an agent's call or the relays' 90 seconds should wait. A run goes
+  on in the background and holds the device, so other callers get "Busy" until it ends.
+  `run_tests` waits up to `wait` seconds (by default until the end; through a relay at most 75)
+  and otherwise answers while it runs; `test_result` then says how far it is (tests done, their
+  results so far, the one running) and, once done, every result. A caller that hangs up, or a
+  relay that stops waiting, ends only the wait, not the run. `run_tests` with `stop: true` stops
+  the run on that device, whoever started it: the step it is at is cancelled, the tests that
+  finished keep their results, and the call returns what ran; **Stop**
+  in the app's **Tests** does the same for a run the app started. Calling `run_tests` for the same
+  project on the same device while it runs reports the run instead of starting a second one.
 - `Mobdev test` runs a project without the app, for scripts and CI, on booted simulators and
   Android devices:
 
@@ -1200,6 +1270,8 @@ claude mcp add --transport http mobdev-remote https://relay.mobdev.sh/h/<mac-nam
   --header "Authorization: Bearer mdc_…"
 ```
 
+`?tools=core,tests` on that URL lists fewer tools (see [Load fewer tools](#load-fewer-tools)).
+
 Relays forward requests and store nothing. Anyone with the client key can control the phone;
 **New Client Key** revokes the old one, and revoking the access token in the dashboard disconnects
 the Mac.
@@ -1298,6 +1370,13 @@ Mobdev's log (Console, subsystem `dev.mobdev.mac`), the install in the device's 
   tested on an iOS 27 simulator, not yet on an iPhone.
 - Over Bluetooth, typing supports the U.S. and German hardware layouts, including common accents.
   Emoji and other characters without a key need Mobdev Runner, which types any text.
+- Typing holds the device until the text is in. Mobdev Runner types about ten characters a second,
+  the Bluetooth keyboard takes 60 ms a key and 120 ms with Shift or Option (an accent is two keys),
+  so 1000 characters can outlast a relay, which gives up on a call after 90 seconds. Through a
+  relay, `type_text` refuses text that would take more than 75 seconds and says how many
+  characters fit: 500 through Mobdev Runner, 312 to 1000 over Bluetooth depending on the keys.
+  Simulators and Android type 1000 characters well within it, and steps of a flow or test run are
+  not limited this way.
 - Through Mobdev Runner, XCTest waits for the app to settle after each action, so on a simulator a
   tap takes one to two seconds and a swipe about as long; the mirror reacts more slowly than over
   Bluetooth. XCTest cannot press `escape` or `forwarddelete`, nor Return and Backspace with
@@ -1320,6 +1399,11 @@ Mobdev's log (Console, subsystem `dev.mobdev.mac`), the install in the device's 
   Xcode 27 on macOS 27 and with Xcode 26.6 on GitHub's macOS 26 runners, where the example flow
   runs on every change. There the simulator can fall seconds behind typed text, and its app cannot
   be read meanwhile; `tap_element` and `wait_for_element` wait up to 15 s past their timeout for it.
+- Through a relay a call has 90 seconds. `run_tests`, `run_native_tests` and `boot_device` answer
+  after 75 seconds at the latest while their work goes on. `run_flow`, `crawl_app` (keep `seconds`
+  under 80) and `navigate_to` end with their call, so a longer flow is cut off: save it as a test
+  and run that. `Mobdev mcp` likewise gives up on an answer after 5 minutes; a test run goes on,
+  and `test_result` reads it.
 - Recording does not capture the scroll wheel; drag to scroll while recording.
 - A double tap (`double`) on Android takes two `input tap` calls through adb, which can be slower
   than an app's double-tap timeout.

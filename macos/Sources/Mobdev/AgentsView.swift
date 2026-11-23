@@ -19,7 +19,7 @@ struct AgentsView: View {
             } header: {
                 Text("MCP")
             } footer: {
-                Text("These configs need no secret. Mobdev reads its token locally and starts in the background when an agent calls it.")
+                Text("These configs need no secret. Mobdev reads its token locally and starts in the background when an agent calls it. To list fewer tools, add --tools core after mcp, or ?tools=core to an MCP URL (toolsets: \(Toolset.names)).")
             }
 
             Section {

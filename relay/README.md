@@ -80,7 +80,8 @@ second), the Mac sends the list of its devices:
 ```
 
 `id` is the UDID or another stable ID and must not be empty; `screen` means the Mac has the
-picture over USB, `bluetooth` that its keyboard and mouse are connected. An empty array is valid.
+picture over USB, `bluetooth` that input reaches it (Mobdev Runner or Bluetooth on an iPhone, always on simulators
+and Android). An empty array is valid.
 The relay keeps the first 32 devices, cuts strings to 100 characters and drops unknown fields;
 it ignores the whole frame if it is larger than 16 KB or malformed (not JSON, no `devices`
 array, an entry without `id`, a field of the wrong type). It keeps the latest list per Mac in

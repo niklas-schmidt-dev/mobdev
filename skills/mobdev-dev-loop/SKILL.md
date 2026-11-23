@@ -98,12 +98,16 @@ The loop is the same; only the build differs.
    name the cause, such as `Fatal error: Unexpectedly found nil`.
 2. `crash_reports` with `app` (name or bundle ID) lists reports, newest first.
 3. `crash_reports` with `name` returns the exception, the reason and the crashed thread, and saves
-   the full `.ips` on the Mac.
-4. Frames of your own code may come without symbols, as
-   `MyApp.debug.dylib  0x0000000104a8f2c4  (MyApp.debug.dylib + 12996, loaded at 0x104a8c000)`.
-   Debug builds from Xcode 16 on keep the app's code in `MyApp.debug.dylib`; other builds in
-   `MyApp`. Resolve the address with that file from the same build (or its dSYM) and the load
-   address:
+   the full `.ips` on the Mac. When the build is on the Mac (installed with `install_app`, in
+   Xcode's DerivedData, a dSYM Spotlight finds, or a simulator's installed copy), frames of your own
+   code name the function, file and line, such as
+   `closure #1 in ContentView.body.getter (ContentView.swift:21)`. Read that line, fix, and run the
+   loop again.
+4. A frame of your own code may still come without symbols, as
+   `MyApp.debug.dylib  0x0000000104a8f2c4  (MyApp.debug.dylib + 12996, loaded at 0x104a8c000)`,
+   when Mobdev did not find that build. Debug builds from Xcode 16 on keep the app's code in
+   `MyApp.debug.dylib`; other builds in `MyApp`. Resolve the address with that file from the same
+   build (or its dSYM) and the load address:
 
    ```sh
    atos -arch arm64 -o build/device/Build/Products/Debug-iphoneos/MyApp.app/MyApp.debug.dylib \
@@ -121,6 +125,11 @@ The loop is the same; only the build differs.
   `network_log` (keep its `cursor` for `after`) and `stop_network_capture`. iOS lists method, host,
   status, size and time but hides paths; Android shows plain HTTP in full and HTTPS as host and bytes.
   Always stop it on Android, which otherwise keeps the proxy until Mobdev quits.
+- Prove a call instead of reading for it: right after the step that should send it,
+  `wait_for_request` with `url` (the host on iOS; a path only for plain HTTP on Android), and
+  `method` and `status` where they matter. It counts the requests since that step began, so a fast
+  one is not missed, fails after `timeout`, and works as a step in flows and tests while a capture
+  runs.
 - Report what you checked on the phone and what you could not, such as push notifications on an
   iPhone (a simulator takes `send_push`) or purchases that need real accounts.
 - Once a path works, offer to keep it as a test with `save_test` in the app's project (see Projects

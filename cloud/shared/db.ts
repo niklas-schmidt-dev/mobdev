@@ -126,8 +126,22 @@ export async function cacheMacsAllowed(db: D1Database, accountId: string, macs: 
   await db.prepare("UPDATE accounts SET macs_allowed = ?1 WHERE id = ?2").bind(macs, accountId).run();
 }
 
-export async function touchAccessToken(db: D1Database, tokenId: string): Promise<void> {
-  await db.prepare("UPDATE access_tokens SET last_used_at = ?1 WHERE id = ?2").bind(Date.now(), tokenId).run();
+/** How often a token's last use is written at most. The dashboard shows it to the hour. */
+export const TOKEN_USE_INTERVAL_MS = 3_600_000;
+
+/**
+ * Records that a Mac used its access token, at most once per TOKEN_USE_INTERVAL_MS: Mac apps list
+ * their devices every 30 seconds, and a write each time would be a D1 row write each. The statement
+ * decides, so a skipped write changes no row. True when it wrote.
+ */
+export async function touchAccessToken(db: D1Database, tokenId: string, now = Date.now()): Promise<boolean> {
+  const { meta } = await db
+    .prepare(
+      "UPDATE access_tokens SET last_used_at = ?1 WHERE id = ?2 AND (last_used_at IS NULL OR last_used_at <= ?1 - ?3)",
+    )
+    .bind(now, tokenId, TOKEN_USE_INTERVAL_MS)
+    .run();
+  return meta.changes > 0;
 }
 
 /**

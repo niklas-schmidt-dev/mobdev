@@ -49,7 +49,7 @@ const tools = [
   ["swipe", "from_x, from_y, to_x, to_y, duration", msg("Drag, e.g. to scroll")],
   ["pinch", "scale, x, y, duration", msg("Two fingers apart or together, e.g. to zoom a map or photo")],
   ["scroll", "direction, amount, x, y", msg("Mouse wheel")],
-  ["type_text", "text, submit", msg("Type into the focused field (up to 1000 characters per call)")],
+  ["type_text", "text, submit", msg("Type into the focused field (up to 1000 characters per call, fewer through a relay)")],
   ["type_secret", "name, submit", msg("Type a stored password or code without the agent seeing it")],
   ["list_secrets", "", msg("The names of the stored secrets, never their values")],
   ["press_key", "key, modifiers", msg("e.g. space + cmd for Spotlight")],
@@ -81,11 +81,11 @@ const tools = [
   ["list_projects", "", msg("The projects Mobdev knows, which is active, and which one your calls use")],
   ["create_project", "path, name, bundle_id, builds", msg("Make a project in the app's repository and make it active")],
   ["open_project", "project", msg("Make a project active: its folder, a repository with mobdev/, or its name")],
-  ["run_tests", "project, tests, variables, video, language", msg("Run a project's tests: every result, the first failure's screen, results.json and junit.xml")],
+  ["run_tests", "project, tests, variables, video, language, wait, stop", msg("Run a project's tests in the background: every result, the first failure's screen, results.json and junit.xml; stop ends a run")],
   ["list_tests", "project", msg("A project's tests and its newest results")],
   ["save_test", "project, name, steps, description, platforms, file", msg("Write a test into a project, creating it when needed")],
   ["save_flow", "project, name, steps, file", msg("Write a flow into the project's flows/")],
-  ["test_result", "project, run", msg("The newest run's results with each failure's step, screenshot and video")],
+  ["test_result", "project, run", msg("A run's progress, else the newest results with each failure's step, screenshot and video")],
   ["run_native_tests", "project, platform, only, scheme, test_plan, task, wait, …", msg("Run the app's own XCTest, Swift Testing or Gradle suite on the device, in the background")],
   ["native_test_result", "project, run", msg("A native run's progress, else every failure with its file, line and attachments")],
 ];
@@ -134,13 +134,14 @@ const developerTools = [
   ["stop_app", "bundle_id", msg("Stop a running app")],
   ["open_url", "url", msg("Open a deep link, universal link or web page")],
   ["logs", "bundle_id, after, lines, contains", msg("print, NSLog and os_log output, and how the app ended")],
-  ["crash_reports", "app, name, limit", msg("List crash reports, or read one: exception, reason, crashed thread")],
+  ["crash_reports", "app, name, limit", msg("List crash reports, or read one: exception, reason, crashed thread, with file and line when the Mac has the symbols")],
 ];
 
 /** Which requests an app makes. */
 const networkTools = [
   ["start_network_capture", "bundle_id", msg("Start recording an app’s requests")],
   ["network_log", "bundle_id, contains, after, query, headers", msg("The recorded requests: method, URL, status, bytes and time")],
+  ["wait_for_request", "url, method, status, after, timeout", msg("Wait until the app makes a matching request; fails after the timeout")],
   ["stop_network_capture", "bundle_id", msg("Stop recording; on Android this removes the proxy again")],
   ["mock_response", "url, status, body, content_type, clear", msg("Android: a fixed answer for plain HTTP requests, e.g. an error from your API")],
 ];
@@ -153,6 +154,20 @@ const performanceTools = [
   ["device_load", "count", msg("The whole device: busiest processes by CPU and memory, memory used, thermal state")],
   ["reload_app", "port", msg("Reload a React Native or Expo app through Metro, else through its developer menu")],
   ["dev_menu", "port", msg("Open a React Native or Expo app’s developer menu")],
+];
+
+/** What an agent can ask for with --tools or ?tools=. The names stay English. */
+const toolsets = [
+  ["core", msg("Seeing and controlling a device: devices and status, screenshots, observe, text and elements on screen, taps, typing, swipes, keys, pinch, waits, installing, launching and opening apps, logs")],
+  ["apps", msg("Listing, stopping and uninstalling apps, opening links, crash reports, React Native and Expo reload and developer menu")],
+  ["settings", msg("Device state: location, permissions, push notifications, appearance, language, status bar, biometrics, app data, clipboard, orientation, hardware buttons, Shortcuts")],
+  ["simulators", msg("Listing, booting, shutting down, creating and deleting simulators and emulators")],
+  ["recording", msg("Screen recordings and full-resolution screenshots")],
+  ["tests", msg("Projects, tests and flows, native test suites, checks, crawling an app, recent steps")],
+  ["performance", msg("CPU, memory, frames, launch time, Instruments and Perfetto traces, the device’s load")],
+  ["network", msg("An app’s requests, and mocked answers")],
+  ["secrets", msg("Typing stored passwords without seeing them")],
+  ["appstore", msg("App Store Connect")],
 ];
 
 const code = "rounded bg-mist px-1.5 py-0.5 text-[15px]";
@@ -180,6 +195,34 @@ function ToolTable({ rows }: { rows: string[][] }) {
             <tr key={name}>
               <td className="px-4 py-2.5 font-semibold text-ink">{name}</td>
               <td className="px-4 py-2.5 text-muted">{args}</td>
+              <td className="px-4 py-2.5 text-ink/85">{m(what)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function ToolsetTable() {
+  const m = useMessages();
+  return (
+    <div className="overflow-x-auto rounded-2xl bg-mist">
+      <table className="w-full text-left text-[15px]">
+        <thead className="text-muted">
+          <tr>
+            <th className="px-4 pb-2 pt-3.5 text-[13px] font-semibold">
+              <T>Toolset</T>
+            </th>
+            <th className="px-4 pb-2 pt-3.5 text-[13px] font-semibold">
+              <T>Tools for</T>
+            </th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-line/70">
+          {toolsets.map(([name, what]) => (
+            <tr key={name}>
+              <td className="px-4 py-2.5 font-semibold text-ink">{name}</td>
               <td className="px-4 py-2.5 text-ink/85">{m(what)}</td>
             </tr>
           ))}
@@ -329,6 +372,25 @@ function Docs() {
                 <p>
                   HTTP clients can use <code className={code}>http://127.0.0.1:4686/mcp</code> with the token
                   from Settings › API. The server speaks MCP 2026-07-28 and the earlier versions back to 2024-11-05.
+                </p>
+              </T>
+              <T>
+                <h3 className="pt-2 text-[21px] font-semibold tracking-tight text-ink">Fewer tools</h3>
+                <p>
+                  Every tool’s description goes into the agent’s context when it connects. To load only what a task
+                  needs, name toolsets: add <code className={code}>--tools core,tests</code> after{" "}
+                  <code className={code}>mcp</code> in the configurations above, or <code className={code}>?tools=core,tests</code> to
+                  an HTTP or relay URL. <code className={code}>core</code> alone is enough to see and control a device and
+                  is less than a third the size of the full list.
+                </p>
+              </T>
+              <Code>{"claude mcp add --scope user mobdev -- /Applications/Mobdev.app/Contents/MacOS/Mobdev mcp --tools core,tests"}</Code>
+              <ToolsetTable />
+              <T>
+                <p>
+                  The other tools still run when called by name, and always from a terminal as{" "}
+                  <code className={code}>Mobdev &lt;tool&gt;</code>. The server tells the agent which toolsets it left out
+                  and what is in them. Without a selection, every tool is listed.
                 </p>
               </T>
             </Section>
@@ -528,6 +590,16 @@ function Docs() {
                 </p>
               </T>
               <ToolTable rows={networkTools} />
+              <T>
+                <p>
+                  <code className={code}>wait_for_request</code> waits until the capture records a request whose URL
+                  contains a text, optionally with its method and status, so a flow or test proves that the app called
+                  its API. It counts the requests since the last tap, typing or launch, or since a cursor
+                  from <code className={code}>network_log</code>, and fails after a timeout. Wait for a host on iOS,
+                  which hides paths; Android shows the path, method and status of plain HTTP only.
+                </p>
+              </T>
+              <Code>{'{"tap_element": {"id": "sign-in"}}\n{"wait_for_request": {"url": "api.example.com", "method": "POST", "status": 200}}'}</Code>
             </Section>
 
             <Section id="flows">
@@ -656,7 +728,10 @@ function Docs() {
                   steps, the screenshot of a failure and the video. Agents get the same
                   through <code className={code}>list_tests</code>, <code className={code}>save_test</code>, <code className={code}>run_tests</code> and <code className={code}>test_result</code>:
                   they drive the app until a path works, save it as a test, run it and fix it from the failing
-                  step. <code className={code}>Mobdev test</code> runs a project in CI without the app and
+                  step. A run goes on in the background and holds the device, so long suites are not cut off: through a
+                  relay <code className={code}>run_tests</code> answers after 75 seconds at the latest,
+                  then <code className={code}>test_result</code> says how far it is, and <code className={code}>run_tests</code> with <code className={code}>stop</code> stops
+                  it at the step it is at. <code className={code}>Mobdev test</code> runs a project in CI without the app and
                   writes <code className={code}>results.json</code>, <code className={code}>junit.xml</code> and a video and a
                   screenshot per test.
                 </p>

@@ -70,8 +70,17 @@ extension PhoneTools {
     func runObserveTool(_ name: String, _ args: Arguments) async throws -> ToolOutput? {
         switch name {
         case "observe":
-            let (frame, size) = try currentFrame()
-            let (marks, fromTree) = try await currentMarks(in: frame)
+            // A picture only for the marks drawn on it, taken before the tree as before, or for
+            // text recognition without a tree: the tree alone needs none.
+            let picture = args.bool("image") == true ? try currentFrame() : nil
+            var frame = picture?.0
+            let size = try picture?.1 ?? screenshotSize()
+            let (marks, fromTree) = try await currentMarks {
+                if let frame { return frame }
+                let (taken, _) = try currentFrame()
+                frame = taken
+                return taken
+            }
             observed.set(ObservedMarks(marks: marks, at: Date()))
             let query = args.has("contains") ? try args.string("contains") : nil
             let shown = marks.filter { mark in
@@ -87,7 +96,7 @@ extension PhoneTools {
             if let query, shown.isEmpty { lines.append("No mark matches \"\(query)\".") }
             lines += shown.map { describe($0, size) }
             var output = ToolOutput(text: lines.joined(separator: "\n"), data: .array(shown.map { json($0, size) }))
-            if args.bool("image") == true { output.image = Self.marked(frame, marks: shown) }
+            if args.bool("image") == true, let frame { output.image = Self.marked(frame, marks: shown) }
             return output
         case "tap_mark":
             let number = Int(try args.number("mark", default: 0, range: 1...10_000))
@@ -141,10 +150,15 @@ extension PhoneTools {
 
     /// The UI tree's useful elements, else the recognized lines, in reading order and numbered.
     func currentMarks(in frame: CGImage) async throws -> (marks: [ScreenMark], fromTree: Bool) {
+        try await currentMarks { frame }
+    }
+
+    /// As `currentMarks(in:)`, taking the picture only when there is no tree to read.
+    func currentMarks(frame: () throws -> CGImage) async throws -> (marks: [ScreenMark], fromTree: Bool) {
         if let elements = try? await phone.uiTree(), let marks = Self.marks(from: elements), !marks.isEmpty {
             return (marks, true)
         }
-        let text = try await screenText(nil, in: frame)
+        let text = try await screenText(nil, in: try frame())
         let marks = text.matches.enumerated().map { index, match in
             ScreenMark(
                 number: index + 1, role: "Text", label: match.text, identifier: "", value: "", frame: match.box,
@@ -362,6 +376,100 @@ extension PhoneTools {
             }
             try await pause(0.1)
         }
+    }
+
+    /// The screen just before an action, so `settledFrame` can tell when the action's effect shows.
+    /// Nil where waiting for a still screen does not pay: no wait at all, pictures that are slow
+    /// (Android's `screencap` without scrcpy) or missing, and before one was timed.
+    func screenBeforeAction() -> FrameSignature? {
+        guard settle.fixed > 0, let cost = frameCost.get(), cost <= settle.slowFrame else { return nil }
+        let clock = Date()
+        guard let image = phone.frame() else { return nil }
+        let took = Date().timeIntervalSince(clock)
+        frameCost.set(took)
+        return took <= settle.slowFrame ? FrameSignature(image) : nil
+    }
+
+    /// The picture an action returns. `before` is the screen before the action.
+    ///
+    /// Once the screen differs from `before`, the action's effect shows: the picture is taken when
+    /// the screen then stayed the same for `settle.still`, at the latest after `settle.limit` on a
+    /// screen that keeps moving. While nothing changed, the wait is `settle.fixed` as it always
+    /// was, so an effect that takes half a second to show is not missed. Without `before`, where a
+    /// picture is slow or missing: `settle.fixed`, then one picture, as before.
+    func settledFrame(after before: FrameSignature?) async throws -> CGImage? {
+        let settle = self.settle
+        guard settle.fixed > 0 else { return phone.frame() }
+        let started = Date()
+        func look() -> (image: CGImage, fast: Bool)? {
+            let clock = Date()
+            guard let image = phone.frame() else { return nil }
+            let cost = Date().timeIntervalSince(clock)
+            frameCost.set(cost)
+            return (image, cost <= settle.slowFrame)
+        }
+        func asBefore() async throws -> CGImage? {
+            try await pause(max(settle.fixed - Date().timeIntervalSince(started), 0))
+            return look()?.image
+        }
+        // As wait_for_idle: the status bar and tiny changes such as a blinking cursor do not count.
+        let threshold = 0.002
+        guard let before else { return try await asBefore() }
+        try await pause(min(settle.first, settle.fixed))
+        guard var newest = look(), newest.fast, var reference = FrameSignature(newest.image) else {
+            return try await asBefore()
+        }
+        var changed = reference.changed(from: before) >= threshold
+        var stillSince = Date()
+        while true {
+            let elapsed = Date().timeIntervalSince(started)
+            let still = Date().timeIntervalSince(stillSince)
+            let wait: TimeInterval
+            if changed {
+                if still >= settle.still || elapsed >= settle.limit { return newest.image }
+                wait = min(settle.poll, settle.still - still, settle.limit - elapsed)
+            } else {
+                if elapsed >= settle.fixed { return newest.image }
+                wait = min(settle.poll, settle.fixed - elapsed)
+            }
+            try await pause(max(wait, 0.001))
+            guard let next = look(), next.fast, let signature = FrameSignature(next.image) else {
+                return try await asBefore()
+            }
+            newest = next
+            if signature.changed(from: reference) >= threshold {
+                reference = signature
+                stillSince = Date()
+                changed = true
+            }
+        }
+    }
+}
+
+/// How an action waits for the screenshot it returns (see `settledFrame`).
+struct Settle: Sendable {
+    /// Where pictures are slow or missing: this long, then one picture. 0 takes it at once.
+    var fixed: TimeInterval
+    /// The first look after the action.
+    var first: TimeInterval = 0.15
+    /// How long the screen has to stay the same once the action's effect has shown.
+    var still: TimeInterval = 0.25
+    /// The longest wait for a screen that keeps moving, such as a video or a spinner.
+    var limit: TimeInterval = 1.5
+    /// Between looks. A look costs about 10 ms on a simulator or an iPhone (2026-11).
+    var poll: TimeInterval = 0.08
+    /// Pictures that take longer cost more than waiting for a still screen saves: Android's
+    /// `screencap` without scrcpy takes 0.25 to 1 s.
+    var slowFrame: TimeInterval = 0.15
+
+    /// The wait for a `settleDelay`, which becomes the fixed wait (0.6 s in the app). A shorter delay
+    /// shortens the first look and the stillness with it, so a still screen never waits longer.
+    static func standard(_ settleDelay: TimeInterval) -> Settle {
+        var settle = Settle(fixed: settleDelay)
+        let scale = min(1, settleDelay / (settle.first + settle.still))
+        settle.first *= scale
+        settle.still *= scale
+        return settle
     }
 }
 

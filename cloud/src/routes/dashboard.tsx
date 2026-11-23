@@ -95,6 +95,16 @@ function useAgo(now: number): (timestamp: number | null) => string {
   };
 }
 
+/**
+ * When a token was last used. The relay writes that at most once an hour (touchAccessToken), so a
+ * token in use now can read 59 minutes old; within that hour it says no more than that.
+ */
+function useLastUsed(now: number): (timestamp: number | null) => string {
+  const gt = useGT();
+  const ago = useAgo(now);
+  return (timestamp) => (timestamp && now - timestamp < 3_600_000 ? gt("within the last hour") : ago(timestamp));
+}
+
 function Card({ title, subtitle, children }: { title: string; subtitle?: string; children: ReactNode }) {
   return (
     <section className="rounded-3xl bg-card p-7 dark:inset-ring dark:inset-ring-white/5 sm:p-8">
@@ -107,12 +117,16 @@ function Card({ title, subtitle, children }: { title: string; subtitle?: string;
 
 const destructive = "text-[15px] text-danger transition-opacity hover:opacity-70 disabled:opacity-40";
 
-/** The label is registered with msg; translate it with useMessages. */
+/**
+ * What the device has and lacks, in the Mac app's words for the same states (DeviceViews.swift).
+ * `bluetooth` means input is connected, by Mobdev Runner or Bluetooth. The label is registered with
+ * msg; translate it with useMessages.
+ */
 function deviceStatus(device: Device, macOnline: boolean): { label: string; dot: string } {
   if (!macOnline) return { label: msg("Offline"), dot: "bg-line" };
   if (device.ready) return { label: msg("Ready"), dot: "bg-[#34c759]" };
-  if (device.screen && !device.bluetooth) return { label: msg("Screen only"), dot: "bg-[#ff9500]" };
-  if (device.bluetooth && !device.screen) return { label: msg("Bluetooth only"), dot: "bg-[#ff9500]" };
+  if (device.screen && !device.bluetooth) return { label: msg("Input not ready"), dot: "bg-[#ff9500]" };
+  if (device.bluetooth && !device.screen) return { label: msg("Screen not connected"), dot: "bg-[#ff9500]" };
   return { label: msg("Not ready"), dot: "bg-[#ff9500]" };
 }
 
@@ -326,6 +340,7 @@ function PlanCard({
 function Dashboard({ data }: { data: DashboardData & { loadedAt: number } }) {
   const gt = useGT();
   const ago = useAgo(data.loadedAt);
+  const lastUsed = useLastUsed(data.loadedAt);
   const expiry = useExpiry(data.loadedAt);
   const router = useRouter();
   const { upgraded = false } = Route.useSearch();
@@ -606,7 +621,7 @@ function Dashboard({ data }: { data: DashboardData & { loadedAt: number } }) {
                       <T>
                         <p className="text-[14px] text-muted">
                           <Var>{token.prefix}</Var>… · created <Var>{ago(token.created_at)}</Var> ·
-                          used <Var>{ago(token.last_used_at)}</Var>
+                          used <Var>{lastUsed(token.last_used_at)}</Var>
                         </p>
                       </T>
                     </div>

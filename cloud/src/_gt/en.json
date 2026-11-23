@@ -10,6 +10,7 @@
   "60434ab831897ee0": "Not connected",
   "01ac8805c2826b3d": "Live view off",
   "20c3947738c91bf3": "Live view ended",
+  "e45ba125b62ba529": "Live view paused",
   "aba31effc6c4db19": "The picture stopped. The device may be locked or asleep.",
   "bcb61ae96e111a0b": "No picture yet. The device may be locked, or Mobdev on the Mac may need an update.",
   "e72c350f5dde2520": "Connected. Waiting for the screen…",
@@ -18,6 +19,7 @@
   "cf2a349a35622de5": "This link is no longer valid.",
   "2e2329af93210e8c": "This account has used up its hosted relay time for this month.",
   "48abf2e3c99c9502": "Could not connect. Trying again…",
+  "a489559877e27f98": "Paused while this tab is in the background. It continues when you come back.",
   "355188d4c155d586": "Live view is off on this Mac. Turn on “Allow live view” under Remote Access in Mobdev, then try again.",
   "1cd152a0629c24b3": "This device is not connected to the Mac right now.",
   "8dabdcb53828b40f": "The live view was stopped on the Mac.",
@@ -181,7 +183,7 @@
   "a23cdd89efb441fa": "Download for Mac",
   "53ea457ed050c196": "See what’s inside ›",
   "fb29bc8562fc5588": "Free. Updates itself. Requires macOS 26.",
-  "67e75127590f935f": "Every device in one list, and every device takes the same 88 tools.",
+  "52115713c90f0342": "Every device in one list, and every device takes the same 89 tools.",
   "6e3a1ad8ecdae7b4": "Your agent drives.",
   "38b4bfda87fcb470": "Claude Code, Codex, Cursor or any MCP client sees, taps and types on every phone. You watch it happen.",
   "d4615a60ce29cf83": "From anywhere.",
@@ -195,13 +197,14 @@
   ],
   "4ba692b01a327ce3": "Offline",
   "a553be36e93303cd": "Ready",
-  "a63e101587d02b86": "Screen only",
-  "358f8189da53a26e": "Bluetooth only",
+  "3537c3488a66c937": "Input not ready",
+  "ddf799fbfe128131": "Screen not connected",
   "30e073ab10f35725": "Not ready",
   "f96cc50da447c89d": "never",
   "30589efe06e4d26f": "just now",
   "a771b87e24b3a67e": "{minutes} min ago",
   "9f87340ecd54bff6": "{hours} h ago",
+  "6c7a3006df33da8b": "within the last hour",
   "14ce27abb7a7b2d0": "Watch {name} live",
   "fb5edc430667c4a9": "{used} of unlimited hours",
   "c9f10d90b4749579": "{used} of unlimited",
@@ -438,7 +441,7 @@
   "20e86a2df1b039bb": "Drag, e.g. to scroll",
   "ae43518be9887643": "Two fingers apart or together, e.g. to zoom a map or photo",
   "8ba5b645cde2f75d": "Mouse wheel",
-  "1c05592420abed0b": "Type into the focused field (up to 1000 characters per call)",
+  "ee75b5a9c7e60af2": "Type into the focused field (up to 1000 characters per call, fewer through a relay)",
   "55550b5f4e09f03f": "Type a stored password or code without the agent seeing it",
   "02f5c269c01a2e8f": "The names of the stored secrets, never their values",
   "a6daf7dca0f6ab24": "e.g. space + cmd for Spotlight",
@@ -470,11 +473,11 @@
   "d899872fd22e71b0": "The projects Mobdev knows, which is active, and which one your calls use",
   "aeb87e33ecc4e46f": "Make a project in the app's repository and make it active",
   "c08d59f3e5add780": "Make a project active: its folder, a repository with mobdev/, or its name",
-  "ef679b1a39cb3a6e": "Run a project's tests: every result, the first failure's screen, results.json and junit.xml",
+  "9b04f0d6ce647ec8": "Run a project's tests in the background: every result, the first failure's screen, results.json and junit.xml; stop ends a run",
   "1488e7f0ea8303a7": "A project's tests and its newest results",
   "81f56d55045933fc": "Write a test into a project, creating it when needed",
   "fab100381a47a28a": "Write a flow into the project's flows/",
-  "b95b3c240b2d36e0": "The newest run's results with each failure's step, screenshot and video",
+  "0c42706955f97a8f": "A run's progress, else the newest results with each failure's step, screenshot and video",
   "e9f1ed5e39f88b9d": "Run the app's own XCTest, Swift Testing or Gradle suite on the device, in the background",
   "fa29a76ceac1e52a": "A native run's progress, else every failure with its file, line and attachments",
   "af08407c2398abf1": "A simulated position, or a route the device follows",
@@ -507,9 +510,10 @@
   "0a8a7f9c27843869": "Stop a running app",
   "0ac466474519ce04": "Open a deep link, universal link or web page",
   "c251abb37649208f": "print, NSLog and os_log output, and how the app ended",
-  "146352292b4cf39c": "List crash reports, or read one: exception, reason, crashed thread",
+  "2a1f36ac182aa77b": "List crash reports, or read one: exception, reason, crashed thread, with file and line when the Mac has the symbols",
   "ae874cb857cc7e94": "Start recording an app’s requests",
   "4f236cf8d119eb43": "The recorded requests: method, URL, status, bytes and time",
+  "f115912930174eb6": "Wait until the app makes a matching request; fails after the timeout",
   "a27804ea948898da": "Stop recording; on Android this removes the proxy again",
   "d40f8ab5d7cf415d": "Android: a fixed answer for plain HTTP requests, e.g. an error from your API",
   "93fae913627ba671": "CPU, memory and, on Android, frames of a running app; budgets fail the call",
@@ -518,10 +522,21 @@
   "06558f2d70059737": "The whole device: busiest processes by CPU and memory, memory used, thermal state",
   "491ff4ed5c824653": "Reload a React Native or Expo app through Metro, else through its developer menu",
   "c135835721e02020": "Open a React Native or Expo app’s developer menu",
+  "562327b925294a47": "Seeing and controlling a device: devices and status, screenshots, observe, text and elements on screen, taps, typing, swipes, keys, pinch, waits, installing, launching and opening apps, logs",
+  "9c768f6822bb2911": "Listing, stopping and uninstalling apps, opening links, crash reports, React Native and Expo reload and developer menu",
+  "a9739df39a9fe271": "Device state: location, permissions, push notifications, appearance, language, status bar, biometrics, app data, clipboard, orientation, hardware buttons, Shortcuts",
+  "9a0b8c685dae1c25": "Listing, booting, shutting down, creating and deleting simulators and emulators",
+  "fdcbfe5bd6086d18": "Screen recordings and full-resolution screenshots",
+  "50c8293ce7d6d058": "Projects, tests and flows, native test suites, checks, crawling an app, recent steps",
+  "66dae1a0b9e54d53": "CPU, memory, frames, launch time, Instruments and Perfetto traces, the device’s load",
+  "6974db0e3e60cafb": "An app’s requests, and mocked answers",
+  "89886972bfeee861": "Typing stored passwords without seeing them",
   "e4911e502264cb64": "On this page",
   "b18ddcdea5477466": "Tool",
   "5772a96c29d1b1e0": "Arguments",
   "0cec07430a396fe0": "What it does",
+  "d515040544bf8073": "Toolset",
+  "f10f8dcaaa8d2625": "Tools for",
   "981c5c8f6b0996f0": [
     {
       "t": "p",
@@ -738,6 +753,59 @@
         "c": "http://127.0.0.1:4686/mcp"
       },
       " with the token from Settings › API. The server speaks MCP 2026-07-28 and the earlier versions back to 2024-11-05."
+    ]
+  },
+  "d0f3f374e58e3c70": [
+    {
+      "t": "h3",
+      "i": 1,
+      "c": "Fewer tools"
+    },
+    {
+      "t": "p",
+      "i": 2,
+      "c": [
+        "Every tool’s description goes into the agent’s context when it connects. To load only what a task needs, name toolsets: add ",
+        {
+          "t": "code",
+          "i": 3,
+          "c": "--tools core,tests"
+        },
+        " after",
+        " ",
+        {
+          "t": "code",
+          "i": 4,
+          "c": "mcp"
+        },
+        " in the configurations above, or ",
+        {
+          "t": "code",
+          "i": 5,
+          "c": "?tools=core,tests"
+        },
+        " to an HTTP or relay URL. ",
+        {
+          "t": "code",
+          "i": 6,
+          "c": "core"
+        },
+        " alone is enough to see and control a device and is less than a third the size of the full list."
+      ]
+    }
+  ],
+  "10a2f50a55496751": {
+    "t": "p",
+    "i": 1,
+    "c": [
+      "The other tools still run when called by name, and always from a terminal as",
+      " ",
+      {
+        "t": "code",
+        "i": 2,
+        "c": "Mobdev <tool>"
+      },
+      ". The server tells the agent which toolsets it left out and what is in them. Without a selection, every tool is listed."
     ]
   },
   "b1bdfeed6ba99add": {
@@ -1202,6 +1270,24 @@
       "c": "The network tools show which requests an app makes, for debugging, for checking analytics and API calls, and for privacy audits. Nothing is installed on the device, and HTTPS is never decrypted. On iOS, Mobdev relaunches the app with Apple’s network diagnostics on and reads its log: method, host, status, bytes and time, but iOS hides paths and queries. On Android, Mobdev points the device at a proxy on the Mac: plain HTTP in full, HTTPS as host, bytes and time. Stopping the capture removes the proxy again, and a dev server on the Mac stays reachable as 10.0.2.2."
     }
   ],
+  "5ab479b6c66762af": {
+    "t": "p",
+    "i": 1,
+    "c": [
+      {
+        "t": "code",
+        "i": 2,
+        "c": "wait_for_request"
+      },
+      " waits until the capture records a request whose URL contains a text, optionally with its method and status, so a flow or test proves that the app called its API. It counts the requests since the last tap, typing or launch, or since a cursor from ",
+      {
+        "t": "code",
+        "i": 3,
+        "c": "network_log"
+      },
+      ", and fails after a timeout. Wait for a host on iOS, which hides paths; Android shows the path, method and status of plain HTTP only."
+    ]
+  },
   "e4b8eecebcdef156": {
     "t": "p",
     "i": 1,
@@ -1480,7 +1566,7 @@
       " takes a variable from the project, the environment or the run. A secret’s value comes from the run, the environment or a secret stored under Settings › Secrets, and never appears in results."
     ]
   },
-  "655bd7c01b4093de": {
+  "c55404b5a65eb9d8": {
     "t": "p",
     "i": 1,
     "c": [
@@ -1514,22 +1600,46 @@
         "i": 6,
         "c": "test_result"
       },
-      ": they drive the app until a path works, save it as a test, run it and fix it from the failing step. ",
+      ": they drive the app until a path works, save it as a test, run it and fix it from the failing step. A run goes on in the background and holds the device, so long suites are not cut off: through a relay ",
       {
         "t": "code",
         "i": 7,
+        "c": "run_tests"
+      },
+      " answers after 75 seconds at the latest, then ",
+      {
+        "t": "code",
+        "i": 8,
+        "c": "test_result"
+      },
+      " says how far it is, and ",
+      {
+        "t": "code",
+        "i": 9,
+        "c": "run_tests"
+      },
+      " with ",
+      {
+        "t": "code",
+        "i": 10,
+        "c": "stop"
+      },
+      " stops it at the step it is at. ",
+      {
+        "t": "code",
+        "i": 11,
         "c": "Mobdev test"
       },
       " runs a project in CI without the app and writes ",
       {
         "t": "code",
-        "i": 8,
+        "i": 12,
         "c": "results.json"
       },
       ", ",
       {
         "t": "code",
-        "i": 9,
+        "i": 13,
         "c": "junit.xml"
       },
       " and a video and a screenshot per test."
@@ -2200,7 +2310,7 @@
       "c": "Mobdev covers everything that happens on the device, for you and for your agent. Keep building the way you do; Mobdev takes it from there."
     }
   ],
-  "1f62d4f16b3eafb8": [
+  "4fb1ef9564647037": [
     {
       "t": "h2",
       "i": 1,
@@ -2216,7 +2326,7 @@
     {
       "t": "p",
       "i": 3,
-      "c": "Plug in an iPhone, boot a simulator or start an emulator, and it shows up in Mobdev. Every device takes the same 88 tools, so one agent can test on all of them in one session."
+      "c": "Plug in an iPhone, boot a simulator or start an emulator, and it shows up in Mobdev. Every device takes the same 89 tools, so one agent can test on all of them in one session."
     }
   ],
   "0e93ea2eb9c558d4": [

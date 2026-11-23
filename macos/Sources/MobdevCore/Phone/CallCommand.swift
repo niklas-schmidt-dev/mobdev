@@ -182,9 +182,16 @@ public enum CallCommand {
                 "\(options.tool) needs the running Mobdev app: without it every call is a process of its own, which forgets the recording or the marks when it ends. Open Mobdev, or record a flow with Mobdev flow --artifacts.")
             return nil
         }
-        if ["start_network_capture", "network_log", "stop_network_capture", "mock_response"].contains(options.tool) {
+        if ["start_network_capture", "network_log", "wait_for_request", "stop_network_capture", "mock_response"]
+            .contains(options.tool)
+        {
             output(
                 "\(options.tool) needs the running Mobdev app: without it every call is a process of its own, and the capture ends with it (on Android, with its proxy). Open Mobdev, or put the capture into a flow, which runs in one process.")
+            return nil
+        }
+        if options.tool == "run_tests", options.arguments["wait"] != nil || options.arguments["stop"] != nil {
+            output(
+                "run_tests with wait or stop needs the running Mobdev app: without it the run is this process's and ends with it. Open Mobdev, or leave them out and the call waits for the end.")
             return nil
         }
         // Simulators and AVDs that are not running need no device, and the simulators Mobdev made

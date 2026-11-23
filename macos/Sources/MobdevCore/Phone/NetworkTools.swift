@@ -1,9 +1,29 @@
 import Foundation
 
+/// Where a device's request log stood at a moment: requests numbered after `cursor` finished
+/// later, and a tunnel opened at or after `time` is newer.
+struct NetworkMark: Sendable, Equatable {
+    var cursor: Int
+    /// Nil when the moment is not known: every open tunnel counts.
+    var time: Date?
+}
+
 /// The iOS apps of one device whose requests Mobdev reads from their CFNetwork log.
 final class AppNetworkCapture: Sendable {
     let log = NetworkLog()
     let readers = Locked<[String: CFNetworkLog]>([:])
+    /// Where the device's request log (this one, or Android's proxy's) stood when the last action
+    /// on the device began, for `wait_for_request` without a cursor.
+    let lastAction = Locked<NetworkMark?>(nil)
+    /// The HTTPS tunnels `wait_for_request` returned, each with the cursor it returned: a tunnel has
+    /// no number while it is open and gets a newer one when it closes, so that cursor alone would
+    /// find the same connection again.
+    let returnedTunnels = Locked<[String: Int]>([:])
+
+    /// A tunnel as `returnedTunnels` knows it, open or closed: where it goes and when it opened.
+    static func tunnelKey(_ entry: NetworkEntry) -> String {
+        "\(entry.host):\(entry.port ?? 443)@\(entry.time.timeIntervalSinceReferenceDate)"
+    }
 
     var capturing: [String] { readers.get().filter { $0.value.isRecording }.keys.sorted() }
 
@@ -49,6 +69,25 @@ extension PhoneTools {
                     ], screenshot: false),
                 readOnly: true),
             ToolDefinition(
+                name: "wait_for_request", title: "Wait for request",
+                description:
+                    "Wait until the running network capture records a request whose URL contains url, optionally with this method and status, and return it, e.g. to prove in a flow or test that the app called its API. Counts requests that finished after the cursor after (from network_log or an earlier wait_for_request), else those since the last action on the device began (a tap, typing, launch_app…), so a request a tap caused counts even when it finished before this call. Fails after timeout, at once when no capture runs, and when the filter can never match what the device reports: iOS shows hosts without paths (wait for api.example.com, not /login); Android's proxy shows plain HTTP in full but HTTPS only as a connection to the host, once per connection rather than per request.",
+                inputSchema: schema(
+                    [
+                        "url": [
+                            "type": "string",
+                            "description": "Part of the URL, e.g. api.example.com, or /api/login for plain HTTP on Android",
+                        ],
+                        "method": ["type": "string", "description": "GET, POST…"],
+                        "status": ["type": "integer", "minimum": 100, "maximum": 599],
+                        "after": [
+                            "type": "integer", "minimum": 0,
+                            "description": "Only requests after this cursor; default since the last action",
+                        ],
+                        "timeout": ["type": "number", "description": "Seconds, default 10, at most 60"],
+                    ], required: ["url"], screenshot: false),
+                readOnly: true),
+            ToolDefinition(
                 name: "stop_network_capture", title: "Stop network capture",
                 description:
                     "Stop recording requests. On Android this removes Mobdev's proxy from the device's settings. An iOS app keeps logging its requests until it is launched again. network_log still lists what was recorded.",
@@ -78,6 +117,7 @@ extension PhoneTools {
         switch name {
         case "start_network_capture": return try await startNetworkCapture(args)
         case "network_log": return try networkLog(args)
+        case "wait_for_request": return try await waitForRequest(args)
         case "stop_network_capture": return try await stopNetworkCapture(args)
         case "mock_response": return try mockResponse(args)
         default: return nil
@@ -167,17 +207,11 @@ extension PhoneTools {
         let showQuery = args.bool("query") ?? false
         let showHeaders = args.bool("headers") ?? false
 
-        let log: NetworkLog
-        let capturing: String
+        let log = requestLog
+        let capturing = captureState().text
         var notes: [String] = []
-        if let proxy = phone.networkProxy {
-            log = proxy.log
-            capturing = proxy.address.map { "Capturing through Mobdev's proxy at \($0)." } ?? "Not capturing now."
-            if app != nil { notes.append("Android's proxy sees every app's traffic and cannot tell which app made a request.") }
-        } else {
-            log = appNetwork.log
-            let apps = appNetwork.capturing
-            capturing = apps.isEmpty ? "Not capturing now." : "Capturing \(apps.joined(separator: ", ")) through CFNetwork's log."
+        if phone.networkProxy != nil, app != nil {
+            notes.append("Android's proxy sees every app's traffic and cannot tell which app made a request.")
         }
         let page = log.read(app: app, after: after, limit: limit, contains: contains)
         let open = log.openEntries.filter { entry in
@@ -220,6 +254,141 @@ extension PhoneTools {
             ])
     }
 
+    /// The log this device's requests go to: Android's proxy's, or that of the iOS apps.
+    var requestLog: NetworkLog { phone.networkProxy?.log ?? appNetwork.log }
+
+    /// Notes where the request log stands as an action begins, so `wait_for_request` counts the
+    /// requests the action caused even when they finished before it was called.
+    func markNetworkAction() {
+        appNetwork.lastAction.set(NetworkMark(cursor: requestLog.cursor, time: Date()))
+    }
+
+    /// Whether this device records requests now, and how, as network_log says it.
+    private func captureState() -> (running: Bool, text: String) {
+        if let proxy = phone.networkProxy {
+            guard let address = proxy.address else { return (false, "Not capturing now.") }
+            return (true, "Capturing through Mobdev's proxy at \(address).")
+        }
+        let apps = appNetwork.capturing
+        guard !apps.isEmpty else { return (false, "Not capturing now.") }
+        return (true, "Capturing \(apps.joined(separator: ", ")) through CFNetwork's log.")
+    }
+
+    private func waitForRequest(_ args: Arguments) async throws -> ToolOutput {
+        let filter = RequestFilter(
+            url: try args.string("url", maxLength: 2000),
+            method: args.has("method") ? try args.string("method", maxLength: 20).uppercased() : nil,
+            status: args.has("status") ? Int(try args.number("status", default: 200, range: 100...599)) : nil)
+        let timeout = try args.number("timeout", default: 10, range: 0...60)
+        let log = requestLog
+        let source: NetworkEntry.Source = phone.networkProxy == nil ? .cfnetwork : .proxy
+        let start: NetworkMark
+        // With a cursor, a tunnel an earlier wait returned with that cursor or an older one is not news.
+        var returned: [String: Int] = [:]
+        if args.has("after") {
+            // A cursor from before Mobdev restarted is newer than anything here: start over, as
+            // network_log does.
+            let after = Int(try args.number("after", default: 0, range: 0...1e15))
+            let cursor = after > log.cursor ? 0 : after
+            // A tunnel is newer when it opened after the cursor's request finished.
+            let previous = cursor == 0 ? nil : log.entries { $0.number <= cursor }.last
+            start = NetworkMark(cursor: cursor, time: previous.map { $0.time.addingTimeInterval($0.duration ?? 0) })
+            returned = appNetwork.returnedTunnels.get().filter { $0.value <= cursor }
+        } else {
+            start = appNetwork.lastAction.get() ?? NetworkMark(cursor: log.cursor, time: Date())
+        }
+        let seen: (NetworkEntry) -> Bool = { $0.scheme == nil && returned[AppNetworkCapture.tunnelKey($0)] != nil }
+        let pathsSeen = !log.entries { $0.source == source && $0.path != nil }.isEmpty
+        if let reason = filter.impossible(on: source, pathsSeen: pathsSeen) { throw ToolFailure(reason) }
+
+        let deadline = Date().addingTimeInterval(timeout)
+        while true {
+            if let (entry, open) = Self.firstRequest(matching: filter, in: log, since: start, skipping: seen) {
+                // An open tunnel has no number yet: what follows it comes after the log's end.
+                let cursor = open ? log.cursor : entry.number
+                if open {
+                    appNetwork.returnedTunnels.withLock { tunnels in
+                        // Old ones go once there are many; a wait rarely reaches back that far.
+                        if tunnels.count >= 500 { tunnels = tunnels.filter { $0.value > cursor - 1000 } }
+                        // The oldest cursor it came with: a wait without after may return it again later.
+                        let key = AppNetworkCapture.tunnelKey(entry)
+                        tunnels[key] = min(tunnels[key] ?? cursor, cursor)
+                    }
+                }
+                var text = "Found \(entry.summary(query: false, open: open))."
+                if entry.scheme == nil { text += " Android's proxy sees HTTPS only as this connection to the host." }
+                text += "\nCursor: \(cursor). Pass it as after to wait for a later request."
+                return ToolOutput(
+                    text: text,
+                    data: [
+                        "request": entry.json(query: false, headers: false), "open": .bool(open),
+                        "cursor": .number(Double(cursor)),
+                    ])
+            }
+            let capture = captureState()
+            guard capture.running else {
+                throw ToolFailure(
+                    "Network capture is not running, so no request can arrive: no request matched \(filter). Start it with start_network_capture, then do what should send the request.")
+            }
+            if Date() >= deadline {
+                throw ToolFailure(requestTimeout(filter, timeout, log: log, start: start, source: source, capture: capture.text))
+            }
+            try await pause(0.25)
+        }
+    }
+
+    /// The oldest finished request after `start` that matches, else an HTTPS tunnel through the
+    /// proxy that opened since: one is listed only once it closes, which a connection kept alive
+    /// does minutes later.
+    static func firstRequest(
+        matching filter: RequestFilter, in log: NetworkLog, since start: NetworkMark,
+        skipping seen: (NetworkEntry) -> Bool = { _ in false }
+    ) -> (entry: NetworkEntry, open: Bool)? {
+        if let entry = log.entries(where: { $0.number > start.cursor && filter.matches($0) && !seen($0) }).first {
+            return (entry, false)
+        }
+        let tunnel = log.openEntries.first { entry in
+            entry.scheme == nil && entry.time >= (start.time ?? .distantPast) && filter.matches(entry) && !seen(entry)
+        }
+        return tunnel.map { ($0, true) }
+    }
+
+    /// Says what came instead: requests to the same URL with another method or status, ones still
+    /// running, and how many others finished, so the agent can tell a typo from a missing call.
+    private func requestTimeout(
+        _ filter: RequestFilter, _ timeout: Double, log: NetworkLog, start: NetworkMark, source: NetworkEntry.Source,
+        capture: String
+    ) -> String {
+        var lines = ["Timed out after \(format(timeout)) s: no request matched \(filter). \(capture)"]
+        let sameURL = RequestFilter(url: filter.url)
+        let since = log.entries { $0.number > start.cursor }
+        let near = since.filter(sameURL.matches)
+        if !near.isEmpty {
+            lines.append("With \"\(filter.url)\" in the URL but another method or status:")
+            lines += near.suffix(5).map { $0.summary(query: false) }
+        }
+        let running = log.openEntries.filter(sameURL.matches)
+        if !running.isEmpty {
+            lines.append("Still running:")
+            lines += running.suffix(5).map { $0.summary(query: false, open: true) }
+        }
+        if source == .proxy {
+            if filter.needsDetails, filter.parts.scheme != "http" {
+                lines.append(
+                    "Android's proxy sees HTTPS only as a connection to the host, so a path, method or status matches plain HTTP requests only.")
+            }
+            if running.contains(where: { $0.scheme == nil }) {
+                lines.append("A request sent over an HTTPS connection that was already open does not show again.")
+            }
+        }
+        let others = since.count - near.count
+        lines.append(
+            others == 0
+                ? "No other request finished since cursor \(start.cursor)."
+                : "\(others) other \(others == 1 ? "request" : "requests") finished since cursor \(start.cursor); network_log with after \(start.cursor) lists them.")
+        return lines.joined(separator: "\n")
+    }
+
     private func mockResponse(_ args: Arguments) throws -> ToolOutput {
         guard let proxy = phone.networkProxy else {
             throw ToolFailure(
@@ -244,5 +413,77 @@ extension PhoneTools {
         if proxy.address == nil { text += " Start network capture with start_network_capture for it to apply." }
         if url.lowercased().hasPrefix("https") { text += " HTTPS cannot be mocked: Mobdev does not decrypt it." }
         return ToolOutput(text: text, data: ["mocks": .number(Double(proxy.mocks.count))])
+    }
+}
+
+/// What `wait_for_request` waits for: part of the URL, and optionally the method and status.
+struct RequestFilter: Sendable, Equatable, CustomStringConvertible {
+    var url: String
+    /// Upper case.
+    var method: String?
+    var status: Int?
+
+    init(url: String, method: String? = nil, status: Int? = nil) {
+        self.url = url
+        self.method = method
+        self.status = status
+    }
+
+    var description: String {
+        (["url \"\(url)\""] + [method.map { "method \($0)" }, status.map { "status \($0)" }].compactMap { $0 })
+            .joined(separator: ", ")
+    }
+
+    /// The url split where its host ends: "https://api.example.com/v1?page=2" is "https",
+    /// "api.example.com" and "/v1?page=2".
+    var parts: (scheme: String?, host: String, rest: String) {
+        var scheme: String?
+        var remainder = Substring(url)
+        if let separator = url.range(of: "://"), case let given = url[..<separator.lowerBound], !given.isEmpty,
+            given.allSatisfy(\.isLetter)
+        {
+            scheme = given.lowercased()
+            remainder = url[separator.upperBound...]
+        }
+        let end = remainder.firstIndex { $0 == "/" || $0 == "?" } ?? remainder.endIndex
+        return (scheme, String(remainder[..<end]), String(remainder[end...]))
+    }
+
+    /// The url names a path or query, not only a host.
+    var hasPath: Bool { !["", "/"].contains(parts.rest) }
+
+    /// Asks for what a connection to a host does not show: a path, a method or a status.
+    var needsDetails: Bool { hasPath || (method != nil && method != "CONNECT") || status != nil }
+
+    func matches(_ entry: NetworkEntry) -> Bool {
+        // A tunnel through Android's proxy is an HTTPS connection: its host and port, nothing more.
+        // "https://api.example.com" means it as well as "api.example.com:443" does.
+        if entry.scheme == nil {
+            guard status == nil, method == nil || method == entry.method else { return false }
+            let port = entry.port ?? 443
+            let texts = ["\(entry.host):\(port)", "https://\(entry.host)\(port == 443 ? "" : ":\(port)")/"]
+            return texts.contains { $0.localizedCaseInsensitiveContains(url) }
+        }
+        if let method, entry.method.uppercased() != method { return false }
+        if let status, entry.status != status { return false }
+        return entry.target(query: true).localizedCaseInsensitiveContains(url)
+    }
+
+    /// Why no request this source records can ever match, or nil. iOS hides paths and queries
+    /// unless one it already reported shows otherwise; Android's proxy sees HTTPS as a tunnel.
+    func impossible(on source: NetworkEntry.Source, pathsSeen: Bool) -> String? {
+        let (scheme, host, _) = parts
+        let example = host.isEmpty ? "api.example.com" : host
+        switch source {
+        case .cfnetwork:
+            guard hasPath, !pathsSeen else { return nil }
+            return
+                "iOS reports requests without their paths and queries (https://\(example)/…), so url \"\(url)\" can never match. Wait for the host instead, e.g. url \"\(example)\", with method and status if needed."
+        case .proxy:
+            guard scheme == "https", needsDetails else { return nil }
+            let tunnel = example.contains(":") ? example : example + ":443"
+            return
+                "Android's proxy sees an HTTPS request only as a connection to its host (CONNECT \(tunnel)), without path, method or status, so \(self) can never match. Wait for url \"\(example)\" alone; plain HTTP, such as a local dev server, shows in full."
+        }
     }
 }

@@ -1,7 +1,7 @@
 import { SELF, env, runDurableObjectAlarm, runInDurableObject } from "cloudflare:test";
 import { exports } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
-import { LIVE_MAX_VIEWERS_PER_MAC, normalizeLiveInput, type LiveGrant } from "../shared/live";
+import { LIVE_MAX_VIEWERS_PER_MAC, LIVE_RENEW_MS, normalizeLiveInput, type LiveGrant } from "../shared/live";
 import { FEATURES } from "../shared/plans";
 import { MAX_SHARES_PER_ACCOUNT, createShare, deleteShare, findShare, listShares } from "../shared/shares";
 import { clientKeyForSecret, spaceForSecret } from "../shared/keys";
@@ -281,6 +281,30 @@ describe("live view metering", () => {
     }
     expect(fakeAutumn.trackedFor(mac.accountId, FEATURES.activeSeconds)).toBeGreaterThanOrEqual(1);
     expect(fakeAutumn.trackedFor(mac.accountId, FEATURES.requests)).toBe(2);
+  });
+
+  it("sends usage on its own schedule, not with every renewal", async () => {
+    const mac = await liveMac();
+    const watching = await viewer("/v1/live?device=phone", mac.key);
+    const start = await mac.next("live_start");
+    watching.send({ type: "input", action: "home" });
+    await mac.next("live_input");
+    const space = env.RELAY_SPACE.getByName(mac.spaceId);
+    const alarmAt = () => runInDurableObject(space, (_instance, state) => state.storage.getAlarm());
+
+    expect(await alarmAt()).toBeLessThanOrEqual(Date.now() + LIVE_RENEW_MS);
+    expect(await runDurableObjectAlarm(space)).toBe(true); // The renewal, well before the flush is due.
+    expect(await mac.next("live_start")).toEqual(start);
+    expect(fakeAutumn.trackedFor(mac.accountId, FEATURES.requests)).toBe(0);
+    expect(await alarmAt()).toBeLessThanOrEqual(Date.now() + LIVE_RENEW_MS); // The next renewal.
+
+    watching.socket.close(1000, "bye");
+    await mac.next("live_stop");
+    // Once nobody watches, the alarm left is the flush, and it sends the input.
+    for (let attempt = 0; attempt < 5 && fakeAutumn.trackedFor(mac.accountId, FEATURES.requests) === 0; attempt++) {
+      expect(await runDurableObjectAlarm(space)).toBe(true);
+    }
+    expect(fakeAutumn.trackedFor(mac.accountId, FEATURES.requests)).toBe(1);
   });
 
   it("refuses viewers once the active time is used up", async () => {

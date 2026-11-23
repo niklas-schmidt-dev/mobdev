@@ -43,6 +43,30 @@ public struct CrashReport: Sendable, Equatable {
     public var reasons: [String]
     /// The crashed thread (or the uncaught exception's backtrace), top first.
     public var frames: [String]
+    /// Frames that symbols on the Mac may name with function, file and line (see
+    /// `CrashSymbolicator`): those without a symbol, and those of the app's own code.
+    var addresses: [Address] = []
+    /// The dSYMs and binaries that named frames.
+    public var symbolFiles: [String] = []
+
+    /// One image of the crashed process, as `atos` needs it.
+    struct Image: Sendable, Hashable {
+        var name: String
+        /// Upper case with dashes, as Spotlight stores dSYM UUIDs.
+        var uuid: String
+        var arch: String
+        /// Its load address.
+        var base: UInt64
+        /// Where it was loaded from on the device, e.g. ".../MyApp.app/MyApp.debug.dylib".
+        var path: String?
+    }
+
+    /// A frame of `frames` by its index there, at `address` in `image`.
+    struct Address: Sendable, Equatable {
+        var frame: Int
+        var image: Image
+        var address: UInt64
+    }
 
     /// Parses the JSON header line and body of an .ips file. Returns nil for anything else.
     public static func parse(_ text: String) -> CrashReport? {
@@ -96,8 +120,9 @@ public struct CrashReport: Sendable, Equatable {
             ?? faulting.flatMap { threads.indices.contains($0) ? threads[$0]["frames"]?.arrayValue : nil }
             ?? threads.first { $0["triggered"]?.boolValue == true }?["frames"]?.arrayValue
             ?? []
-        report.frames = frames.prefix(30).enumerated().map { index, frame in
-            describe(frame, index: index, images: images)
+        for (index, frame) in frames.prefix(30).enumerated() {
+            report.frames.append(describe(frame, index: index, images: images))
+            if let address = address(of: frame, index: index, images: images) { report.addresses.append(address) }
         }
         return report
     }
@@ -120,6 +145,36 @@ public struct CrashReport: Sendable, Equatable {
         return line
     }
 
+    /// The frame for `CrashSymbolicator` when its image has a UUID and the frame has no symbol or
+    /// lies in the app's bundle, where a dSYM adds the file and line. System libraries come
+    /// symbolicated and have no dSYM on the Mac.
+    private static func address(of frame: JSONValue, index: Int, images: [JSONValue]) -> Address? {
+        guard let imageIndex = frame["imageIndex"]?.doubleValue.map(Int.init), images.indices.contains(imageIndex)
+        else { return nil }
+        let image = images[imageIndex]
+        let path = image["path"]?.stringValue
+        guard frame["symbol"] == nil || path?.contains(".app/") == true,
+            let name = image["name"]?.stringValue, !name.isEmpty,
+            let uuid = image["uuid"]?.stringValue.flatMap(Self.uuid), let base = image["base"]?.doubleValue,
+            let offset = frame["imageOffset"]?.doubleValue
+        else { return nil }
+        // atos takes it as an argument: only a plain architecture name.
+        let arch = image["arch"]?.stringValue.flatMap { $0.wholeMatch(of: /[a-z0-9_]{1,16}/) == nil ? nil : $0 } ?? "arm64"
+        return Address(
+            frame: index,
+            image: Image(name: name, uuid: uuid, arch: arch, base: UInt64(max(0, base)), path: path),
+            address: UInt64(max(0, base)) &+ UInt64(max(0, offset)))
+    }
+
+    /// "9c5f6b9e-3c4f-…" as "9C5F6B9E-3C4F-…"; nil for anything that is not 32 hex digits, which
+    /// goes into a Spotlight query.
+    static func uuid(_ text: String) -> String? {
+        let hex = text.filter { $0 != "-" }.uppercased()
+        guard hex.count == 32, hex.allSatisfy(\.isHexDigit) else { return nil }
+        let characters = Array(hex)
+        return [0..<8, 8..<12, 12..<16, 16..<20, 20..<32].map { String(characters[$0]) }.joined(separator: "-")
+    }
+
     public var summary: String {
         func join(_ parts: [String], _ separator: String) -> String {
             parts.filter { !$0.isEmpty }.joined(separator: separator)
@@ -131,6 +186,7 @@ public struct CrashReport: Sendable, Equatable {
             lines.append("Crashed thread:")
             lines += frames
         }
+        lines += symbolFiles.map { "Symbols from \($0)" }
         return lines.joined(separator: "\n")
     }
 
@@ -139,6 +195,7 @@ public struct CrashReport: Sendable, Equatable {
             "app": .string(app), "bundle_id": .string(bundleID), "version": .string(version), "date": .string(date),
             "os_version": .string(osVersion), "exception": exception.map(JSONValue.string) ?? .null,
             "reasons": .array(reasons.map(JSONValue.string)), "frames": .array(frames.map(JSONValue.string)),
+            "symbol_files": .array(symbolFiles.map(JSONValue.string)),
         ]
     }
 }

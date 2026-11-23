@@ -131,9 +131,10 @@ public final class DeviceTools: ToolCalling {
             name: "list_devices", title: "List devices",
             description:
                 "The iPhones and iPads on this Mac, booted iOS simulators and Android emulators and phones, with id, name, model, system version and whether each is ready. Pass `device` to the other tools to pick one.",
-            inputSchema: ["type": "object", "properties": [:]], readOnly: true)
-        return [listDevices] + VirtualDeviceTools.definitions + ProjectTools.definitions + SecretTools.definitions
-            + AppStoreTools.definitions
+            inputSchema: ["type": "object", "properties": [:]], readOnly: true, toolset: .core)
+        return [listDevices] + VirtualDeviceTools.definitions.inToolset(.simulators)
+            + ProjectTools.definitions.inToolset(.tests) + SecretTools.definitions.inToolset(.secrets)
+            + AppStoreTools.definitions.inToolset(.appstore)
             + PhoneTools.definitions.map { definition in
                 guard case .object(var schema) = definition.inputSchema,
                     case .object(var properties)? = schema["properties"]
@@ -142,7 +143,7 @@ public final class DeviceTools: ToolCalling {
                 schema["properties"] = .object(properties)
                 return ToolDefinition(
                     name: definition.name, title: definition.title, description: definition.description,
-                    inputSchema: .object(schema), readOnly: definition.readOnly)
+                    inputSchema: .object(schema), readOnly: definition.readOnly, toolset: definition.toolset)
             }
     }()
 
