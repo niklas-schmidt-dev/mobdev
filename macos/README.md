@@ -586,7 +586,8 @@ boot_device id=Pixel_9_Pro` works from the terminal without the app too.
   text only and no clipboard. `MOBDEV_ANDROID_SCRCPY=0` keeps Mobdev on adb alone. `press_key`
   with `escape` is Back. `open_app` matches launchable package names ("Settings" opens
   `com.android.settings`). `launch_app` follows the app's logcat, `crash_reports` reads the crash
-  buffer, `install_app` takes an `.apk`; `arguments` and `environment` are ignored.
+  buffer, `install_app` takes an `.apk`; `launch_app` refuses `arguments` and
+  `environment`, which Android apps do not take; `open_url` with a deep link can select a state.
 
 ### UI tree
 

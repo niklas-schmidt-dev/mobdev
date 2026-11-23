@@ -36,7 +36,7 @@ extension PhoneTools {
             ToolDefinition(
                 name: "launch_app", title: "Launch app",
                 description:
-                    "Launch an app by bundle ID and capture what it prints: print, NSLog and os_log lines, or its logcat lines on Android. Read them with logs. A running copy is restarted first unless restart is false. Android ignores arguments and environment.",
+                    "Launch an app by bundle ID and capture what it prints: print, NSLog and os_log lines, or its logcat lines on Android. Read them with logs. A running copy is restarted first unless restart is false. Android apps take no arguments or environment, and the call fails when you pass them; open_url with a deep link can select a state instead.",
                 inputSchema: schema(
                     [
                         "bundle_id": bundleID,
