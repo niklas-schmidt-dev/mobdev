@@ -1566,7 +1566,7 @@
       " takes a variable from the project, the environment or the run. A secret’s value comes from the run, the environment or a secret stored under Settings › Secrets, and never appears in results."
     ]
   },
-  "fdc35888e808c43c": {
+  "c55404b5a65eb9d8": {
     "t": "p",
     "i": 1,
     "c": [
@@ -1624,7 +1624,7 @@
         "i": 10,
         "c": "stop"
       },
-      " ends it after the current step. ",
+      " stops it at the step it is at. ",
       {
         "t": "code",
         "i": 11,

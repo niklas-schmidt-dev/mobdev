@@ -464,7 +464,7 @@ public final class TestRun: Sendable {
     public var isFinished: Bool { result != nil }
     var isStopping: Bool { stopped.get() }
 
-    /// Stops it after the current step; the tests that finished keep their results.
+    /// Stops it: the step it is at is cancelled, and the tests that finished keep their results.
     public func cancel() {
         stopped.set(true)
         work.get()?.cancel()
@@ -515,7 +515,7 @@ public final class TestRun: Sendable {
         if !tests.isEmpty { line += " (\(counts.joined(separator: ", ")))" }
         line += String(format: " after %.1f s", Date().timeIntervalSince(started))
         if isStopping {
-            line += ", stopping after the current step."
+            line += ", stopping."
         } else if let next = next(after: tests.count) {
             line += "; now \(next)."
         } else {
@@ -556,7 +556,7 @@ extension PhoneTools {
     /// `before_each` and each test's steps as a flow, records a video per test, keeps a screenshot
     /// of each failure, notices when the app crashed, and writes results.json and junit.xml.
     /// Every step shows in the device's activity. The run is a `TestRun` that `test_result` and
-    /// `run_tests` see; cancelling the caller stops it after the current step.
+    /// `run_tests` see; cancelling the caller stops it at the step it is at.
     public func runTests(
         _ project: TestProject, options: TestRunOptions, source: String,
         progress: (@Sendable (TestRunResult.Test) -> Void)? = nil

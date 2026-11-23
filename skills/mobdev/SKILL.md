@@ -212,7 +212,7 @@ returns the newest results again. Each takes `project`, by default the project y
 A run goes on in the background and holds the device. When `run_tests` answers "Started" (through
 a relay it answers after 75 seconds at the latest, or earlier with `wait`), the tests are still
 running: read how far they are, and later every result, with `test_result`, and do not call
-`run_tests` again to wait. `run_tests` with `stop: true` ends the run after its current step.
+`run_tests` again to wait. `run_tests` with `stop: true` stops the run and cancels the step it is at.
 
 To add a test, drive the app with the tools above until the path works, then save the calls that
 mattered: `tap_element` and `wait_for_element` over coordinates, `${NAME}` for data such as an

@@ -69,7 +69,7 @@ import Testing
         #expect(tap.isError)
         #expect(
             tap.text.hasPrefix(
-                "Busy: a test run from relay is running on this device. Wait for it to finish; test_result says how far it is, and run_tests with stop true ends it after the current step."
+                "Busy: a test run from relay is running on this device. Wait for it to finish; test_result says how far it is, and run_tests with stop true stops it."
             ), "\(tap.text)")
         #expect(gate.phone.events.get().isEmpty)
 
@@ -188,7 +188,7 @@ import Testing
         #expect(missing.text.contains("No test \"nope\" in Background."))
         #expect(tools.hold.get() == nil)
 
-        // The app's Stop cancels its call, which stops its run after the current step.
+        // The app's Stop cancels its call, which stops its run at the step it is at.
         let app = Task {
             await tools.runTests(
                 project, options: TestRunOptions(output: project.folder.appendingPathComponent("app-run"), video: false), source: "app")

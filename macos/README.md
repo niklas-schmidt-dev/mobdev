@@ -989,8 +989,9 @@ iOS, and the other way round.
   `run_tests` waits up to `wait` seconds (by default until the end; through a relay at most 75)
   and otherwise answers while it runs; `test_result` then says how far it is (tests done, their
   results so far, the one running) and, once done, every result. A caller that hangs up, or a
-  relay that stops waiting, ends only the wait, not the run. `run_tests` with `stop: true` ends
-  the run on that device after its current step, whoever started it, and returns what ran; **Stop**
+  relay that stops waiting, ends only the wait, not the run. `run_tests` with `stop: true` stops
+  the run on that device, whoever started it: the step it is at is cancelled, the tests that
+  finished keep their results, and the call returns what ran; **Stop**
   in the app's **Tests** does the same for a run the app started. Calling `run_tests` for the same
   project on the same device while it runs reports the run instead of starting a second one.
 - `Mobdev test` runs a project without the app, for scripts and CI, on booted simulators and

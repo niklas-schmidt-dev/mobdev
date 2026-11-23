@@ -730,8 +730,8 @@ function Docs() {
                   they drive the app until a path works, save it as a test, run it and fix it from the failing
                   step. A run goes on in the background and holds the device, so long suites are not cut off: through a
                   relay <code className={code}>run_tests</code> answers after 75 seconds at the latest,
-                  then <code className={code}>test_result</code> says how far it is, and <code className={code}>run_tests</code> with <code className={code}>stop</code> ends
-                  it after the current step. <code className={code}>Mobdev test</code> runs a project in CI without the app and
+                  then <code className={code}>test_result</code> says how far it is, and <code className={code}>run_tests</code> with <code className={code}>stop</code> stops
+                  it at the step it is at. <code className={code}>Mobdev test</code> runs a project in CI without the app and
                   writes <code className={code}>results.json</code>, <code className={code}>junit.xml</code> and a video and a
                   screenshot per test.
                 </p>

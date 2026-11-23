@@ -6,7 +6,7 @@ extension PhoneTools {
         ToolDefinition(
             name: "run_tests", title: "Run tests",
             description:
-                "Run a project's tests on this device: the active project's (see list_projects), or the folder, mobdev.json or single test file in project. Installs the project's build for the device, plays each test, keeps a video and, for failures, a screenshot, and writes results.json and junit.xml into the project's output/runs. Returns every test's result, the first failure's screen, and where the files are. Pass tests to run some by file name. The run goes on in the background and holds the device; the call waits up to wait seconds (default until the end, through a relay at most 75) and otherwise returns while it runs, then test_result says how it is doing and, once done, every result. Hanging up only ends the wait. stop: true ends the run on this device after its current step.",
+                "Run a project's tests on this device: the active project's (see list_projects), or the folder, mobdev.json or single test file in project. Installs the project's build for the device, plays each test, keeps a video and, for failures, a screenshot, and writes results.json and junit.xml into the project's output/runs. Returns every test's result, the first failure's screen, and where the files are. Pass tests to run some by file name. The run goes on in the background and holds the device; the call waits up to wait seconds (default until the end, through a relay at most 75) and otherwise returns while it runs, then test_result says how it is doing and, once done, every result. Hanging up only ends the wait. stop: true stops the run on this device: the step it is at is cancelled, and the tests that finished keep their results.",
             inputSchema: schema(
                 [
                     "project": ProjectTools.projectArgument(orTestFile: true),
@@ -32,7 +32,7 @@ extension PhoneTools {
                     "stop": [
                         "type": "boolean",
                         "description":
-                            "Stop the test run going on on this device after its current step instead of starting one, and return what ran; other arguments but wait are ignored",
+                            "Stop the test run going on on this device instead of starting one, cancelling the step it is at, and return what ran; other arguments but wait are ignored",
                     ],
                 ], screenshot: false),
             readOnly: false)
@@ -100,13 +100,13 @@ extension PhoneTools {
         if let final { return testOutput(final) }
         return ToolOutput(
             text:
-                "Started the tests of \(project.name) on \(device.name). They go on in the background and hold the device; call test_result for how they are doing and, once done, every result. run_tests with stop true ends them after the current step.\n"
+                "Started the tests of \(project.name) on \(device.name). They go on in the background and hold the device; call test_result for how they are doing and, once done, every result. run_tests with stop true stops them.\n"
                 + run.progressText,
             data: run.progressJSON)
     }
 
-    /// Ends the test run that holds this device after its current step, and waits up to `wait`
-    /// seconds for what ran.
+    /// Stops the test run that holds this device, cancelling the step it is at, and waits up to
+    /// `wait` seconds for what ran.
     private func stopTests(on device: TestRunResult.Device, wait: TimeInterval) async -> ToolOutput {
         guard let run = TestRuns.running(hold: hold.get()?.id, device: device.id) else {
             return ToolOutput(text: "No tests are running on \(device.name).")
@@ -114,7 +114,7 @@ extension PhoneTools {
         run.cancel()
         guard let final = await run.wait(timeout: wait) else {
             return ToolOutput(
-                text: "Stopping the tests of \(run.projectName) on \(device.name) after the current step; call test_result for what ran.\n"
+                text: "Stopping the tests of \(run.projectName) on \(device.name); call test_result for what ran.\n"
                     + run.progressText,
                 data: run.progressJSON)
         }

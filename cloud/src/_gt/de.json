@@ -1568,7 +1568,7 @@
       " nimmt eine Variable aus dem Projekt, der Umgebung oder dem Lauf. Der Wert eines Secrets kommt aus dem Lauf, der Umgebung oder einem Secret, das unter „Settings › Secrets“ gespeichert ist, und taucht nie in Ergebnissen auf."
     ]
   },
-  "fdc35888e808c43c": {
+  "c55404b5a65eb9d8": {
     "t": "p",
     "i": 1,
     "c": [
@@ -1625,7 +1625,7 @@
         "i": 10,
         "c": "stop"
       },
-      " beendet ihn nach dem aktuellen Schritt. ",
+      " stoppt ihn beim aktuellen Schritt. ",
       {
         "t": "code",
         "i": 11,

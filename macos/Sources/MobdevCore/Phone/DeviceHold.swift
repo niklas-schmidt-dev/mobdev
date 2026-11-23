@@ -18,7 +18,7 @@ struct DeviceHold: Sendable {
     }
 
     /// A test run outlives the call that started it, so "Busy" says where it stands and how it stops.
-    static let testRunAdvice = "test_result says how far it is, and run_tests with stop true ends it after the current step"
+    static let testRunAdvice = "test_result says how far it is, and run_tests with stop true stops it"
 }
 
 extension PhoneTools {
