@@ -95,6 +95,16 @@ function useAgo(now: number): (timestamp: number | null) => string {
   };
 }
 
+/**
+ * When a token was last used. The relay writes that at most once an hour (touchAccessToken), so a
+ * token in use now can read 59 minutes old; within that hour it says no more than that.
+ */
+function useLastUsed(now: number): (timestamp: number | null) => string {
+  const gt = useGT();
+  const ago = useAgo(now);
+  return (timestamp) => (timestamp && now - timestamp < 3_600_000 ? gt("within the last hour") : ago(timestamp));
+}
+
 function Card({ title, subtitle, children }: { title: string; subtitle?: string; children: ReactNode }) {
   return (
     <section className="rounded-3xl bg-card p-7 dark:inset-ring dark:inset-ring-white/5 sm:p-8">
@@ -326,6 +336,7 @@ function PlanCard({
 function Dashboard({ data }: { data: DashboardData & { loadedAt: number } }) {
   const gt = useGT();
   const ago = useAgo(data.loadedAt);
+  const lastUsed = useLastUsed(data.loadedAt);
   const expiry = useExpiry(data.loadedAt);
   const router = useRouter();
   const { upgraded = false } = Route.useSearch();
@@ -606,7 +617,7 @@ function Dashboard({ data }: { data: DashboardData & { loadedAt: number } }) {
                       <T>
                         <p className="text-[14px] text-muted">
                           <Var>{token.prefix}</Var>… · created <Var>{ago(token.created_at)}</Var> ·
-                          used <Var>{ago(token.last_used_at)}</Var>
+                          used <Var>{lastUsed(token.last_used_at)}</Var>
                         </p>
                       </T>
                     </div>
