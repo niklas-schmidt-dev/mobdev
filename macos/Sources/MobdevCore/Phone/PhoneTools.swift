@@ -548,22 +548,30 @@ public final class PhoneTools: Sendable {
             let deadline = Date().addingTimeInterval(timeout)
             // Once recognition failed, the rest of the wait reads the UI tree.
             var fromTree = false
+            // The picture recognition last read without finding what it waits for. Each recognition
+            // pipes the whole frame to a helper process, about 14 MB on an iPhone Pro, and the same
+            // pixels again would give the same answer.
+            var recognized: FramePixels?
             while true {
                 let (frame, _) = try currentFrame()
-                let found: ScreenText
-                do {
-                    found = try await screenText(query, in: frame, treeOnly: fromTree)
-                } catch where fromTree && Date() < deadline {
-                    // A tree that cannot be read yet, as while an app launches, counts as not visible.
-                    try await pause(0.5)
-                    continue
-                }
-                fromTree = found.fromTree
-                let visible = !found.matches.isEmpty
-                if visible != gone {
-                    return ToolOutput(
-                        text: (gone ? "\"\(query)\" is gone." : "\"\(query)\" is visible.")
-                            + (fromTree ? " " + Self.fromTreeNote : ""))
+                let pixels = fromTree ? nil : FramePixels(frame)
+                if pixels == nil || pixels != recognized {
+                    let found: ScreenText
+                    do {
+                        found = try await screenText(query, in: frame, treeOnly: fromTree)
+                    } catch where fromTree && Date() < deadline {
+                        // A tree that cannot be read yet, as while an app launches, counts as not visible.
+                        try await pause(0.5)
+                        continue
+                    }
+                    fromTree = found.fromTree
+                    recognized = fromTree ? nil : pixels
+                    let visible = !found.matches.isEmpty
+                    if visible != gone {
+                        return ToolOutput(
+                            text: (gone ? "\"\(query)\" is gone." : "\"\(query)\" is visible.")
+                                + (fromTree ? " " + Self.fromTreeNote : ""))
+                    }
                 }
                 if Date() >= deadline {
                     throw ToolFailure(

@@ -8,6 +8,32 @@ struct ScreenText {
     var fromTree: Bool
 }
 
+/// A picture's exact bytes and layout, so `wait_for_text` does not recognize the same picture
+/// twice. Unlike `FrameSignature`, which overlooks small changes, any changed pixel counts: a few
+/// new letters are a small change. Padding at the end of rows counts too, which can only make two
+/// equal pictures look different, never the other way round.
+struct FramePixels: Equatable {
+    let width: Int
+    let height: Int
+    let bitsPerPixel: Int
+    let bytesPerRow: Int
+    let bitmapInfo: UInt32
+    let colorSpace: CGColorSpace?
+    let bytes: Data
+
+    /// Nil for a picture without readable bytes, which then is always recognized.
+    init?(_ image: CGImage) {
+        guard let data = image.dataProvider?.data else { return nil }
+        width = image.width
+        height = image.height
+        bitsPerPixel = image.bitsPerPixel
+        bytesPerRow = image.bytesPerRow
+        bitmapInfo = image.bitmapInfo.rawValue
+        colorSpace = image.colorSpace
+        bytes = data as Data
+    }
+}
+
 extension PhoneTools {
     static let fromTreeNote = "Text recognition failed, so Mobdev read the UI tree instead."
 
