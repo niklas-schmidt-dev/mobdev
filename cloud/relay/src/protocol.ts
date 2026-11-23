@@ -39,8 +39,14 @@ export const MAX_IN_FLIGHT_PER_MAC = 4;
 /** Agent requests per client key and window. Must match AGENT_LIMIT in wrangler.jsonc. */
 export const AGENT_BURST = { limit: 50, seconds: 10 } as const;
 
-/** Usage is sent to Autumn this long after a request finishes, in one batch per Mac. */
-export const USAGE_FLUSH_MS = 30_000;
+/**
+ * Usage is sent to Autumn this long after a Mac gets busy (a request, someone watching), and again
+ * every this long while it stays busy, in one batch per Mac. Each connection enforces the limits
+ * with what it counted meanwhile, so a longer wait means fewer Autumn calls, not more use per Mac.
+ */
+export const USAGE_FLUSH_MS = 120_000;
+/** When a request finds the allowance used up, the flush comes this soon, so an upgrade applies. */
+export const USAGE_RECHECK_MS = 30_000;
 /** Wait before sending usage again when Autumn could not be reached. */
 export const USAGE_RETRY_MS = 60_000;
 /** An exhausted or unknown allowance is asked for again at most this often, so upgrades apply. */

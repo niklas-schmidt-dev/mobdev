@@ -20,6 +20,11 @@ export class FakeAutumn {
   down = false;
   /** Records the next track call, then answers 503 as if the response got lost. */
   loseNextTrackResponse = false;
+  /** How long track calls take to answer, so a test can see whether they overlap. */
+  trackDelayMs = 0;
+  /** Track calls answering right now, and the most there were at once. */
+  tracksInFlight = 0;
+  mostTracksAtOnce = 0;
   /** Answers customers.delete with this status instead of deleting. */
   deleteAnswer: number | null = null;
   /** Runs before customers.get_or_create answers, e.g. to revoke a token while a Mac connects. */
@@ -97,6 +102,12 @@ export class FakeAutumn {
         return Response.json(this.customerBody(customer));
       }
       case "/v1/balances.track": {
+        if (this.trackDelayMs > 0) {
+          this.tracksInFlight++;
+          this.mostTracksAtOnce = Math.max(this.mostTracksAtOnce, this.tracksInFlight);
+          await new Promise((resolve) => setTimeout(resolve, this.trackDelayMs));
+          this.tracksInFlight--;
+        }
         const key = request.headers.get("Idempotency-Key") ?? "";
         if (key && this.idempotencyKeys.has(key)) return Response.json({ message: "duplicate" }, { status: 409 });
         if (key) this.idempotencyKeys.add(key);
