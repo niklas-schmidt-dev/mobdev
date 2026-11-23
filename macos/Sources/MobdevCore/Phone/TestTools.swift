@@ -48,11 +48,17 @@ extension PhoneTools {
         if args.bool("stop") == true { return await stopTests(on: device, wait: wait) }
 
         let (project, selected) = try ProjectTools.locate(args, projects: projects)
-        if let running = TestRuns.running(hold: hold.get()?.id), running.project == ProjectList.normalized(project.folder) {
-            return ToolOutput(
-                text: "\(project.name) already has tests running on \(device.name); call test_result for the results once they end.\n"
-                    + running.progressText,
-                data: running.progressJSON)
+        if let running = TestRuns.running(hold: hold.get()?.id, device: device.id) {
+            if running.project == ProjectList.normalized(project.folder) {
+                return ToolOutput(
+                    text: "\(project.name) already has tests running on \(device.name); call test_result for the results once they end.\n"
+                        + running.progressText,
+                    data: running.progressJSON)
+            }
+            // Its hold is not this device's any more (see TestRuns.running), so taking one would work.
+            if running.hold != hold.get()?.id {
+                throw ToolFailure(DeviceHold(what: "a test run", source: running.source, advice: DeviceHold.testRunAdvice).busy)
+            }
         }
         var tests = try args.stringArray("tests")
         if tests.isEmpty { tests = selected }
@@ -99,7 +105,7 @@ extension PhoneTools {
     /// Ends the test run that holds this device after its current step, and waits up to `wait`
     /// seconds for what ran.
     private func stopTests(on device: TestRunResult.Device, wait: TimeInterval) async -> ToolOutput {
-        guard let run = TestRuns.running(hold: hold.get()?.id) else {
+        guard let run = TestRuns.running(hold: hold.get()?.id, device: device.id) else {
             return ToolOutput(text: "No tests are running on \(device.name).")
         }
         run.cancel()

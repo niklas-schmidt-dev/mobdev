@@ -189,6 +189,11 @@ public enum CallCommand {
                 "\(options.tool) needs the running Mobdev app: without it every call is a process of its own, and the capture ends with it (on Android, with its proxy). Open Mobdev, or put the capture into a flow, which runs in one process.")
             return nil
         }
+        if options.tool == "run_tests", options.arguments["wait"] != nil || options.arguments["stop"] != nil {
+            output(
+                "run_tests with wait or stop needs the running Mobdev app: without it the run is this process's and ends with it. Open Mobdev, or leave them out and the call waits for the end.")
+            return nil
+        }
         // Simulators and AVDs that are not running need no device, and the simulators Mobdev made
         // are remembered in Mobdev's folder, not this process's temporary one.
         if VirtualDeviceTools.isTool(options.tool) {

@@ -401,10 +401,13 @@ public enum TestRuns {
         return active.get().filter { $0.project == folder }.reversed()
     }
 
-    /// The run that holds a device with `hold`, if a test run does.
-    static func running(hold: UUID?) -> TestRun? {
-        guard let hold else { return nil }
-        return active.get().first { $0.hold == hold }
+    /// The run that holds a device with `hold`, if a test run does. Else the one going on on the
+    /// device with that id: when a device is found anew, as after its cable was pulled, its tools and
+    /// their hold are new while the run started before still goes on.
+    static func running(hold: UUID?, device: String) -> TestRun? {
+        let runs = active.get()
+        if let hold, let run = runs.first(where: { $0.hold == hold }) { return run }
+        return device.isEmpty ? nil : runs.first { $0.device.id == device }
     }
 
     static func register(_ run: TestRun) { active.withLock { $0.append(run) } }
