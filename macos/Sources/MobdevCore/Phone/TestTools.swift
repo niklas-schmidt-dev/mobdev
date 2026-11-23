@@ -6,7 +6,7 @@ extension PhoneTools {
         ToolDefinition(
             name: "run_tests", title: "Run tests",
             description:
-                "Run a project's tests on this device: the active project's (see list_projects), or the folder, mobdev.json or single test file in project. Installs the project's build for the device, plays each test, keeps a video and, for failures, a screenshot, and writes results.json and junit.xml into the project's output/runs. Returns every test's result, the first failure's screen, and where the files are. Pass tests to run some by file name.",
+                "Run a project's tests on this device: the active project's (see list_projects), or the folder, mobdev.json or single test file in project. Installs the project's build for the device, plays each test, keeps a video and, for failures, a screenshot, and writes results.json and junit.xml into the project's output/runs. Returns every test's result, the first failure's screen, and where the files are. Pass tests to run some by file name. The run goes on in the background and holds the device; the call waits up to wait seconds (default until the end, through a relay at most 75) and otherwise returns while it runs, then test_result says how it is doing and, once done, every result. Hanging up only ends the wait. stop: true ends the run on this device after its current step.",
             inputSchema: schema(
                 [
                     "project": ProjectTools.projectArgument(orTestFile: true),
@@ -24,20 +24,99 @@ extension PhoneTools {
                         "description":
                             "Run the tests in this language, e.g. de-DE: the simulator's, or the Android app's (needs the project's bundle_id). Steps see it as ${LANGUAGE}; the old language comes back afterwards",
                     ],
+                    "wait": [
+                        "type": "number",
+                        "description":
+                            "Seconds to wait for the end before returning while it runs; 0 returns at once. Default until the end (through a relay at most 75)",
+                    ],
+                    "stop": [
+                        "type": "boolean",
+                        "description":
+                            "Stop the test run going on on this device after its current step instead of starting one, and return what ran; other arguments but wait are ignored",
+                    ],
                 ], screenshot: false),
             readOnly: false)
     ]
 
+    /// Starts the run, which holds the device until it ends, and waits for it as long as the caller
+    /// may: a relay gives up on the Mac after 90 seconds and cancels the call. A cancelled or
+    /// hung-up call stops waiting; the run goes on until it ends or `stop` ends it.
     func runTestsTool(_ args: Arguments, source: String) async throws -> ToolOutput {
+        var wait = try args.number("wait", default: 2 * 3600, range: 0...(2 * 3600))
+        if source == "relay" { wait = min(wait, Self.relayWait) }
+        let device = testDevice.device
+        if args.bool("stop") == true { return await stopTests(on: device, wait: wait) }
+
         let (project, selected) = try ProjectTools.locate(args, projects: projects)
+        if let running = TestRuns.running(hold: hold.get()?.id), running.project == ProjectList.normalized(project.folder) {
+            return ToolOutput(
+                text: "\(project.name) already has tests running on \(device.name); call test_result for the results once they end.\n"
+                    + running.progressText,
+                data: running.progressJSON)
+        }
         var tests = try args.stringArray("tests")
         if tests.isEmpty { tests = selected }
+        let variables = try args.stringDictionary("variables")
+        let language = args.has("language") ? try args.string("language") : nil
+        let held = try takeTestHold(source: source)
+        let output: URL
+        do {
+            output = try TestRuns.newRunFolder(for: project)
+        } catch {
+            if held.own { releaseHold(held.id) }
+            throw error
+        }
         let options = TestRunOptions(
-            output: try TestRuns.newRunFolder(for: project), tests: tests,
-            variables: try args.stringDictionary("variables"), video: args.bool("video") ?? true,
-            language: args.has("language") ? try args.string("language") : nil)
-        let result = await runTests(project, options: options, source: source)
-        return ToolOutput(text: result.text, data: result.json, image: result.failureImage, isError: !result.passed)
+            output: output, tests: tests, variables: variables, video: args.bool("video") ?? true, language: language)
+        // 1 once the call returned with the run going on, so its end shows in the activity; 2 once
+        // the call returned the end itself.
+        let delivery = Locked(0)
+        let activity = self.activity
+        let run = startTests(
+            project, options: options, source: source, hold: held,
+            onEnd: { final in
+                if delivery.get() == 1 {
+                    activity.record(source: source, tool: "run_tests", summary: final.summaryLine, failed: !final.passed)
+                }
+            })
+        _ = await run.wait(timeout: wait)
+        let final = delivery.withLock { state -> TestRunResult? in
+            guard let result = run.result else {
+                state = 1
+                return nil
+            }
+            state = 2
+            return result
+        }
+        if let final { return testOutput(final) }
+        return ToolOutput(
+            text:
+                "Started the tests of \(project.name) on \(device.name). They go on in the background and hold the device; call test_result for how they are doing and, once done, every result. run_tests with stop true ends them after the current step.\n"
+                + run.progressText,
+            data: run.progressJSON)
+    }
+
+    /// Ends the test run that holds this device after its current step, and waits up to `wait`
+    /// seconds for what ran.
+    private func stopTests(on device: TestRunResult.Device, wait: TimeInterval) async -> ToolOutput {
+        guard let run = TestRuns.running(hold: hold.get()?.id) else {
+            return ToolOutput(text: "No tests are running on \(device.name).")
+        }
+        run.cancel()
+        guard let final = await run.wait(timeout: wait) else {
+            return ToolOutput(
+                text: "Stopping the tests of \(run.projectName) on \(device.name) after the current step; call test_result for what ran.\n"
+                    + run.progressText,
+                data: run.progressJSON)
+        }
+        var output = testOutput(final)
+        output.text = "Stopped the tests of \(run.projectName) on \(device.name), started by \(run.source).\n" + output.text
+        output.isError = false
+        return output
+    }
+
+    private func testOutput(_ result: TestRunResult) -> ToolOutput {
+        ToolOutput(text: result.text, data: result.json, image: result.failureImage, isError: !result.passed)
     }
 }
 
@@ -126,7 +205,7 @@ public enum ProjectTools {
             ToolDefinition(
                 name: "test_result", title: "Test result",
                 description:
-                    "The results of a project's newest run of run_tests or the app (or of the run named by run): every test with its status, failed step, message, screenshot and video paths on the Mac.",
+                    "How a project's run of run_tests or the app is doing while it runs (tests done and their results so far), else the results of its newest run (or of the run named by run): every test with its status, failed step, message, screenshot and video paths on the Mac. Call it again while it runs.",
                 inputSchema: PhoneTools.schema(
                     [
                         "project": project,
@@ -282,6 +361,9 @@ public enum ProjectTools {
                 lines.append("  " + parts.joined(separator: ". "))
             }
         }
+        for running in TestRuns.running(for: project.folder) {
+            lines.append("Running: " + (running.progressText.split(separator: "\n").first.map(String.init) ?? ""))
+        }
         if let last {
             lines.append("Newest run: \(last.summaryLine) Call test_result for details.")
         }
@@ -387,6 +469,15 @@ public enum ProjectTools {
     private static func testResult(_ args: Arguments, projects: ProjectList) throws -> ToolOutput {
         let (project, _) = try locate(args, projects: projects)
         let run = args.has("run") ? try args.string("run") : nil
+        let running = TestRuns.running(for: project.folder)
+        if let shown = running.first(where: { run == nil || $0.output.lastPathComponent == run }) {
+            var lines = [shown.progressText]
+            for other in running where other !== shown {
+                lines.append("Also running on \(other.device.name): run \"\(other.output.lastPathComponent)\".")
+            }
+            lines.append("Still running; call test_result again for the results.")
+            return ToolOutput(text: lines.joined(separator: "\n"), data: shown.progressJSON)
+        }
         guard let result = TestRuns.result(for: project, run: run) else {
             let runs = TestRuns.runs(for: project).map(\.lastPathComponent)
             if let run {

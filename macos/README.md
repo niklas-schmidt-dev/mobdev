@@ -208,14 +208,14 @@ only device, or the connected iPhone when simulators or Android devices run next
 | `accessibility_audit` | `image`, `fail_on`, `ignore` | Missing labels, small tap targets, low text contrast, duplicate and unclear labels, from the UI tree |
 | `assert_with_ai` | `question`, `expect` | Asks Apple Intelligence on the Mac a yes/no question about the screen |
 | `run_flow` | `path`, `steps`, `variables`, `video` | Replays a flow (JSON or Maestro YAML) and stops at the first failing step; `video` saves a recording (.mp4) |
-| `run_tests` | `project`, `tests`, `variables`, `video`, `language` | Runs a project's tests on this device: every result, the first failure's screen, results.json and junit.xml |
+| `run_tests` | `project`, `tests`, `variables`, `video`, `language`, `wait`, `stop` | Runs a project's tests on this device in the background (see [Tests](#tests)): every result, the first failure's screen, results.json and junit.xml; `stop` ends a run |
 | `list_projects` | | The projects Mobdev knows, which is active, and which one your calls use |
 | `create_project` | `path`, `name`, `bundle_id`, `builds` | Makes a project, such as `~/code/my-app/mobdev`, and makes it active; without `bundle_id` it takes the repository's only app, or lists them |
 | `open_project` | `project` | Makes a project active: its folder, a repository with `mobdev/`, or its name |
 | `list_tests` | `project` | A project's tests and its newest results |
 | `save_test` | `project`, `name`, `steps`, `description`, `platforms`, `file` | Writes a test into the project, creating it when needed |
 | `save_flow` | `project`, `name`, `steps`, `file` | Writes a flow into the project's `flows/` |
-| `test_result` | `project`, `run` | The newest run's results, with each failure's step, screenshot and video |
+| `test_result` | `project`, `run` | A run's progress while it goes on, else the newest run's results, with each failure's step, screenshot and video |
 | `run_native_tests` | `project`, `platform`, `only`, `workspace`, `xcode_project`, `scheme`, `test_plan`, `build`, `gradle_root`, `task`, `module`, `wait` | Runs the app's own XCTest/Swift Testing or Gradle suite on this device in the background (see [Native tests](#native-tests)) |
 | `native_test_result` | `project`, `run` | A native run's progress, else its results: every failure with message and file:line, attachments, the .xcresult |
 | `save_screenshot` | `path` | The screen as a full-resolution PNG in the project's `screenshots/`, such as `de-DE/iphone-6.9/01-home` |
@@ -709,7 +709,8 @@ arguments. Maestro's YAML flows run too ([below](#maestro-flows)).
 
 A running flow holds its device, as a test run and `crawl_app` do: actions from other agents, the
 relay or the live view get "Busy" until it ends, so nothing taps into the middle of it. Tools that
-only look, such as `screenshot` and `ui_tree`, still work.
+only look, such as `screenshot` and `ui_tree`, still work. A flow ends with its call; a test run
+goes on in the background until it ends (see [Tests](#tests)).
 
 #### Control steps
 
@@ -924,6 +925,15 @@ iOS, and the other way round.
   Without `project` they use the agent's or the active project. So an agent drives the
   app with the tools above until a path works, saves the calls that mattered as a test, runs it,
   and fixes it from the failing step.
+- A suite can take longer than an agent's call or the relays' 90 seconds should wait. A run goes
+  on in the background and holds the device, so other callers get "Busy" until it ends.
+  `run_tests` waits up to `wait` seconds (by default until the end; through a relay at most 75)
+  and otherwise answers while it runs; `test_result` then says how far it is (tests done, their
+  results so far, the one running) and, once done, every result. A caller that hangs up, or a
+  relay that stops waiting, ends only the wait, not the run. `run_tests` with `stop: true` ends
+  the run on that device after its current step, whoever started it, and returns what ran; **Stop**
+  in the app's **Tests** does the same for a run the app started. Calling `run_tests` for the same
+  project on the same device while it runs reports the run instead of starting a second one.
 - `Mobdev test` runs a project without the app, for scripts and CI, on booted simulators and
   Android devices:
 
@@ -1320,6 +1330,11 @@ Mobdev's log (Console, subsystem `dev.mobdev.mac`), the install in the device's 
   Xcode 27 on macOS 27 and with Xcode 26.6 on GitHub's macOS 26 runners, where the example flow
   runs on every change. There the simulator can fall seconds behind typed text, and its app cannot
   be read meanwhile; `tap_element` and `wait_for_element` wait up to 15 s past their timeout for it.
+- Through a relay a call has 90 seconds. `run_tests`, `run_native_tests` and `boot_device` answer
+  after 75 seconds at the latest while their work goes on. `run_flow`, `crawl_app` (keep `seconds`
+  under 80) and `navigate_to` end with their call, so a longer flow is cut off: save it as a test
+  and run that. `Mobdev mcp` likewise gives up on an answer after 5 minutes; a test run goes on,
+  and `test_result` reads it.
 - Recording does not capture the scroll wheel; drag to scroll while recording.
 - A double tap (`double`) on Android takes two `input tap` calls through adb, which can be slower
   than an app's double-tap timeout.

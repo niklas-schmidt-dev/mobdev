@@ -473,11 +473,11 @@
   "d899872fd22e71b0": "Die Projekte, die Mobdev kennt, welches aktiv ist und welches deine Aufrufe nutzen",
   "aeb87e33ecc4e46f": "Ein Projekt im Repository der App anlegen und aktiv machen",
   "c08d59f3e5add780": "Ein Projekt aktiv machen: über seinen Ordner, ein Repository mit mobdev/ oder seinen Namen",
-  "ef679b1a39cb3a6e": "Die Tests eines Projekts ausführen: jedes Ergebnis, der Bildschirm des ersten Fehlschlags, results.json und junit.xml",
+  "9b04f0d6ce647ec8": "Die Tests eines Projekts im Hintergrund ausführen: jedes Ergebnis, der Bildschirm des ersten Fehlschlags, results.json und junit.xml; stop beendet einen Lauf",
   "1488e7f0ea8303a7": "Die Tests eines Projekts und seine neuesten Ergebnisse",
   "81f56d55045933fc": "Einen Test in ein Projekt schreiben; legt es bei Bedarf an",
   "fab100381a47a28a": "Einen Flow in den Ordner flows/ des Projekts schreiben",
-  "b95b3c240b2d36e0": "Die Ergebnisse des neuesten Laufs mit Schritt, Screenshot und Video jedes Fehlschlags",
+  "0c42706955f97a8f": "Der Fortschritt eines Laufs, sonst die neuesten Ergebnisse mit Schritt, Screenshot und Video jedes Fehlschlags",
   "e9f1ed5e39f88b9d": "Die eigene XCTest-, Swift-Testing- oder Gradle-Suite der App auf dem Gerät ausführen, im Hintergrund",
   "fa29a76ceac1e52a": "Der Fortschritt eines nativen Laufs, sonst jeder Fehlschlag mit Datei, Zeile und Anhängen",
   "af08407c2398abf1": "Ein simulierter Standort oder eine Route, der das Gerät folgt",
@@ -1485,7 +1485,7 @@
       " nimmt eine Variable aus dem Projekt, der Umgebung oder dem Lauf. Der Wert eines Secrets kommt aus dem Lauf, der Umgebung oder einem Secret, das unter „Settings › Secrets“ gespeichert ist, und taucht nie in Ergebnissen auf."
     ]
   },
-  "655bd7c01b4093de": {
+  "fdc35888e808c43c": {
     "t": "p",
     "i": 1,
     "c": [
@@ -1518,22 +1518,46 @@
         "i": 6,
         "c": "test_result"
       },
-      ": Sie fahren die App, bis ein Pfad funktioniert, speichern ihn als Test, führen ihn aus und reparieren ihn ab dem fehlgeschlagenen Schritt. ",
+      ": Sie fahren die App, bis ein Pfad funktioniert, speichern ihn als Test, führen ihn aus und reparieren ihn ab dem fehlgeschlagenen Schritt. Ein Lauf geht im Hintergrund weiter und belegt das Gerät, damit lange Suiten nicht abgeschnitten werden: Über ein Relay antwortet ",
       {
         "t": "code",
         "i": 7,
+        "c": "run_tests"
+      },
+      " spätestens nach 75 Sekunden, danach sagt ",
+      {
+        "t": "code",
+        "i": 8,
+        "c": "test_result"
+      },
+      ", wie weit er ist, und ",
+      {
+        "t": "code",
+        "i": 9,
+        "c": "run_tests"
+      },
+      " mit ",
+      {
+        "t": "code",
+        "i": 10,
+        "c": "stop"
+      },
+      " beendet ihn nach dem aktuellen Schritt. ",
+      {
+        "t": "code",
+        "i": 11,
         "c": "Mobdev test"
       },
       " führt ein Projekt in CI ohne die App aus und schreibt ",
       {
         "t": "code",
-        "i": 8,
+        "i": 12,
         "c": "results.json"
       },
       ", ",
       {
         "t": "code",
-        "i": 9,
+        "i": 13,
         "c": "junit.xml"
       },
       " sowie ein Video und einen Screenshot je Test."

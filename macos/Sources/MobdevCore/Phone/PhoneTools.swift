@@ -313,11 +313,13 @@ public final class PhoneTools: Sendable {
         do {
             try AppBlocklist.check(name, args)
             var output: ToolOutput
-            if let what = Self.holdingTools[name] {
+            if name == "run_tests" {
+                // Its run holds the device itself, past this call when the caller cannot wait.
+                output = try await runTestsTool(args, source: source)
+            } else if let what = Self.holdingTools[name] {
                 output = try await holding(what, source: source) {
                     switch name {
                     case "run_flow": try await runFlowTool(args, source: source)
-                    case "run_tests": try await runTestsTool(args, source: source)
                     default: try await runCrawlTool(name, args, source: source)!
                     }
                 }

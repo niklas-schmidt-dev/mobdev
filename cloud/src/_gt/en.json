@@ -473,11 +473,11 @@
   "d899872fd22e71b0": "The projects Mobdev knows, which is active, and which one your calls use",
   "aeb87e33ecc4e46f": "Make a project in the app's repository and make it active",
   "c08d59f3e5add780": "Make a project active: its folder, a repository with mobdev/, or its name",
-  "ef679b1a39cb3a6e": "Run a project's tests: every result, the first failure's screen, results.json and junit.xml",
+  "9b04f0d6ce647ec8": "Run a project's tests in the background: every result, the first failure's screen, results.json and junit.xml; stop ends a run",
   "1488e7f0ea8303a7": "A project's tests and its newest results",
   "81f56d55045933fc": "Write a test into a project, creating it when needed",
   "fab100381a47a28a": "Write a flow into the project's flows/",
-  "b95b3c240b2d36e0": "The newest run's results with each failure's step, screenshot and video",
+  "0c42706955f97a8f": "A run's progress, else the newest results with each failure's step, screenshot and video",
   "e9f1ed5e39f88b9d": "Run the app's own XCTest, Swift Testing or Gradle suite on the device, in the background",
   "fa29a76ceac1e52a": "A native run's progress, else every failure with its file, line and attachments",
   "af08407c2398abf1": "A simulated position, or a route the device follows",
@@ -1483,7 +1483,7 @@
       " takes a variable from the project, the environment or the run. A secret’s value comes from the run, the environment or a secret stored under Settings › Secrets, and never appears in results."
     ]
   },
-  "655bd7c01b4093de": {
+  "fdc35888e808c43c": {
     "t": "p",
     "i": 1,
     "c": [
@@ -1517,22 +1517,46 @@
         "i": 6,
         "c": "test_result"
       },
-      ": they drive the app until a path works, save it as a test, run it and fix it from the failing step. ",
+      ": they drive the app until a path works, save it as a test, run it and fix it from the failing step. A run goes on in the background and holds the device, so long suites are not cut off: through a relay ",
       {
         "t": "code",
         "i": 7,
+        "c": "run_tests"
+      },
+      " answers after 75 seconds at the latest, then ",
+      {
+        "t": "code",
+        "i": 8,
+        "c": "test_result"
+      },
+      " says how far it is, and ",
+      {
+        "t": "code",
+        "i": 9,
+        "c": "run_tests"
+      },
+      " with ",
+      {
+        "t": "code",
+        "i": 10,
+        "c": "stop"
+      },
+      " ends it after the current step. ",
+      {
+        "t": "code",
+        "i": 11,
         "c": "Mobdev test"
       },
       " runs a project in CI without the app and writes ",
       {
         "t": "code",
-        "i": 8,
+        "i": 12,
         "c": "results.json"
       },
       ", ",
       {
         "t": "code",
-        "i": 9,
+        "i": 13,
         "c": "junit.xml"
       },
       " and a video and a screenshot per test."

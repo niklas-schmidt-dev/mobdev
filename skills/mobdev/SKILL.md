@@ -207,6 +207,10 @@ A project's tests are `tests/*.json`, each a flow with a `name`, a `description`
 `list_tests` shows the tests with their newest results, `save_test` writes a test, `run_tests` runs
 the tests on a device and returns every result with the first failure's screen, and `test_result`
 returns the newest results again. Each takes `project`, by default the project your calls use.
+A run goes on in the background and holds the device. When `run_tests` answers "Started" (through
+a relay it answers after 75 seconds at the latest, or earlier with `wait`), the tests are still
+running: read how far they are, and later every result, with `test_result`, and do not call
+`run_tests` again to wait. `run_tests` with `stop: true` ends the run after its current step.
 
 To add a test, drive the app with the tools above until the path works, then save the calls that
 mattered: `tap_element` and `wait_for_element` over coordinates, `${NAME}` for data such as an

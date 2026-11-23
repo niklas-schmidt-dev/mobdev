@@ -81,11 +81,11 @@ const tools = [
   ["list_projects", "", msg("The projects Mobdev knows, which is active, and which one your calls use")],
   ["create_project", "path, name, bundle_id, builds", msg("Make a project in the app's repository and make it active")],
   ["open_project", "project", msg("Make a project active: its folder, a repository with mobdev/, or its name")],
-  ["run_tests", "project, tests, variables, video, language", msg("Run a project's tests: every result, the first failure's screen, results.json and junit.xml")],
+  ["run_tests", "project, tests, variables, video, language, wait, stop", msg("Run a project's tests in the background: every result, the first failure's screen, results.json and junit.xml; stop ends a run")],
   ["list_tests", "project", msg("A project's tests and its newest results")],
   ["save_test", "project, name, steps, description, platforms, file", msg("Write a test into a project, creating it when needed")],
   ["save_flow", "project, name, steps, file", msg("Write a flow into the project's flows/")],
-  ["test_result", "project, run", msg("The newest run's results with each failure's step, screenshot and video")],
+  ["test_result", "project, run", msg("A run's progress, else the newest results with each failure's step, screenshot and video")],
   ["run_native_tests", "project, platform, only, scheme, test_plan, task, wait, …", msg("Run the app's own XCTest, Swift Testing or Gradle suite on the device, in the background")],
   ["native_test_result", "project, run", msg("A native run's progress, else every failure with its file, line and attachments")],
 ];
@@ -656,7 +656,10 @@ function Docs() {
                   steps, the screenshot of a failure and the video. Agents get the same
                   through <code className={code}>list_tests</code>, <code className={code}>save_test</code>, <code className={code}>run_tests</code> and <code className={code}>test_result</code>:
                   they drive the app until a path works, save it as a test, run it and fix it from the failing
-                  step. <code className={code}>Mobdev test</code> runs a project in CI without the app and
+                  step. A run goes on in the background and holds the device, so long suites are not cut off: through a
+                  relay <code className={code}>run_tests</code> answers after 75 seconds at the latest,
+                  then <code className={code}>test_result</code> says how far it is, and <code className={code}>run_tests</code> with <code className={code}>stop</code> ends
+                  it after the current step. <code className={code}>Mobdev test</code> runs a project in CI without the app and
                   writes <code className={code}>results.json</code>, <code className={code}>junit.xml</code> and a video and a
                   screenshot per test.
                 </p>
