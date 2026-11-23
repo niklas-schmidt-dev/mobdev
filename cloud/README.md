@@ -127,6 +127,11 @@ the website checks who may watch what and asks the relay over the `RelayAdmin` s
 Durable Object for 60 s. The browser presents `mdv_<space><secret>` as a subprotocol; the relay uses
 it once. So no secret is shared between the workers.
 
+A page whose tab has been hidden for 30 s closes its view and says it is paused, so the Mac stops
+streaming and the account's active time stops; it opens the view again when the tab shows. While
+the Mac is offline the page asks for a ticket again after 5 s, then twice as long each time up to a
+minute, and at once when its tab shows again (`src/lib/live-view.ts`).
+
 Share links are created and revoked on the live page and listed in the dashboard. D1 keeps them in
 `live_shares` with the token's SHA-256 hash, a label, the Mac (and device, or all of them), the
 mode and the expiry (an hour, a day or a week; at most 20 per account). Revoking deletes the row and
@@ -142,9 +147,10 @@ account's allowance is used up. The space's alarm runs every 30 s while someone 
 each stream on the Mac (`live_start`) and ends views whose Mac left, whose link expired or was
 revoked, or whose viewer went silent. It sends usage to Autumn only when the 2-minute flush is due.
 
-Tested in `test/live.test.ts` against the relay worker and D1. The website's pages and server
-functions (`src/routes/live.*.tsx`, `src/server/live.ts`, `src/components/live.tsx`) have no unit
-tests; check them in the browser (Local development).
+Tested in `test/live.test.ts` against the relay worker and D1, and the page's pause and retry
+timing in `test/live-view.test.ts`. The website's pages and server functions
+(`src/routes/live.*.tsx`, `src/server/live.ts`, `src/components/live.tsx`) have no unit tests;
+check them in the browser (Local development).
 
 ## Local development
 
