@@ -141,6 +141,30 @@ final class FakeProxy: NetworkProxyBackend, @unchecked Sendable {
         proxy.log.finish(id)
     }
 
+    /// The cursor a wait returns with an open connection asks for a later one: neither the same
+    /// connection while it is open nor the entry it becomes when it closes may satisfy it.
+    @Test func aCursorFromAnOpenConnectionDoesNotFindItAgain() async throws {
+        let (tools, proxy, _) = try await android()
+        let first = proxy.log.open(Self.tunnel("api.example.com"))
+        let found = try await call(tools, "wait_for_request", ["url": "https://api.example.com", "after": 0, "timeout": 0])
+        #expect(found.data?["open"] == true)
+        #expect(found.data?["cursor"] == 0)
+
+        let again = try await call(tools, "wait_for_request", ["url": "https://api.example.com", "after": 0, "timeout": 0])
+        #expect(again.isError, "\(again.text)")
+        #expect(again.text.hasPrefix("Timed out after 0 s"))
+        proxy.log.finish(first)
+        let closed = try await call(tools, "wait_for_request", ["url": "https://api.example.com", "after": 0, "timeout": 0])
+        #expect(closed.isError, "\(closed.text)")
+
+        // A second connection is what the cursor waits for.
+        try await Task.sleep(nanoseconds: 5_000_000)
+        let second = proxy.log.open(Self.tunnel("api.example.com"))
+        let next = try await call(tools, "wait_for_request", ["url": "https://api.example.com", "after": 0, "timeout": 0])
+        #expect(next.data?["open"] == true)
+        proxy.log.finish(second)
+    }
+
     @Test func timesOutAndSaysWhatCameInstead() async throws {
         let (tools, proxy, _) = try await android()
         proxy.log.add(Self.request("POST", "http://10.0.2.2:3000/api/login", status: 500))

@@ -15,6 +15,15 @@ final class AppNetworkCapture: Sendable {
     /// Where the device's request log (this one, or Android's proxy's) stood when the last action
     /// on the device began, for `wait_for_request` without a cursor.
     let lastAction = Locked<NetworkMark?>(nil)
+    /// The HTTPS tunnels `wait_for_request` returned, each with the cursor it returned: a tunnel has
+    /// no number while it is open and gets a newer one when it closes, so that cursor alone would
+    /// find the same connection again.
+    let returnedTunnels = Locked<[String: Int]>([:])
+
+    /// A tunnel as `returnedTunnels` knows it, open or closed: where it goes and when it opened.
+    static func tunnelKey(_ entry: NetworkEntry) -> String {
+        "\(entry.host):\(entry.port ?? 443)@\(entry.time.timeIntervalSinceReferenceDate)"
+    }
 
     var capturing: [String] { readers.get().filter { $0.value.isRecording }.keys.sorted() }
 
@@ -274,6 +283,8 @@ extension PhoneTools {
         let log = requestLog
         let source: NetworkEntry.Source = phone.networkProxy == nil ? .cfnetwork : .proxy
         let start: NetworkMark
+        // With a cursor, a tunnel an earlier wait returned with that cursor or an older one is not news.
+        var returned: [String: Int] = [:]
         if args.has("after") {
             // A cursor from before Mobdev restarted is newer than anything here: start over, as
             // network_log does.
@@ -282,17 +293,26 @@ extension PhoneTools {
             // A tunnel is newer when it opened after the cursor's request finished.
             let previous = cursor == 0 ? nil : log.entries { $0.number <= cursor }.last
             start = NetworkMark(cursor: cursor, time: previous.map { $0.time.addingTimeInterval($0.duration ?? 0) })
+            returned = appNetwork.returnedTunnels.get().filter { $0.value <= cursor }
         } else {
             start = appNetwork.lastAction.get() ?? NetworkMark(cursor: log.cursor, time: Date())
         }
+        let seen: (NetworkEntry) -> Bool = { $0.scheme == nil && returned[AppNetworkCapture.tunnelKey($0)] != nil }
         let pathsSeen = !log.entries { $0.source == source && $0.path != nil }.isEmpty
         if let reason = filter.impossible(on: source, pathsSeen: pathsSeen) { throw ToolFailure(reason) }
 
         let deadline = Date().addingTimeInterval(timeout)
         while true {
-            if let (entry, open) = Self.firstRequest(matching: filter, in: log, since: start) {
+            if let (entry, open) = Self.firstRequest(matching: filter, in: log, since: start, skipping: seen) {
                 // An open tunnel has no number yet: what follows it comes after the log's end.
                 let cursor = open ? log.cursor : entry.number
+                if open {
+                    appNetwork.returnedTunnels.withLock { tunnels in
+                        // Old ones go once there are many; a wait rarely reaches back that far.
+                        if tunnels.count >= 500 { tunnels = tunnels.filter { $0.value > cursor - 1000 } }
+                        tunnels[AppNetworkCapture.tunnelKey(entry)] = cursor
+                    }
+                }
                 var text = "Found \(entry.summary(query: false, open: open))."
                 if entry.scheme == nil { text += " Android's proxy sees HTTPS only as this connection to the host." }
                 text += "\nCursor: \(cursor). Pass it as after to wait for a later request."
@@ -318,14 +338,15 @@ extension PhoneTools {
     /// The oldest finished request after `start` that matches, else an HTTPS tunnel through the
     /// proxy that opened since: one is listed only once it closes, which a connection kept alive
     /// does minutes later.
-    static func firstRequest(matching filter: RequestFilter, in log: NetworkLog, since start: NetworkMark)
-        -> (entry: NetworkEntry, open: Bool)?
-    {
-        if let entry = log.entries(where: { $0.number > start.cursor && filter.matches($0) }).first {
+    static func firstRequest(
+        matching filter: RequestFilter, in log: NetworkLog, since start: NetworkMark,
+        skipping seen: (NetworkEntry) -> Bool = { _ in false }
+    ) -> (entry: NetworkEntry, open: Bool)? {
+        if let entry = log.entries(where: { $0.number > start.cursor && filter.matches($0) && !seen($0) }).first {
             return (entry, false)
         }
         let tunnel = log.openEntries.first { entry in
-            entry.scheme == nil && entry.time >= (start.time ?? .distantPast) && filter.matches(entry)
+            entry.scheme == nil && entry.time >= (start.time ?? .distantPast) && filter.matches(entry) && !seen(entry)
         }
         return tunnel.map { ($0, true) }
     }
