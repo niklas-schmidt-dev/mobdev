@@ -183,7 +183,7 @@
   "a23cdd89efb441fa": "Download für Mac",
   "53ea457ed050c196": "Was alles drinsteckt ›",
   "fb29bc8562fc5588": "Kostenlos. Aktualisiert sich selbst. Erfordert macOS 26.",
-  "67e75127590f935f": "Alle Geräte in einer Liste, und alle verstehen dieselben 88 Tools.",
+  "52115713c90f0342": "Alle Geräte in einer Liste, und alle verstehen dieselben 89 Tools.",
   "6e3a1ad8ecdae7b4": "Dein Agent steuert.",
   "38b4bfda87fcb470": "Claude Code, Codex, Cursor oder jeder andere MCP-Client sieht, tippt und schreibt auf jedem Smartphone. Du siehst dabei zu.",
   "d4615a60ce29cf83": "Von überall.",
@@ -2312,7 +2312,7 @@
       "c": "Mobdev deckt alles ab, was auf dem Gerät passiert, für dich und für deinen Agenten. Bau weiter wie bisher, ab da übernimmt Mobdev."
     }
   ],
-  "1f62d4f16b3eafb8": [
+  "4fb1ef9564647037": [
     {
       "t": "h2",
       "i": 1,
@@ -2328,7 +2328,7 @@
     {
       "t": "p",
       "i": 3,
-      "c": "Schließ ein iPhone an, starte einen Simulator oder einen Emulator, und das Gerät erscheint in Mobdev. Jedes Gerät versteht dieselben 88 Tools, so kann ein Agent in einer Sitzung auf allen testen."
+      "c": "Schließ ein iPhone an, starte einen Simulator oder einen Emulator, und das Gerät erscheint in Mobdev. Jedes Gerät versteht dieselben 89 Tools, so kann ein Agent in einer Sitzung auf allen testen."
     }
   ],
   "0e93ea2eb9c558d4": [

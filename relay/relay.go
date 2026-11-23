@@ -95,7 +95,7 @@ type Device struct {
 	OSVersion   string `json:"os_version"`
 	DeviceClass string `json:"device_class"`
 	Screen      bool   `json:"screen"`    // the Mac has the device's picture
-	Bluetooth   bool   `json:"bluetooth"` // input reaches it: Bluetooth for iPhones, always for simulators and Android
+	Bluetooth   bool   `json:"bluetooth"` // input reaches it: Mobdev Runner or Bluetooth for iPhones, always for simulators and Android
 	Ready       bool   `json:"ready"`
 }
 

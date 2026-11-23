@@ -195,7 +195,7 @@ every tool.
 | `recording` | `start_recording`, `stop_recording`, `save_screenshot` |
 | `tests` | `list_projects`, `create_project`, `open_project`, `list_tests`, `save_test`, `save_flow`, `run_tests`, `test_result`, `run_flow`, `run_native_tests`, `native_test_result`, `assert_screenshot`, `accessibility_audit`, `assert_with_ai`, `crawl_app`, `navigate_to`, `recent_steps` |
 | `performance` | `performance`, `measure_launch`, `record_trace`, `device_load` |
-| `network` | `start_network_capture`, `network_log`, `stop_network_capture`, `mock_response` |
+| `network` | `start_network_capture`, `network_log`, `wait_for_request`, `stop_network_capture`, `mock_response` |
 | `secrets` | `list_secrets`, `type_secret` |
 | `appstore` | `appstore_apps`, `appstore_builds`, `appstore_testflight`, `appstore_versions`, `appstore_reviews`, `appstore_add_build_to_group`, `appstore_set_what_to_test`, `appstore_reply_to_review` |
 

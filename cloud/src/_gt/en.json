@@ -183,7 +183,7 @@
   "a23cdd89efb441fa": "Download for Mac",
   "53ea457ed050c196": "See what’s inside ›",
   "fb29bc8562fc5588": "Free. Updates itself. Requires macOS 26.",
-  "67e75127590f935f": "Every device in one list, and every device takes the same 88 tools.",
+  "52115713c90f0342": "Every device in one list, and every device takes the same 89 tools.",
   "6e3a1ad8ecdae7b4": "Your agent drives.",
   "38b4bfda87fcb470": "Claude Code, Codex, Cursor or any MCP client sees, taps and types on every phone. You watch it happen.",
   "d4615a60ce29cf83": "From anywhere.",
@@ -2310,7 +2310,7 @@
       "c": "Mobdev covers everything that happens on the device, for you and for your agent. Keep building the way you do; Mobdev takes it from there."
     }
   ],
-  "1f62d4f16b3eafb8": [
+  "4fb1ef9564647037": [
     {
       "t": "h2",
       "i": 1,
@@ -2326,7 +2326,7 @@
     {
       "t": "p",
       "i": 3,
-      "c": "Plug in an iPhone, boot a simulator or start an emulator, and it shows up in Mobdev. Every device takes the same 88 tools, so one agent can test on all of them in one session."
+      "c": "Plug in an iPhone, boot a simulator or start an emulator, and it shows up in Mobdev. Every device takes the same 89 tools, so one agent can test on all of them in one session."
     }
   ],
   "0e93ea2eb9c558d4": [
