@@ -150,7 +150,9 @@ A recording stops by itself after 30 minutes.
 ## From a terminal
 
 Agents without MCP, and scripts, call the same tools with the `Mobdev` command, which is
-`/Applications/Mobdev.app/Contents/MacOS/Mobdev` (`mobdev` when installed with Homebrew):
+`/Applications/Mobdev.app/Contents/MacOS/Mobdev` (`mobdev` when installed with Homebrew). It also
+runs the tools your MCP connection leaves out when it loads only some toolsets (`?tools=` or
+`--tools`; the server's instructions then name the rest):
 
 ```sh
 Mobdev tools                                     # every tool, one line each

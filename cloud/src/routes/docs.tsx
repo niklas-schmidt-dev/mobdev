@@ -155,6 +155,20 @@ const performanceTools = [
   ["dev_menu", "port", msg("Open a React Native or Expo app’s developer menu")],
 ];
 
+/** What an agent can ask for with --tools or ?tools=. The names stay English. */
+const toolsets = [
+  ["core", msg("Seeing and controlling a device: devices and status, screenshots, observe, text and elements on screen, taps, typing, swipes, keys, pinch, waits, installing, launching and opening apps, logs")],
+  ["apps", msg("Listing, stopping and uninstalling apps, opening links, crash reports, React Native and Expo reload and developer menu")],
+  ["settings", msg("Device state: location, permissions, push notifications, appearance, language, status bar, biometrics, app data, clipboard, orientation, hardware buttons, Shortcuts")],
+  ["simulators", msg("Listing, booting, shutting down, creating and deleting simulators and emulators")],
+  ["recording", msg("Screen recordings and full-resolution screenshots")],
+  ["tests", msg("Projects, tests and flows, native test suites, checks, crawling an app, recent steps")],
+  ["performance", msg("CPU, memory, frames, launch time, Instruments and Perfetto traces, the device’s load")],
+  ["network", msg("An app’s requests, and mocked answers")],
+  ["secrets", msg("Typing stored passwords without seeing them")],
+  ["appstore", msg("App Store Connect")],
+];
+
 const code = "rounded bg-mist px-1.5 py-0.5 text-[15px]";
 
 function ToolTable({ rows }: { rows: string[][] }) {
@@ -180,6 +194,34 @@ function ToolTable({ rows }: { rows: string[][] }) {
             <tr key={name}>
               <td className="px-4 py-2.5 font-semibold text-ink">{name}</td>
               <td className="px-4 py-2.5 text-muted">{args}</td>
+              <td className="px-4 py-2.5 text-ink/85">{m(what)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function ToolsetTable() {
+  const m = useMessages();
+  return (
+    <div className="overflow-x-auto rounded-2xl bg-mist">
+      <table className="w-full text-left text-[15px]">
+        <thead className="text-muted">
+          <tr>
+            <th className="px-4 pb-2 pt-3.5 text-[13px] font-semibold">
+              <T>Toolset</T>
+            </th>
+            <th className="px-4 pb-2 pt-3.5 text-[13px] font-semibold">
+              <T>Tools for</T>
+            </th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-line/70">
+          {toolsets.map(([name, what]) => (
+            <tr key={name}>
+              <td className="px-4 py-2.5 font-semibold text-ink">{name}</td>
               <td className="px-4 py-2.5 text-ink/85">{m(what)}</td>
             </tr>
           ))}
@@ -329,6 +371,25 @@ function Docs() {
                 <p>
                   HTTP clients can use <code className={code}>http://127.0.0.1:4686/mcp</code> with the token
                   from Settings › API. The server speaks MCP 2026-07-28 and the earlier versions back to 2024-11-05.
+                </p>
+              </T>
+              <T>
+                <h3 className="pt-2 text-[21px] font-semibold tracking-tight text-ink">Fewer tools</h3>
+                <p>
+                  Every tool’s description goes into the agent’s context when it connects. To load only what a task
+                  needs, name toolsets: add <code className={code}>--tools core,tests</code> after{" "}
+                  <code className={code}>mcp</code> in the configurations above, or <code className={code}>?tools=core,tests</code> to
+                  an HTTP or relay URL. <code className={code}>core</code> alone is enough to see and control a device and
+                  is less than a third the size of the full list.
+                </p>
+              </T>
+              <Code>{"claude mcp add --scope user mobdev -- /Applications/Mobdev.app/Contents/MacOS/Mobdev mcp --tools core,tests"}</Code>
+              <ToolsetTable />
+              <T>
+                <p>
+                  The other tools still run when called by name, and always from a terminal as{" "}
+                  <code className={code}>Mobdev &lt;tool&gt;</code>. The server tells the agent which toolsets it left out
+                  and what is in them. Without a selection, every tool is listed.
                 </p>
               </T>
             </Section>

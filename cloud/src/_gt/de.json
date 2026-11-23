@@ -521,10 +521,21 @@
   "06558f2d70059737": "Das ganze Gerät: die Prozesse mit der meisten CPU und dem meisten Speicher, belegter Speicher, Temperaturstatus",
   "491ff4ed5c824653": "Eine React-Native- oder Expo-App über Metro neu laden, sonst über ihr Entwicklermenü",
   "c135835721e02020": "Das Entwicklermenü einer React-Native- oder Expo-App öffnen",
+  "562327b925294a47": "Ein Gerät sehen und steuern: Geräte und Status, Screenshots, observe, Text und Elemente auf dem Bildschirm, Tippen, Schreiben, Wischen, Tasten, Zoomen mit zwei Fingern, Warten, Apps installieren, starten und öffnen, Logs",
+  "9c768f6822bb2911": "Apps auflisten, beenden und deinstallieren, Links öffnen, Crash-Reports, Neuladen und Entwicklermenü von React Native und Expo",
+  "a9739df39a9fe271": "Gerätezustand: Standort, Berechtigungen, Push-Mitteilungen, Darstellung, Sprache, Statusleiste, Face ID und Fingerabdruck, App-Daten, Zwischenablage, Ausrichtung, Hardwaretasten, Kurzbefehle",
+  "9a0b8c685dae1c25": "Simulatoren und Emulatoren auflisten, starten, herunterfahren, anlegen und löschen",
+  "fdcbfe5bd6086d18": "Bildschirmaufnahmen und Screenshots in voller Auflösung",
+  "50c8293ce7d6d058": "Projekte, Tests und Flows, die eigenen Testsuiten der App, Prüfungen, eine App erkunden, die letzten Schritte",
+  "66dae1a0b9e54d53": "CPU, Speicher, Frames, Startzeit, Traces mit Instruments und Perfetto, die Auslastung des Geräts",
+  "6974db0e3e60cafb": "Die Anfragen einer App und vorgegebene Antworten",
+  "89886972bfeee861": "Gespeicherte Passwörter tippen, ohne sie zu sehen",
   "e4911e502264cb64": "Auf dieser Seite",
   "b18ddcdea5477466": "Tool",
   "5772a96c29d1b1e0": "Argumente",
   "0cec07430a396fe0": "Was es tut",
+  "d515040544bf8073": "Toolset",
+  "f10f8dcaaa8d2625": "Tools für",
   "981c5c8f6b0996f0": [
     {
       "t": "p",
@@ -741,6 +752,59 @@
         "c": "http://127.0.0.1:4686/mcp"
       },
       " mit dem Token aus „Settings › API“ in der App nutzen. Der Server spricht MCP 2026-07-28 und ältere Versionen bis zurück zu 2024-11-05."
+    ]
+  },
+  "d0f3f374e58e3c70": [
+    {
+      "t": "h3",
+      "i": 1,
+      "c": "Weniger Tools"
+    },
+    {
+      "t": "p",
+      "i": 2,
+      "c": [
+        "Die Beschreibung jedes Tools landet im Kontext des Agenten, sobald er sich verbindet. Damit nur geladen wird, was eine Aufgabe braucht, nenne Toolsets: Ergänze ",
+        {
+          "t": "code",
+          "i": 3,
+          "c": "--tools core,tests"
+        },
+        " nach",
+        " ",
+        {
+          "t": "code",
+          "i": 4,
+          "c": "mcp"
+        },
+        " in den Konfigurationen oben oder hänge ",
+        {
+          "t": "code",
+          "i": 5,
+          "c": "?tools=core,tests"
+        },
+        " an eine HTTP- oder Relay-URL an. ",
+        {
+          "t": "code",
+          "i": 6,
+          "c": "core"
+        },
+        " allein reicht, um ein Gerät zu sehen und zu steuern, und ist weniger als ein Drittel so groß wie die ganze Liste."
+      ]
+    }
+  ],
+  "10a2f50a55496751": {
+    "t": "p",
+    "i": 1,
+    "c": [
+      "Die anderen Tools laufen trotzdem, wenn man sie beim Namen aufruft, und immer im Terminal als",
+      " ",
+      {
+        "t": "code",
+        "i": 2,
+        "c": "Mobdev <tool>"
+      },
+      ". Der Server sagt dem Agenten, welche Toolsets er weggelassen hat und was darin ist. Ohne Auswahl werden alle Tools aufgelistet."
     ]
   },
   "b1bdfeed6ba99add": {

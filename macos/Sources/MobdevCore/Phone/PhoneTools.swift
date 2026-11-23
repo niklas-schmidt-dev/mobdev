@@ -7,6 +7,9 @@ public struct ToolDefinition: Sendable {
     public let description: String
     public let inputSchema: JSONValue
     public let readOnly: Bool
+    /// The toolset that lists the tool when an MCP client asks for some: its definition list's,
+    /// set where the lists are put together (`inToolset`).
+    public internal(set) var toolset: Toolset = .core
 
     /// The tool as listed by MCP `tools/list`.
     public var mcpJSON: JSONValue {
@@ -293,9 +296,13 @@ public final class PhoneTools: Sendable {
                         "timeout": ["type": "number", "description": "Seconds, default 10, at most 60"],
                         "gone": ["type": "boolean"],
                     ], required: ["text"]), readOnly: true),
-        ] + secretDefinitions + observeDefinitions + treeDefinitions + appDefinitions + settingsDefinitions + recordingDefinitions
-            + sessionDefinitions + crawlDefinitions + checkDefinitions + flowDefinitions + testDefinitions
-            + nativeTestDefinitions + devLoopDefinitions + profilingDefinitions + networkDefinitions
+        ].inToolset(.core) + secretDefinitions.inToolset(.secrets) + observeDefinitions.inToolset(.core)
+            + treeDefinitions.inToolset(.core) + appDefinitions.inToolset(.apps)
+            + settingsDefinitions.inToolset(.settings) + recordingDefinitions.inToolset(.recording)
+            + sessionDefinitions.inToolset(.settings) + crawlDefinitions.inToolset(.tests)
+            + checkDefinitions.inToolset(.tests) + flowDefinitions.inToolset(.tests) + testDefinitions.inToolset(.tests)
+            + nativeTestDefinitions.inToolset(.tests) + devLoopDefinitions.inToolset(.performance)
+            + profilingDefinitions.inToolset(.performance) + networkDefinitions.inToolset(.network)
     }()
 
     public static func definition(named name: String) -> ToolDefinition? {

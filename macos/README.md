@@ -165,6 +165,40 @@ Clients that speak Streamable HTTP can also use `http://127.0.0.1:4686/mcp` with
 `Authorization: Bearer <token>` (copy it in the app). The server supports MCP 2026-07-28 and the
 earlier `initialize`-based versions from 2024-11-05 to 2025-11-25.
 
+### Load fewer tools
+
+Every tool's definition goes into the agent's context when it connects, about 90 KB for all of
+them. An agent can ask for toolsets instead: `core` alone is enough to see and control a device and
+takes about 25 KB. Name them with `--tools` for `Mobdev mcp`, or with `?tools=` on the HTTP URL and
+on a relay's (`https://relay.mobdev.sh/h/<mac-name>/mcp?tools=core`):
+
+```sh
+claude mcp add --scope user mobdev -- /Applications/Mobdev.app/Contents/MacOS/Mobdev mcp --tools core,tests
+```
+
+In Codex and JSON configurations that is `args = ["mcp", "--tools", "core,tests"]`, and over HTTP
+`http://127.0.0.1:4686/mcp?tools=core,tests`.
+
+The selection only shortens `tools/list`. Every tool still runs when called by name: over MCP
+where the client allows tools it was not shown, and always as `Mobdev <tool>` in a terminal (see
+[From the terminal](#from-the-terminal)). The server's instructions tell the agent which toolsets
+it left out, with their tools. Without a selection every tool is listed, as before. An unknown name
+is an error that lists the valid ones; `Mobdev mcp` then exits with it. The REST API always lists
+every tool.
+
+| Toolset | Tools |
+|---|---|
+| `core` | `list_devices`, `status`, `screenshot`, `observe`, `tap_mark`, `read_screen`, `find_text`, `ui_tree`, `tap`, `tap_text`, `tap_element`, `long_press`, `swipe`, `scroll`, `scroll_until_visible`, `pinch`, `type_text`, `press_key`, `home`, `wait_for_text`, `wait_for_element`, `wait_for_idle`, `open_app`, `install_app`, `launch_app`, `logs` |
+| `apps` | `list_apps`, `uninstall_app`, `stop_app`, `open_url`, `crash_reports`, `reload_app`, `dev_menu` |
+| `settings` | `set_location`, `set_permission`, `send_push`, `set_appearance`, `set_language`, `set_status_bar`, `biometrics`, `reset_app`, `clipboard`, `set_orientation`, `press_button`, `run_shortcut` |
+| `simulators` | `list_virtual_devices`, `boot_device`, `shutdown_device`, `create_simulator`, `delete_simulator` |
+| `recording` | `start_recording`, `stop_recording`, `save_screenshot` |
+| `tests` | `list_projects`, `create_project`, `open_project`, `list_tests`, `save_test`, `save_flow`, `run_tests`, `test_result`, `run_flow`, `run_native_tests`, `native_test_result`, `assert_screenshot`, `accessibility_audit`, `assert_with_ai`, `crawl_app`, `navigate_to`, `recent_steps` |
+| `performance` | `performance`, `measure_launch`, `record_trace`, `device_load` |
+| `network` | `start_network_capture`, `network_log`, `stop_network_capture`, `mock_response` |
+| `secrets` | `list_secrets`, `type_secret` |
+| `appstore` | `appstore_apps`, `appstore_builds`, `appstore_testflight`, `appstore_versions`, `appstore_reviews`, `appstore_add_build_to_group`, `appstore_set_what_to_test`, `appstore_reply_to_review` |
+
 ### Tools
 
 Coordinates are pixels of the image `screenshot` returns (long edge 1280 px, origin top-left).
@@ -1209,6 +1243,8 @@ The app then shows the remote MCP URL and a client key:
 claude mcp add --transport http mobdev-remote https://relay.mobdev.sh/h/<mac-name>/mcp \
   --header "Authorization: Bearer mdc_…"
 ```
+
+`?tools=core,tests` on that URL lists fewer tools (see [Load fewer tools](#load-fewer-tools)).
 
 Relays forward requests and store nothing. Anyone with the client key can control the phone;
 **New Client Key** revokes the old one, and revoking the access token in the dashboard disconnects

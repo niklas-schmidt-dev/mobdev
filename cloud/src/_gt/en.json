@@ -521,10 +521,21 @@
   "06558f2d70059737": "The whole device: busiest processes by CPU and memory, memory used, thermal state",
   "491ff4ed5c824653": "Reload a React Native or Expo app through Metro, else through its developer menu",
   "c135835721e02020": "Open a React Native or Expo app’s developer menu",
+  "562327b925294a47": "Seeing and controlling a device: devices and status, screenshots, observe, text and elements on screen, taps, typing, swipes, keys, pinch, waits, installing, launching and opening apps, logs",
+  "9c768f6822bb2911": "Listing, stopping and uninstalling apps, opening links, crash reports, React Native and Expo reload and developer menu",
+  "a9739df39a9fe271": "Device state: location, permissions, push notifications, appearance, language, status bar, biometrics, app data, clipboard, orientation, hardware buttons, Shortcuts",
+  "9a0b8c685dae1c25": "Listing, booting, shutting down, creating and deleting simulators and emulators",
+  "fdcbfe5bd6086d18": "Screen recordings and full-resolution screenshots",
+  "50c8293ce7d6d058": "Projects, tests and flows, native test suites, checks, crawling an app, recent steps",
+  "66dae1a0b9e54d53": "CPU, memory, frames, launch time, Instruments and Perfetto traces, the device’s load",
+  "6974db0e3e60cafb": "An app’s requests, and mocked answers",
+  "89886972bfeee861": "Typing stored passwords without seeing them",
   "e4911e502264cb64": "On this page",
   "b18ddcdea5477466": "Tool",
   "5772a96c29d1b1e0": "Arguments",
   "0cec07430a396fe0": "What it does",
+  "d515040544bf8073": "Toolset",
+  "f10f8dcaaa8d2625": "Tools for",
   "981c5c8f6b0996f0": [
     {
       "t": "p",
@@ -741,6 +752,59 @@
         "c": "http://127.0.0.1:4686/mcp"
       },
       " with the token from Settings › API. The server speaks MCP 2026-07-28 and the earlier versions back to 2024-11-05."
+    ]
+  },
+  "d0f3f374e58e3c70": [
+    {
+      "t": "h3",
+      "i": 1,
+      "c": "Fewer tools"
+    },
+    {
+      "t": "p",
+      "i": 2,
+      "c": [
+        "Every tool’s description goes into the agent’s context when it connects. To load only what a task needs, name toolsets: add ",
+        {
+          "t": "code",
+          "i": 3,
+          "c": "--tools core,tests"
+        },
+        " after",
+        " ",
+        {
+          "t": "code",
+          "i": 4,
+          "c": "mcp"
+        },
+        " in the configurations above, or ",
+        {
+          "t": "code",
+          "i": 5,
+          "c": "?tools=core,tests"
+        },
+        " to an HTTP or relay URL. ",
+        {
+          "t": "code",
+          "i": 6,
+          "c": "core"
+        },
+        " alone is enough to see and control a device and is less than a third the size of the full list."
+      ]
+    }
+  ],
+  "10a2f50a55496751": {
+    "t": "p",
+    "i": 1,
+    "c": [
+      "The other tools still run when called by name, and always from a terminal as",
+      " ",
+      {
+        "t": "code",
+        "i": 2,
+        "c": "Mobdev <tool>"
+      },
+      ". The server tells the agent which toolsets it left out and what is in them. Without a selection, every tool is listed."
     ]
   },
   "b1bdfeed6ba99add": {
