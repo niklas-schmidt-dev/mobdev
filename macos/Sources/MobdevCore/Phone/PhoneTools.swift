@@ -107,9 +107,18 @@ public final class PhoneTools: Sendable {
         history.start()
     }
 
-    /// Typing takes about 60 ms per character and holds the phone's input until done, so one call
-    /// stays well within the relays' 90-second limit.
+    /// Typing holds the device's input until the text is in, at speeds that differ a lot: Mobdev
+    /// Runner types about ten characters a second (XCTest), the Bluetooth keyboard takes 60 ms a key
+    /// and 120 ms with Shift or Option (an accent is two keys), a simulator about 25 ms a key, and
+    /// Android hands the text to scrcpy at once or to adb's `input text` 200 characters at a time.
+    /// A call from this Mac may type this many characters, which over Bluetooth can take two
+    /// minutes; a call through a relay only what fits in its time (see `relayTypingLimit`).
     static let maxTypedCharacters = 1000
+
+    /// What a character costs through Mobdev Runner when a relay call's typing is counted. XCTest
+    /// typed about ten a second on a simulator and waits for the app to settle in between, so an
+    /// iPhone or a busy app can be slower: at two thirds of that speed, 500 characters still fit.
+    static let runnerSecondsPerCharacter: TimeInterval = 0.15
 
     public static let instructions = """
         Mobdev controls a real iPhone connected to this Mac: it reads the screen over USB. With Developer \
@@ -338,6 +347,7 @@ public final class PhoneTools: Sendable {
                 if !definition.readOnly { try checkNotHeld() }
                 switch name {
                 case "type_secret": output = try await typeSecret(args, source: source)
+                case "type_text": output = try await typeText(args, source: source)
                 case "run_native_tests": output = try await runNativeTestsTool(args, source: source)
                 default: output = try await run(name, args)
                 }
@@ -433,18 +443,6 @@ public final class PhoneTools: Sendable {
             try await phone.pinch(at: center, scale: scale, duration: duration)
             return ToolOutput(
                 text: "Pinched around \(try describe(center)) to zoom \(scale > 1 ? "in" : "out"), scale \(format(scale)).")
-        case "type_text":
-            let text = try args.string("text", maxLength: Self.maxTypedCharacters)
-            let submit = args.bool("submit") == true
-            try requireTouch()
-            if try await phone.typeText(text) {
-                if submit { try await phone.press(KeyStroke(0x28)) }
-            } else {
-                var strokes = try phone.status().keyboardLayout.strokes(typing: text)
-                if submit { strokes.append(KeyStroke(0x28)) }
-                try await phone.type(strokes)
-            }
-            return ToolOutput(text: "Typed \(text.count) characters\(submit ? " and pressed Return" : "").")
         case "press_key":
             let key = try args.string("key")
             let modifiers = args.strings("modifiers")
@@ -592,6 +590,62 @@ public final class PhoneTools: Sendable {
             if let output = try await runNetworkTool(name, args) { return output }
             return try await runAppTool(name, args)
         }
+    }
+
+    // MARK: Typing
+
+    func typeText(_ args: Arguments, source: String) async throws -> ToolOutput {
+        let text = try args.string("text", maxLength: Self.maxTypedCharacters)
+        let submit = args.bool("submit") == true
+        try requireTouch()
+        // The relay gives up on a call after 90 seconds, also in the middle of the text. A flow's or
+        // test run's steps are not calls of their own.
+        if source == "relay", DeviceHold.current == nil, let limit = relayTypingLimit(text) {
+            throw ToolFailure(
+                "Through a relay a call has 90 seconds, and \(limit.why), so one call types at most \(limit.characters) characters of this text. Send it in parts of up to \(limit.characters) characters, one type_text call each."
+            )
+        }
+        if try await phone.typeText(text) {
+            if submit { try await phone.press(KeyStroke(0x28)) }
+        } else {
+            var strokes = try phone.status().keyboardLayout.strokes(typing: text)
+            if submit { strokes.append(KeyStroke(0x28)) }
+            try await phone.type(strokes)
+        }
+        return ToolOutput(text: "Typed \(text.count) characters\(submit ? " and pressed Return" : "").")
+    }
+
+    /// How many characters of `text` this device types within `relayWait`, which leaves a relay
+    /// call time for Return and the screenshot, and why; nil when all of them fit. Simulators and
+    /// Android type 1000 characters well within it.
+    func relayTypingLimit(_ text: String) -> (characters: Int, why: String)? {
+        let status = phone.status()
+        // In whole milliseconds, so that 500 times 0.15 s is not a little more than 75 s.
+        let milliseconds: (Character) -> Int
+        let why: String
+        switch status.input {
+        case .runner:
+            let each = Int((Self.runnerSecondsPerCharacter * 1000).rounded())
+            milliseconds = { _ in each }
+            why = "Mobdev Runner types about ten characters a second, fewer in a busy app"
+        case .bluetooth:
+            // HIDInput's reports are 30 ms apart: key down and up, plus modifiers down and up.
+            let layout = status.keyboardLayout
+            milliseconds = { character in
+                let strokes = layout.strokes(for: character == "\r\n" || character == "\r" ? "\n" : character) ?? []
+                return strokes.reduce(0) { $0 + ($1.modifiers == 0 ? 60 : 120) }
+            }
+            why = "the Bluetooth keyboard takes 60 ms a key and 120 ms with Shift or Option"
+        case .direct:
+            return nil
+        }
+        let budget = Int((Self.relayWait * 1000).rounded())
+        var total = 0
+        for (index, character) in text.enumerated() {
+            total += milliseconds(character)
+            if total > budget { return (index, why) }
+        }
+        return nil
     }
 
     // MARK: Helpers

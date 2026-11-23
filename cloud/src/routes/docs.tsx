@@ -49,7 +49,7 @@ const tools = [
   ["swipe", "from_x, from_y, to_x, to_y, duration", msg("Drag, e.g. to scroll")],
   ["pinch", "scale, x, y, duration", msg("Two fingers apart or together, e.g. to zoom a map or photo")],
   ["scroll", "direction, amount, x, y", msg("Mouse wheel")],
-  ["type_text", "text, submit", msg("Type into the focused field (up to 1000 characters per call)")],
+  ["type_text", "text, submit", msg("Type into the focused field (up to 1000 characters per call, fewer through a relay)")],
   ["type_secret", "name, submit", msg("Type a stored password or code without the agent seeing it")],
   ["list_secrets", "", msg("The names of the stored secrets, never their values")],
   ["press_key", "key, modifiers", msg("e.g. space + cmd for Spotlight")],

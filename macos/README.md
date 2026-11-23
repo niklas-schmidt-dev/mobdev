@@ -224,7 +224,7 @@ only device, or the connected iPhone when simulators or Android devices run next
 | `swipe` | `from_x`, `from_y`, `to_x`, `to_y`, `duration` | |
 | `pinch` | `scale`, `x`, `y`, `duration` | Two fingers around a point (default the center) along the screen's longer side, e.g. to zoom a map, photo or plan: `scale` 2 spreads them to twice their distance and zooms in, 0.5 zooms out. Simulators, Android with scrcpy and iPhones and iPads with Mobdev Runner; not over Bluetooth, which has one pointer |
 | `scroll` | `direction` (`up`/`down`/`left`/`right`), `amount`, `x`, `y` | Mouse wheel over Bluetooth, a swipe elsewhere; `right` reveals content further right |
-| `type_text` | `text`, `submit` | Into the focused field, at most 1000 characters per call |
+| `type_text` | `text`, `submit` | Into the focused field, at most 1000 characters per call; through a relay, what fits in its 90 seconds (see [Limits](#limits)) |
 | `type_secret` | `name`, `submit` | Types a stored password or code without the agent seeing it (see [Secrets](#secrets)) |
 | `list_secrets` | | The names of the stored secrets, never their values |
 | `press_key` | `key`, `modifiers`, `count` | e.g. `space` + `cmd` for Spotlight; `volume_up` and `volume_down` press the buttons (iPhones, Android) |
@@ -1347,6 +1347,13 @@ Mobdev's log (Console, subsystem `dev.mobdev.mac`), the install in the device's 
   tested on an iOS 27 simulator, not yet on an iPhone.
 - Over Bluetooth, typing supports the U.S. and German hardware layouts, including common accents.
   Emoji and other characters without a key need Mobdev Runner, which types any text.
+- Typing holds the device until the text is in. Mobdev Runner types about ten characters a second,
+  the Bluetooth keyboard takes 60 ms a key and 120 ms with Shift or Option (an accent is two keys),
+  so 1000 characters can outlast a relay, which gives up on a call after 90 seconds. Through a
+  relay, `type_text` refuses text that would take more than 75 seconds and says how many
+  characters fit: 500 through Mobdev Runner, 312 to 1000 over Bluetooth depending on the keys.
+  Simulators and Android type 1000 characters well within it, and steps of a flow or test run are
+  not limited this way.
 - Through Mobdev Runner, XCTest waits for the app to settle after each action, so on a simulator a
   tap takes one to two seconds and a swipe about as long; the mirror reacts more slowly than over
   Bluetooth. XCTest cannot press `escape` or `forwarddelete`, nor Return and Backspace with

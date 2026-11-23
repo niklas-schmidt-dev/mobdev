@@ -441,7 +441,7 @@
   "20e86a2df1b039bb": "Drag, e.g. to scroll",
   "ae43518be9887643": "Two fingers apart or together, e.g. to zoom a map or photo",
   "8ba5b645cde2f75d": "Mouse wheel",
-  "1c05592420abed0b": "Type into the focused field (up to 1000 characters per call)",
+  "ee75b5a9c7e60af2": "Type into the focused field (up to 1000 characters per call, fewer through a relay)",
   "55550b5f4e09f03f": "Type a stored password or code without the agent seeing it",
   "02f5c269c01a2e8f": "The names of the stored secrets, never their values",
   "a6daf7dca0f6ab24": "e.g. space + cmd for Spotlight",
