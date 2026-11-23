@@ -166,8 +166,9 @@ public final class PhoneTools: Sendable {
         Without a path, recordings, screenshots, baselines, crawls and runs go into the project: the one \
         of your working folder, else the active one (`list_projects`, `open_project`, `create_project`; ask \
         before creating one). `list_tests` shows its tests, `save_test` and `save_flow` write one, \
-        `run_tests` runs them on a device with a video and a screenshot of each failure, and \
-        `test_result` returns the newest results. `run_native_tests` runs the app's own XCTest or \
+        `run_tests` runs them on a device with a video and a screenshot of each failure, in the \
+        background when the caller cannot wait for the end, and `test_result` says how the run is doing \
+        and returns the newest results. `run_native_tests` runs the app's own XCTest or \
         Gradle suite on the device in the background and `native_test_result` reads its failures with \
         file and line. \
         With an App Store Connect key in Mobdev's settings, `appstore_apps`, `appstore_builds`, \
@@ -255,7 +256,7 @@ public final class PhoneTools: Sendable {
             ToolDefinition(
                 name: "type_text", title: "Type text",
                 description:
-                    "Type text into the focused field. Tap the field first. Set submit to press Return afterwards. At most 1000 characters per call; send longer text in several calls.",
+                    "Type text into the focused field. Tap the field first. Set submit to press Return afterwards. At most 1000 characters per call; send longer text in several calls. Through a relay an iPhone takes fewer, and the error says how many.",
                 inputSchema: schema(
                     ["text": ["type": "string"], "submit": ["type": "boolean", "description": "Press Return after typing"]],
                     required: ["text"]), readOnly: false),

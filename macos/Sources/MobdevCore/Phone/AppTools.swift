@@ -72,7 +72,7 @@ extension PhoneTools {
             ToolDefinition(
                 name: "crash_reports", title: "Crash reports",
                 description:
-                    "Crash and hang reports of the device, newest first, optionally for one app (name or bundle ID). Pass name to read one: exception, reason and the crashed thread. The full report is saved on the Mac. On an iPhone this needs Developer Mode.",
+                    "Crash and hang reports of the device, newest first, optionally for one app (name or bundle ID). Pass name to read one: exception, reason and the crashed thread, with function, file and line where the Mac has the build's symbols. The full report is saved on the Mac. On an iPhone this needs Developer Mode.",
                 inputSchema: schema(
                     [
                         "app": ["type": "string", "description": "App name or bundle ID"],
