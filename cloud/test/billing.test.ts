@@ -235,6 +235,23 @@ describe("metering", () => {
     expect(fakeAutumn.trackedFor(id, FEATURES.requests)).toBe(3);
   });
 
+  it("asks for the allowance again when Autumn confirms usage without a balance", async () => {
+    const { id, token } = await account();
+    fakeAutumn.setPlan(id, { ...FREE_PLAN, requests: 2 });
+    const hostSecret = secret();
+    await fakeMac(hostSecret, token);
+    const key = await clientKeyForSecret(hostSecret);
+
+    for (let i = 0; i < 2; i++) expect((await agent("/v1/status", key)).status).toBe(200);
+    // Autumn counts the two requests, but its answer with the balance is lost. The retry is a
+    // duplicate, which has no balance: the one from before the requests must not count as current.
+    fakeAutumn.loseNextTrackResponse = true;
+    await flush(hostSecret);
+    await flush(hostSecret);
+    expect(fakeAutumn.trackedFor(id, FEATURES.requests)).toBe(2);
+    expect((await agent("/v1/status", key)).status).toBe(429);
+  });
+
   it("keeps the usage of a Mac that disconnects until Autumn has it", async () => {
     const { id, token } = await account();
     const hostSecret = secret();
