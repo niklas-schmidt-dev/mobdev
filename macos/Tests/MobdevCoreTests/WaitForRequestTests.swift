@@ -165,6 +165,23 @@ final class FakeProxy: NetworkProxyBackend, @unchecked Sendable {
         proxy.log.finish(second)
     }
 
+    /// Without a cursor a wait counts from the last action, so it may return an open connection a
+    /// second time, with a newer cursor. The first cursor still means "later than this connection".
+    @Test func theFirstCursorOfAnOpenConnectionStaysGood() async throws {
+        let (tools, proxy, _) = try await android()
+        let id = proxy.log.open(Self.tunnel("api.example.com"))
+        let first = try await call(tools, "wait_for_request", ["url": "https://api.example.com", "timeout": 0])
+        #expect(first.data?["cursor"] == 0)
+        proxy.log.add(Self.request("GET", "http://10.0.2.2:3000/other", status: 200))
+        let second = try await call(tools, "wait_for_request", ["url": "https://api.example.com", "timeout": 0])
+        #expect(second.data?["open"] == true)
+        #expect(second.data?["cursor"] == 1)
+
+        let later = try await call(tools, "wait_for_request", ["url": "https://api.example.com", "after": 0, "timeout": 0])
+        #expect(later.isError, "\(later.text)")
+        proxy.log.finish(id)
+    }
+
     @Test func timesOutAndSaysWhatCameInstead() async throws {
         let (tools, proxy, _) = try await android()
         proxy.log.add(Self.request("POST", "http://10.0.2.2:3000/api/login", status: 500))

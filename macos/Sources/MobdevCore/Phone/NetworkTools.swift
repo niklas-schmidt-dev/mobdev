@@ -310,7 +310,9 @@ extension PhoneTools {
                     appNetwork.returnedTunnels.withLock { tunnels in
                         // Old ones go once there are many; a wait rarely reaches back that far.
                         if tunnels.count >= 500 { tunnels = tunnels.filter { $0.value > cursor - 1000 } }
-                        tunnels[AppNetworkCapture.tunnelKey(entry)] = cursor
+                        // The oldest cursor it came with: a wait without after may return it again later.
+                        let key = AppNetworkCapture.tunnelKey(entry)
+                        tunnels[key] = min(tunnels[key] ?? cursor, cursor)
                     }
                 }
                 var text = "Found \(entry.summary(query: false, open: open))."
