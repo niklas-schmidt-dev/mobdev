@@ -477,30 +477,29 @@ export class RelaySpace extends DurableObject<RelayEnv> {
       socket.serializeAttachment(before);
     }
     try {
-      // Autumn confirmed usage without saying what is left: it already had the call, from a try
-      // whose answer got lost or whose other half failed. The balance here is then from before it.
-      let unanswered = false;
       if (takeBatch(before.meter)) {
         socket.serializeAttachment(before);
         const seq = before.meter.seq;
         const batch = before.meter.batch;
         const tracked = (batch && batch.requests > 0 ? 1 : 0) + (batch && batch.seconds > 0 ? 1 : 0);
         const balances = await this.send(autumn, before.meter);
-        unanswered = balances.length < tracked;
+        // Autumn confirmed usage without saying what is left: it already had the call, from a try
+        // whose answer got lost or whose other half failed, so the balance here is from before the
+        // batch. The account says what is left. Until it has, the batch stays and keeps counting;
+        // if the read fails, the retry sends the batch again, which Autumn ignores, and reads again.
+        const customer = balances.length < tracked ? await autumn.customer(before.accountId) : null;
         const after = socket.deserializeAttachment() as Attachment;
         if (after.meter?.seq === seq) {
           after.meter.batch = null;
           after.meter.seq++;
         }
-        for (const balance of balances) after.quota = withBalance(after.quota, balance);
+        if (customer) after.quota = hasRelayPlan(customer) ? quotaFromCustomer(customer) : null;
+        else for (const balance of balances) after.quota = withBalance(after.quota, balance);
         socket.serializeAttachment(after);
       }
       const current = socket.deserializeAttachment() as Attachment;
       const stale = !current.quota || Date.now() - current.quota.checkedAt >= QUOTA_REFRESH_MS;
-      const asks =
-        current.meter !== null &&
-        (unanswered || (stale && (!current.quota || exhausted(current.quota, unconfirmed(current.meter)) !== null)));
-      if (asks) {
+      if (current.meter && stale && (!current.quota || exhausted(current.quota, unconfirmed(current.meter)))) {
         const customer = await autumn.customer(current.accountId);
         const latest = socket.deserializeAttachment() as Attachment;
         latest.quota = hasRelayPlan(customer) ? quotaFromCustomer(customer) : null;

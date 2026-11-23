@@ -247,6 +247,15 @@ describe("metering", () => {
     // duplicate, which has no balance: the one from before the requests must not count as current.
     fakeAutumn.loseNextTrackResponse = true;
     await flush(hostSecret);
+    // The account cannot be read either: the two requests stay counted here until it can.
+    fakeAutumn.beforeCustomer = async () => {
+      throw new Error("Autumn does not answer");
+    };
+    await flush(hostSecret);
+    expect(fakeAutumn.trackedFor(id, FEATURES.requests)).toBe(2);
+    expect((await agent("/v1/status", key)).status).toBe(429);
+
+    fakeAutumn.beforeCustomer = null;
     await flush(hostSecret);
     expect(fakeAutumn.trackedFor(id, FEATURES.requests)).toBe(2);
     expect((await agent("/v1/status", key)).status).toBe(429);
