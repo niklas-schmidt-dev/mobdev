@@ -107,7 +107,9 @@ struct CrashSymbolicator: Sendable {
             }
         }
         return candidates.first { candidate in
-            manager.fileExists(atPath: candidate.file.path) && MachO.uuids(of: candidate.file).contains(image.uuid)
+            // Reading many builds, or a slow volume, must not outlast the budget.
+            Date() < deadline && manager.fileExists(atPath: candidate.file.path)
+                && MachO.uuids(of: candidate.file).contains(image.uuid)
         }
     }
 
