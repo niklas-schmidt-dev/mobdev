@@ -335,6 +335,10 @@ public final class PhoneTools: Sendable {
         do {
             try AppBlocklist.check(name, args)
             var output: ToolOutput
+            let wantsScreenshot = args.bool("screenshot") ?? screenshotByDefault
+            let offersScreenshot = definition.inputSchema["properties"]?["screenshot"] != nil && !definition.readOnly
+            // The screen before the action, for the screenshot the action returns (see settledFrame).
+            var before: FrameSignature?
             if name == "run_tests" {
                 // Its run holds the device itself, past this call when the caller cannot wait.
                 output = try await runTestsTool(args, source: source)
@@ -350,6 +354,7 @@ public final class PhoneTools: Sendable {
                     try checkNotHeld()
                     markNetworkAction()
                 }
+                if wantsScreenshot, offersScreenshot { before = screenBeforeAction() }
                 switch name {
                 case "type_secret": output = try await typeSecret(args, source: source)
                 case "type_text": output = try await typeText(args, source: source)
@@ -357,10 +362,8 @@ public final class PhoneTools: Sendable {
                 default: output = try await run(name, args)
                 }
             }
-            let wantsScreenshot = args.bool("screenshot") ?? screenshotByDefault
-            let offersScreenshot = definition.inputSchema["properties"]?["screenshot"] != nil && !definition.readOnly
             if wantsScreenshot, output.image == nil, offersScreenshot {
-                output.image = try await settledFrame().flatMap(ImageTools.screenshot)
+                output.image = try await settledFrame(after: before).flatMap(ImageTools.screenshot)
             }
             activity.record(
                 source: source, tool: name, summary: summary(name, args, output), failed: output.isError,

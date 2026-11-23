@@ -378,12 +378,26 @@ extension PhoneTools {
         }
     }
 
-    /// The picture an action returns: once the screen stayed the same for `settle.still`, looking
-    /// first after `settle.first` so the action's effect can reach the picture, and at the latest
-    /// after `settle.limit` on a screen that keeps moving. Where a picture is slow, as Android's
-    /// `screencap` without scrcpy is, or missing, and before one was timed: `settle.fixed`, then one
-    /// picture, as before.
-    func settledFrame() async throws -> CGImage? {
+    /// The screen just before an action, so `settledFrame` can tell when the action's effect shows.
+    /// Nil where waiting for a still screen does not pay: no wait at all, pictures that are slow
+    /// (Android's `screencap` without scrcpy) or missing, and before one was timed.
+    func screenBeforeAction() -> FrameSignature? {
+        guard settle.fixed > 0, let cost = frameCost.get(), cost <= settle.slowFrame else { return nil }
+        let clock = Date()
+        guard let image = phone.frame() else { return nil }
+        let took = Date().timeIntervalSince(clock)
+        frameCost.set(took)
+        return took <= settle.slowFrame ? FrameSignature(image) : nil
+    }
+
+    /// The picture an action returns. `before` is the screen before the action.
+    ///
+    /// Once the screen differs from `before`, the action's effect shows: the picture is taken when
+    /// the screen then stayed the same for `settle.still`, at the latest after `settle.limit` on a
+    /// screen that keeps moving. While nothing changed, the wait is `settle.fixed` as it always
+    /// was, so an effect that takes half a second to show is not missed. Without `before`, where a
+    /// picture is slow or missing: `settle.fixed`, then one picture, as before.
+    func settledFrame(after before: FrameSignature?) async throws -> CGImage? {
         let settle = self.settle
         guard settle.fixed > 0 else { return phone.frame() }
         let started = Date()
@@ -398,25 +412,35 @@ extension PhoneTools {
             try await pause(max(settle.fixed - Date().timeIntervalSince(started), 0))
             return look()?.image
         }
-        guard let cost = frameCost.get(), cost <= settle.slowFrame else { return try await asBefore() }
-        try await pause(settle.first)
+        // As wait_for_idle: the status bar and tiny changes such as a blinking cursor do not count.
+        let threshold = 0.002
+        guard let before else { return try await asBefore() }
+        try await pause(min(settle.first, settle.fixed))
         guard var newest = look(), newest.fast, var reference = FrameSignature(newest.image) else {
             return try await asBefore()
         }
+        var changed = reference.changed(from: before) >= threshold
         var stillSince = Date()
         while true {
+            let elapsed = Date().timeIntervalSince(started)
             let still = Date().timeIntervalSince(stillSince)
-            let left = settle.limit - Date().timeIntervalSince(started)
-            if still >= settle.still || left <= 0 { return newest.image }
-            try await pause(min(settle.poll, settle.still - still, left))
+            let wait: TimeInterval
+            if changed {
+                if still >= settle.still || elapsed >= settle.limit { return newest.image }
+                wait = min(settle.poll, settle.still - still, settle.limit - elapsed)
+            } else {
+                if elapsed >= settle.fixed { return newest.image }
+                wait = min(settle.poll, settle.fixed - elapsed)
+            }
+            try await pause(max(wait, 0.001))
             guard let next = look(), next.fast, let signature = FrameSignature(next.image) else {
                 return try await asBefore()
             }
             newest = next
-            // As wait_for_idle: the status bar and tiny changes such as a blinking cursor do not count.
-            if signature.changed(from: reference) >= 0.002 {
+            if signature.changed(from: reference) >= threshold {
                 reference = signature
                 stillSince = Date()
+                changed = true
             }
         }
     }
@@ -426,10 +450,9 @@ extension PhoneTools {
 struct Settle: Sendable {
     /// Where pictures are slow or missing: this long, then one picture. 0 takes it at once.
     var fixed: TimeInterval
-    /// The first look. Taps through Mobdev Runner return once the app settled, but over Bluetooth,
-    /// on Android and in the iPhone's USB picture an effect takes a moment to show.
+    /// The first look after the action.
     var first: TimeInterval = 0.15
-    /// How long the screen has to stay the same.
+    /// How long the screen has to stay the same once the action's effect has shown.
     var still: TimeInterval = 0.25
     /// The longest wait for a screen that keeps moving, such as a video or a spinner.
     var limit: TimeInterval = 1.5

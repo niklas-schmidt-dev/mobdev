@@ -202,10 +202,10 @@ every tool.
 ### Tools
 
 Coordinates are pixels of the image `screenshot` returns (long edge 1280 px, origin top-left).
-Actions return a fresh screenshot over MCP unless `screenshot` is `false`, taken once the screen
-has stayed the same for a quarter of a second, at most 1.5 seconds after the action. Where
-pictures are slow, as `screencap` is on Android without scrcpy, Mobdev waits 0.6 seconds and takes
-one picture instead. With more than one
+Actions return a fresh screenshot over MCP unless `screenshot` is `false`. Once the screen has
+changed, it is taken when the screen has then stayed the same for a quarter of a second, at most
+1.5 seconds after the action; while nothing changes, after 0.6 seconds. Where pictures are slow, as
+`screencap` is on Android without scrcpy, Mobdev waits 0.6 seconds and takes one picture. With more than one
 device, pass `device` (an id or name from `list_devices`) to pick one. Without it, Mobdev uses the
 only device, or the connected iPhone when simulators or Android devices run next to it.
 

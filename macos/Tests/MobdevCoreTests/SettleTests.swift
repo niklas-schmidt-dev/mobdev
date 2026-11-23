@@ -84,15 +84,40 @@ private let distinctScreens = (0..<4).map {
         #expect(phone.looks.get() >= 5)
     }
 
-    @Test func aStillScreenReturnsSoonerThanTheFixedWait() async throws {
-        let phone = ScriptedScreen([distinctScreens[0]])
+    /// The effect showed and the screen is still: no need to wait out the fixed time.
+    @Test func anEffectThatShowsAndSettlesReturnsSoonerThanTheFixedWait() async throws {
+        // Screen 0 before the action, screen 1 from then on.
+        let phone = ScriptedScreen([distinctScreens[0], distinctScreens[1]])
         let tools = tools(phone, Settle(fixed: 3, first: 0.01, still: 0.05, limit: 30, poll: 0.01))
         tools.frameCost.set(0.01)
         let (output, seconds) = try await tap(tools)
-        #expect(output.image != nil)
+        #expect(output.image == ImageTools.screenshot(distinctScreens[1]))
         #expect(seconds >= 0.06)
         // Waiting as before would take 3 s.
         #expect(seconds < 3)
+    }
+
+    /// Nothing changed yet, so nothing says the action's effect has shown: the fixed wait, as before.
+    @Test func aScreenThatDoesNotChangeWaitsAsBefore() async throws {
+        let phone = ScriptedScreen([distinctScreens[0]])
+        let tools = tools(phone, Settle(fixed: 0.3, first: 0.01, still: 0.05, limit: 30, poll: 0.01))
+        tools.frameCost.set(0.01)
+        let (output, seconds) = try await tap(tools)
+        #expect(output.image == ImageTools.screenshot(distinctScreens[0]))
+        #expect(seconds >= 0.3)
+    }
+
+    /// An app that answers a tap after a moment: the screen is still at first, and a wait that took
+    /// that for the end would return the screen from before the tap.
+    @Test func anEffectThatShowsLateIsInThePicture() async throws {
+        let showsAt = Locked(Date.distantFuture)
+        let phone = ScriptedScreen { _ in Date() >= showsAt.get() ? distinctScreens[1] : distinctScreens[0] }
+        let tools = tools(phone, Settle(fixed: 2, first: 0.01, still: 0.05, limit: 30, poll: 0.01))
+        tools.frameCost.set(0.01)
+        showsAt.set(Date().addingTimeInterval(0.3))
+        let (output, seconds) = try await tap(tools)
+        #expect(output.image == ImageTools.screenshot(distinctScreens[1]))
+        #expect(seconds >= 0.3)
     }
 
     /// How many looks fit before the limit depends on how busy the Mac is; the picture is always
