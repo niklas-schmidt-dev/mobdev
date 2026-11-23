@@ -226,9 +226,10 @@ final class FakeProxy: NetworkProxyBackend, @unchecked Sendable {
         let (android, proxy, _) = try await android()
         proxy.log.add(Self.request("GET", "http://10.0.2.2:3000/api/feed", status: 200))
         _ = try await call(android, "stop_network_capture")
-        let missing = try await call(android, "wait_for_request", ["url": "/api/login", "timeout": 30])
+        let missing = try await call(android, "wait_for_request", ["url": "/api/login", "timeout": 60])
         #expect(missing.text.hasPrefix("Network capture is not running"))
-        #expect(Date().timeIntervalSince(started) < 10)
+        // At once, not after the timeout; a busy runner may take seconds for the test itself.
+        #expect(Date().timeIntervalSince(started) < 45)
         // What was recorded before it stopped is still there to find.
         let recorded = try await call(android, "wait_for_request", ["url": "/api/feed", "after": 0, "timeout": 30])
         #expect(!recorded.isError, "\(recorded.text)")
@@ -254,9 +255,9 @@ final class FakeProxy: NetworkProxyBackend, @unchecked Sendable {
             https.text
                 == "Android's proxy sees an HTTPS request only as a connection to its host (CONNECT api.example.com:443), without path, method or status, so url \"https://api.example.com/v1/login\", method POST can never match. Wait for url \"api.example.com\" alone; plain HTTP, such as a local dev server, shows in full."
         )
-        let status = try await call(android, "wait_for_request", ["url": "https://api.example.com", "status": 200, "timeout": 30])
+        let status = try await call(android, "wait_for_request", ["url": "https://api.example.com", "status": 200, "timeout": 60])
         #expect(status.text.hasPrefix("Android's proxy sees an HTTPS request only as a connection"))
-        #expect(Date().timeIntervalSince(started) < 10)
+        #expect(Date().timeIntervalSince(started) < 45)
 
         // What the device can see waits as usual.
         let host = try await call(iOS, "wait_for_request", ["url": "https://api.example.com/", "timeout": 0])

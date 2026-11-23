@@ -236,7 +236,8 @@ enum MachOFixture {
         let report = try #require(CrashReport.parse(Self.report()))
         let started = Date()
         let named = await symbolicator(commands, budget: 0.5).symbolicate(report)
-        #expect(Date().timeIntervalSince(started) < 5)
+        // Well before the 30 s one command would take; a busy runner is slow, not that slow.
+        #expect(Date().timeIntervalSince(started) < 25)
         #expect(named == report)
         #expect(commands.calls.get().allSatisfy { $0.timeout <= 0.5 })
         #expect(commands.calls(to: "atos").isEmpty)

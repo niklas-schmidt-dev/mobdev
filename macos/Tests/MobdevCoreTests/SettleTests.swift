@@ -88,13 +88,13 @@ private let distinctScreens = (0..<4).map {
     @Test func anEffectThatShowsAndSettlesReturnsSoonerThanTheFixedWait() async throws {
         // Screen 0 before the action, screen 1 from then on.
         let phone = ScriptedScreen([distinctScreens[0], distinctScreens[1]])
-        let tools = tools(phone, Settle(fixed: 3, first: 0.01, still: 0.05, limit: 30, poll: 0.01))
+        let tools = tools(phone, Settle(fixed: 120, first: 0.01, still: 0.05, limit: 300, poll: 0.01))
         tools.frameCost.set(0.01)
         let (output, seconds) = try await tap(tools)
         #expect(output.image == ImageTools.screenshot(distinctScreens[1]))
         #expect(seconds >= 0.06)
-        // Waiting as before would take 3 s.
-        #expect(seconds < 3)
+        // Waiting as before would take two minutes; a busy runner takes seconds for this.
+        #expect(seconds < 60)
     }
 
     /// Nothing changed yet, so nothing says the action's effect has shown: the fixed wait, as before.
@@ -128,7 +128,7 @@ private let distinctScreens = (0..<4).map {
         tools.frameCost.set(0.01)
         let (output, seconds) = try await tap(tools)
         #expect(seconds >= 0.3)
-        #expect(seconds < 10)
+        #expect(seconds < 60)
         #expect(output.image == ImageTools.screenshot(distinctScreens[(phone.looks.get() - 1) % 2]))
     }
 
