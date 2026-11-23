@@ -510,7 +510,7 @@
   "0a8a7f9c27843869": "Stop a running app",
   "0ac466474519ce04": "Open a deep link, universal link or web page",
   "c251abb37649208f": "print, NSLog and os_log output, and how the app ended",
-  "146352292b4cf39c": "List crash reports, or read one: exception, reason, crashed thread",
+  "2a1f36ac182aa77b": "List crash reports, or read one: exception, reason, crashed thread, with file and line when the Mac has the symbols",
   "ae874cb857cc7e94": "Start recording an app’s requests",
   "4f236cf8d119eb43": "The recorded requests: method, URL, status, bytes and time",
   "f115912930174eb6": "Wait until the app makes a matching request; fails after the timeout",

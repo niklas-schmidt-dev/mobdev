@@ -55,8 +55,9 @@ Write down, before touching a device:
 4. When the bug shows, save a full-size screenshot with `save_screenshot` and an absolute `path`
    next to the recording, then `stop_recording`.
 5. Read `logs` with the cursor for errors and the lines just before the bug. If the app crashed,
-   `crash_reports` with `app`, then with `name` for the exception and the crashed thread;
-   `mobdev-dev-loop` shows how to symbolicate your own frames.
+   `crash_reports` with `app`, then with `name` for the exception and the crashed thread, whose
+   frames name file and line when the build is on the Mac; `mobdev-dev-loop` shows how to
+   symbolicate the rest.
 6. Run it twice more from the same state. Record how often it happened, e.g. 3 of 3.
 
 If it does not reproduce, vary one thing at a time toward the report: system version, a fresh

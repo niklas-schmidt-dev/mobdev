@@ -134,7 +134,7 @@ const developerTools = [
   ["stop_app", "bundle_id", msg("Stop a running app")],
   ["open_url", "url", msg("Open a deep link, universal link or web page")],
   ["logs", "bundle_id, after, lines, contains", msg("print, NSLog and os_log output, and how the app ended")],
-  ["crash_reports", "app, name, limit", msg("List crash reports, or read one: exception, reason, crashed thread")],
+  ["crash_reports", "app, name, limit", msg("List crash reports, or read one: exception, reason, crashed thread, with file and line when the Mac has the symbols")],
 ];
 
 /** Which requests an app makes. */

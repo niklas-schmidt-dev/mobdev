@@ -510,7 +510,7 @@
   "0a8a7f9c27843869": "Eine laufende App beenden",
   "0ac466474519ce04": "Einen Deep Link, Universal Link oder eine Webseite öffnen",
   "c251abb37649208f": "Ausgabe von print, NSLog und os_log und wie die App beendet wurde",
-  "146352292b4cf39c": "Crash-Reports auflisten oder einen lesen: Exception, Grund, abgestürzter Thread",
+  "2a1f36ac182aa77b": "Crash-Reports auflisten oder einen lesen: Exception, Grund, abgestürzter Thread, mit Datei und Zeile, wenn der Mac die Symbole hat",
   "ae874cb857cc7e94": "Die Anfragen einer App aufzeichnen",
   "4f236cf8d119eb43": "Die aufgezeichneten Anfragen: Methode, URL, Status, Bytes und Dauer",
   "f115912930174eb6": "Warten, bis die App eine passende Anfrage stellt; schlägt nach dem Timeout fehl",

@@ -265,7 +265,7 @@ only device, or the connected iPhone when simulators or Android devices run next
 | `stop_app` | `bundle_id` | |
 | `open_url` | `url` | Deep links, universal links, web pages; confirms iOS's "Open in …?" where there is a UI tree |
 | `logs` | `bundle_id`, `after`, `lines`, `contains` | Output of launched apps and how they ended |
-| `crash_reports` | `app`, `name`, `limit` | Lists reports; `name` reads one |
+| `crash_reports` | `app`, `name`, `limit` | Lists reports; `name` reads one, with file and line where the Mac has the symbols |
 | `start_network_capture` | `bundle_id` | Records which requests an app makes (see [Network](#network)) |
 | `network_log` | `bundle_id`, `contains`, `after`, `limit`, `query`, `headers` | The recorded requests: method, URL, status, bytes each way, duration and where it was seen |
 | `wait_for_request` | `url`, `method`, `status`, `after`, `timeout` | Waits until the capture records a matching request and returns it; fails after `timeout` |
@@ -418,8 +418,15 @@ xcodebuild -scheme MyApp -destination 'generic/platform=iOS' -derivedDataPath bu
   milliseconds can be missing. `logs` returns a `cursor`; pass it as `after` to get only newer lines. When the app
   exits or crashes, `logs` says so, and `crash_reports` lists the report.
 - `crash_reports` with `name` copies the report to `~/Library/Application Support/dev.mobdev.mac/crash-reports`
-  and returns the exception, the reason and the crashed thread. Frames of your own code carry
-  addresses for `atos` when the report has no symbols.
+  and returns the exception, the reason and the crashed thread. Frames of the app's own code, and
+  any without a symbol, name the function, file and line when the Mac has the build's symbols:
+  a dSYM Spotlight finds by the image's UUID (`mdfind "com_apple_xcode_dsym_uuids == <UUID>"`,
+  which covers Xcode's archives), else a dSYM or the built binary in the folders `install_app`
+  installed from since Mobdev started, in Xcode's DerivedData or, for a simulator, its installed
+  copy of the app. A Debug build has no dSYM; its binary leads `atos` to the object files. A file
+  is used only when its UUID matches, `atos` runs once per image, and all of it takes at most
+  15 seconds; the report then names the files it used (`Symbols from …`). A frame without symbols
+  keeps its offset and load address for `atos`.
 - `install_app` reads `path` on the Mac that runs Mobdev, also when the agent connects through a
   relay. A build made elsewhere, such as in a cloud agent's container, is uploaded first and
   installed with `upload` (see [Install builds from anywhere](#install-builds-from-anywhere)).

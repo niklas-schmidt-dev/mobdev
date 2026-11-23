@@ -98,12 +98,16 @@ The loop is the same; only the build differs.
    name the cause, such as `Fatal error: Unexpectedly found nil`.
 2. `crash_reports` with `app` (name or bundle ID) lists reports, newest first.
 3. `crash_reports` with `name` returns the exception, the reason and the crashed thread, and saves
-   the full `.ips` on the Mac.
-4. Frames of your own code may come without symbols, as
-   `MyApp.debug.dylib  0x0000000104a8f2c4  (MyApp.debug.dylib + 12996, loaded at 0x104a8c000)`.
-   Debug builds from Xcode 16 on keep the app's code in `MyApp.debug.dylib`; other builds in
-   `MyApp`. Resolve the address with that file from the same build (or its dSYM) and the load
-   address:
+   the full `.ips` on the Mac. When the build is on the Mac (installed with `install_app`, in
+   Xcode's DerivedData, a dSYM Spotlight finds, or a simulator's installed copy), frames of your own
+   code name the function, file and line, such as
+   `closure #1 in ContentView.body.getter (ContentView.swift:21)`. Read that line, fix, and run the
+   loop again.
+4. A frame of your own code may still come without symbols, as
+   `MyApp.debug.dylib  0x0000000104a8f2c4  (MyApp.debug.dylib + 12996, loaded at 0x104a8c000)`,
+   when Mobdev did not find that build. Debug builds from Xcode 16 on keep the app's code in
+   `MyApp.debug.dylib`; other builds in `MyApp`. Resolve the address with that file from the same
+   build (or its dSYM) and the load address:
 
    ```sh
    atos -arch arm64 -o build/device/Build/Products/Debug-iphoneos/MyApp.app/MyApp.debug.dylib \
