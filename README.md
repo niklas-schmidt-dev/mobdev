@@ -57,8 +57,10 @@ MOBDEV_VARIANT=release scripts/build-app.sh
 open build/Mobdev.app
 ```
 
-Then plug in the iPhone, pair it over Bluetooth and turn on AssistiveTouch with Snap to Item off.
-The app walks through it; details are in [`macos/README.md`](macos/README.md). Without an iPhone,
+Then plug in the iPhone, tap Trust, turn on Developer Mode and sign in to Xcode with your Apple
+Account: Mobdev builds Mobdev Runner and starts it on the iPhone. An iPhone without Developer Mode
+pairs over Bluetooth instead, with AssistiveTouch on and Snap to Item off. The app walks through
+it; details are in [`macos/README.md`](macos/README.md#set-up-the-iphone-once). Without an iPhone,
 choose **Simulators and Android Only** on the welcome page.
 
 Remote access is optional. Create an access token at [mobdev.sh](https://mobdev.sh/dashboard) and
@@ -136,8 +138,8 @@ installed apps can no longer be updated.
 
 Early release. Verified on hardware: USB screen capture, Bluetooth pairing, MCP, OCR and remote
 access through both relays, taps, swipes and scrolling with AssistiveTouch, and typing with the
-German layout, on iOS 27. Several iPhones on one Mac each get their own Bluetooth connection, which
-has not been tried with two iPhones at once yet. Every tool is verified on
+German layout, on iOS 27. Without Developer Mode, several iPhones on one Mac each get their own
+Bluetooth connection, which has not been tried with two iPhones at once yet. Every tool is verified on
 an iOS 27 simulator (Xcode 27) and an Android 16 emulator; Android phones use the same adb path but
 have not been tried yet.
 
