@@ -70,8 +70,17 @@ extension PhoneTools {
     func runObserveTool(_ name: String, _ args: Arguments) async throws -> ToolOutput? {
         switch name {
         case "observe":
-            let (frame, size) = try currentFrame()
-            let (marks, fromTree) = try await currentMarks(in: frame)
+            // A picture only for the marks drawn on it, taken before the tree as before, or for
+            // text recognition without a tree: the tree alone needs none.
+            let picture = args.bool("image") == true ? try currentFrame() : nil
+            var frame = picture?.0
+            let size = try picture?.1 ?? screenshotSize()
+            let (marks, fromTree) = try await currentMarks {
+                if let frame { return frame }
+                let (taken, _) = try currentFrame()
+                frame = taken
+                return taken
+            }
             observed.set(ObservedMarks(marks: marks, at: Date()))
             let query = args.has("contains") ? try args.string("contains") : nil
             let shown = marks.filter { mark in
@@ -87,7 +96,7 @@ extension PhoneTools {
             if let query, shown.isEmpty { lines.append("No mark matches \"\(query)\".") }
             lines += shown.map { describe($0, size) }
             var output = ToolOutput(text: lines.joined(separator: "\n"), data: .array(shown.map { json($0, size) }))
-            if args.bool("image") == true { output.image = Self.marked(frame, marks: shown) }
+            if args.bool("image") == true, let frame { output.image = Self.marked(frame, marks: shown) }
             return output
         case "tap_mark":
             let number = Int(try args.number("mark", default: 0, range: 1...10_000))
@@ -141,10 +150,15 @@ extension PhoneTools {
 
     /// The UI tree's useful elements, else the recognized lines, in reading order and numbered.
     func currentMarks(in frame: CGImage) async throws -> (marks: [ScreenMark], fromTree: Bool) {
+        try await currentMarks { frame }
+    }
+
+    /// As `currentMarks(in:)`, taking the picture only when there is no tree to read.
+    func currentMarks(frame: () throws -> CGImage) async throws -> (marks: [ScreenMark], fromTree: Bool) {
         if let elements = try? await phone.uiTree(), let marks = Self.marks(from: elements), !marks.isEmpty {
             return (marks, true)
         }
-        let text = try await screenText(nil, in: frame)
+        let text = try await screenText(nil, in: try frame())
         let marks = text.matches.enumerated().map { index, match in
             ScreenMark(
                 number: index + 1, role: "Text", label: match.text, identifier: "", value: "", frame: match.box,
