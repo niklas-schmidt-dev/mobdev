@@ -45,6 +45,8 @@ struct MobdevApp: App {
         Window(MobdevPaths.appName, id: "main") {
             MainView()
                 .environment(model)
+                // Thumbnails, other Macs and the simulator list are only fetched while it can be seen.
+                .background(WindowVisibility { model.setWindow($0, visible: $1) })
         }
         .defaultSize(width: 1180, height: 860)
         .commands {
